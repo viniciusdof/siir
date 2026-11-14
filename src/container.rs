@@ -49,7 +49,7 @@ pub struct Opened {
 /// Detects the signature and unwraps `ScsC` to its payload.
 pub fn open(bytes: &[u8]) -> Result<Opened, Error> {
     let Some(signature) = bytes.first_chunk::<SIGNATURE_LEN>() else {
-        return Err(Error::truncated(SIGNATURE_LEN, bytes.len()));
+        return Err(Error::truncated(SIGNATURE_LEN, bytes.len(), bytes.len()));
     };
 
     match signature {
@@ -68,8 +68,14 @@ pub fn open(bytes: &[u8]) -> Result<Opened, Error> {
 
 fn unwrap_scsc(bytes: &[u8]) -> Result<Opened, Error> {
     if bytes.len() < HEADER_LEN {
-        return Err(Error::truncated(HEADER_LEN, bytes.len()));
+        return Err(Error::truncated(HEADER_LEN, bytes.len(), bytes.len()));
     }
+
+    let size = u32::from_le_bytes(
+        bytes[IV_END..HEADER_LEN]
+            .try_into()
+            .map_err(|_| Error::truncated(SIZE_LEN, bytes.len(), IV_END))?,
+    ) as usize;
 
     let iv = &bytes[IV_START..IV_END];
     let ciphertext = &bytes[HEADER_LEN..];
@@ -86,16 +92,21 @@ fn unwrap_scsc(bytes: &[u8]) -> Result<Opened, Error> {
 
     let mut payload = Vec::new();
     flate2::read::ZlibDecoder::new(compressed)
+        .take(size as u64 + 1)
         .read_to_end(&mut payload)
         .map_err(|_| Error::decompress(HEADER_LEN))?;
 
+    if payload.len() != size {
+        return Err(Error::decompress(HEADER_LEN));
+    }
+
     let Some(signature) = payload.first_chunk::<SIGNATURE_LEN>() else {
-        return Err(Error::truncated(SIGNATURE_LEN, payload.len()));
+        return Err(Error::truncated(SIGNATURE_LEN, payload.len(), HEADER_LEN));
     };
     let origin = match signature {
         b"SiiN" => Origin::EncryptedText,
         b"BSII" => Origin::EncryptedBinary,
-        _ => return Err(Error::unknown_signature(*signature, 0)),
+        _ => return Err(Error::unknown_signature(*signature, HEADER_LEN)),
     };
 
     Ok(Opened { payload, origin })
@@ -187,19 +198,34 @@ mod tests {
     }
 
     #[test]
+    fn declared_size_mismatch_fails() {
+        let mut bytes = scsc(b"SiiNunit\n");
+        bytes[IV_END..HEADER_LEN].copy_from_slice(&1u32.to_le_bytes());
+        let error = open(&bytes).unwrap_err();
+        assert_eq!(error.offset(), HEADER_LEN);
+        assert_eq!(
+            error.to_string(),
+            format!("zlib decompression failed at offset {HEADER_LEN}")
+        );
+    }
+
+    #[test]
     fn payload_with_unknown_signature_fails() {
         let error = open(&scsc(b"nope, not sii")).unwrap_err();
-        assert_eq!(error.offset(), 0);
-        assert_eq!(error.to_string(), "unknown signature \"nope\" at offset 0");
+        assert_eq!(error.offset(), HEADER_LEN);
+        assert_eq!(
+            error.to_string(),
+            format!("unknown signature \"nope\" at offset {HEADER_LEN}")
+        );
     }
 
     #[test]
     fn payload_shorter_than_signature_is_truncated() {
         let error = open(&scsc(b"Sii")).unwrap_err();
-        assert_eq!(error.offset(), 3);
+        assert_eq!(error.offset(), HEADER_LEN);
         assert_eq!(
             error.to_string(),
-            "truncated: need 4 bytes, got 3 at offset 3"
+            format!("truncated: need 4 bytes, got 3 at offset {HEADER_LEN}")
         );
     }
 }

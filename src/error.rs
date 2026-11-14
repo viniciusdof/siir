@@ -26,10 +26,10 @@ impl Error {
         }
     }
 
-    pub(crate) fn truncated(needed: usize, got: usize) -> Self {
+    pub(crate) fn truncated(needed: usize, got: usize, offset: usize) -> Self {
         Self {
             kind: Kind::Truncated { needed, got },
-            offset: got,
+            offset,
         }
     }
 

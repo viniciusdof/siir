@@ -1,8 +1,18 @@
 //! Public behavior of `container::open`
 
+use std::fs;
+
 use siir::container::{Origin, open};
 
 const SCSC_HEADER_LEN: usize = 56;
+const FIXTURES: &str = "fixtures/ets2";
+
+fn fixture(path: &str) -> Vec<u8> {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join(FIXTURES)
+        .join(path);
+    fs::read(&path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()))
+}
 
 #[test]
 fn plain_text_passes_through() {
@@ -91,6 +101,65 @@ fn encrypted_ciphertext_off_block_size_fails() {
         error.to_string(),
         "ciphertext length 17 is not a multiple of the AES block size at offset 56"
     );
+}
+
+#[test]
+fn fixtures_open_to_expected_payload() {
+    let cases: [(&str, Origin, &[u8]); 15] = [
+        ("saves/1/game.sii", Origin::EncryptedBinary, b"BSII\x03"),
+        (
+            "saves/autosave/game.sii",
+            Origin::EncryptedBinary,
+            b"BSII\x03",
+        ),
+        (
+            "saves/autosave_job/game.sii",
+            Origin::EncryptedBinary,
+            b"BSII\x03",
+        ),
+        ("saves/1/info.sii", Origin::EncryptedText, b"SiiNunit"),
+        (
+            "saves/autosave/info.sii",
+            Origin::EncryptedText,
+            b"SiiNunit",
+        ),
+        (
+            "saves/autosave_job/info.sii",
+            Origin::EncryptedText,
+            b"SiiNunit",
+        ),
+        ("profile.sii", Origin::EncryptedText, b"SiiNunit"),
+        ("text/controls_osx.sii", Origin::Plain, b"SiiNunit"),
+        (
+            "text/gearbox_layout_scania_12.sii",
+            Origin::Plain,
+            b"SiiNunit",
+        ),
+        (
+            "text/gearbox_layout_scania_12_2.sii",
+            Origin::Plain,
+            b"SiiNunit",
+        ),
+        (
+            "text/gearbox_layout_volvo_12.sii",
+            Origin::Plain,
+            b"SiiNunit",
+        ),
+        (
+            "text/gearbox_layout_volvo_12_2.sii",
+            Origin::Plain,
+            b"SiiNunit",
+        ),
+        ("text/gearbox_layout_zf_12.sii", Origin::Plain, b"SiiNunit"),
+        ("text/gearbox_layout_zf_16.sii", Origin::Plain, b"SiiNunit"),
+        ("text/tutorial_hint_data.sii", Origin::Plain, b"SiiNunit"),
+    ];
+
+    for (path, origin, prefix) in cases {
+        let opened = open(&fixture(path)).unwrap_or_else(|e| panic!("open {path}: {e}"));
+        assert_eq!(opened.origin, origin, "{path}");
+        assert!(opened.payload.starts_with(prefix), "{path}");
+    }
 }
 
 #[test]
