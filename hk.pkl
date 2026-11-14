@@ -1,0 +1,36 @@
+amends "package://github.com/jdx/hk/releases/download/v2.12.0/hk@2.12.0#/Config.pkl"
+import "package://github.com/jdx/hk/releases/download/v2.12.0/hk@2.12.0#/Builtins.pkl"
+
+min_hk_version = "2.12.0"
+fail_fast = true
+
+hooks {
+  ["pre-commit"] {
+    fix = false
+    stash = "git"
+    steps {
+      ["fmt-check"] {
+        check = "just fmt-check"
+      }
+      ["lint"] {
+        check = "just lint"
+        depends = "fmt-check"
+      }
+    }
+  }
+
+  ["commit-msg"] {
+    steps {
+      ["conventional-commit"] = Builtins.check_conventional_commit
+    }
+  }
+
+  ["pre-push"] {
+    steps {
+      ["ci"] {
+        check = "just ci"
+        exclusive = true
+      }
+    }
+  }
+}
