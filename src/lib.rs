@@ -3,10 +3,12 @@
 pub mod container;
 
 mod error;
+mod file;
 mod model;
 mod text;
 
 pub use error::Error;
+pub use file::{File, open};
 pub use model::{Document, Unit, Value};
 
 /// Crate version, from `Cargo.toml`.

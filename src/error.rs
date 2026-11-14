@@ -1,4 +1,4 @@
-//! Errors raised while opening a container.
+//! Errors raised while reading or editing SII data.
 
 use std::fmt;
 
@@ -22,6 +22,8 @@ enum Kind {
     DuplicateUnit { id: String },
     InvalidName { reason: &'static str },
     InvalidValue { reason: &'static str },
+    InvalidEncoding,
+    Unsupported(&'static str),
 }
 
 impl Error {
@@ -104,6 +106,20 @@ impl Error {
         }
     }
 
+    pub(crate) fn invalid_encoding(offset: usize) -> Self {
+        Self {
+            kind: Kind::InvalidEncoding,
+            offset,
+        }
+    }
+
+    pub(crate) fn unsupported(what: &'static str) -> Self {
+        Self {
+            kind: Kind::Unsupported(what),
+            offset: 0,
+        }
+    }
+
     /// Byte offset into the input where the error was detected.
     pub fn offset(&self) -> usize {
         self.offset
@@ -116,6 +132,7 @@ impl fmt::Display for Error {
             Kind::MissingUnit { id } => return write!(f, "missing unit {id:?}"),
             Kind::DuplicateUnit { id } => return write!(f, "duplicate unit {id:?}"),
             Kind::InvalidName { reason } => return write!(f, "invalid name: {reason}"),
+            Kind::Unsupported(what) => return write!(f, "unsupported: {what}"),
             _ => {}
         }
         match &self.kind {
@@ -135,9 +152,11 @@ impl fmt::Display for Error {
             Kind::Parse { expected } => write!(f, "expected {expected}"),
             Kind::MissingAttribute { name } => write!(f, "missing attribute {name:?}"),
             Kind::InvalidValue { reason } => write!(f, "invalid value: {reason}"),
-            Kind::MissingUnit { .. } | Kind::DuplicateUnit { .. } | Kind::InvalidName { .. } => {
-                unreachable!()
-            }
+            Kind::InvalidEncoding => write!(f, "payload is not valid UTF-8"),
+            Kind::MissingUnit { .. }
+            | Kind::DuplicateUnit { .. }
+            | Kind::InvalidName { .. }
+            | Kind::Unsupported(_) => unreachable!(),
         }?;
         write!(f, " at offset {}", self.offset)
     }
