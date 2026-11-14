@@ -3,8 +3,11 @@
 pub mod container;
 
 mod error;
+mod model;
+mod text;
 
 pub use error::Error;
+pub use model::{Document, Unit, Value};
 
 /// Crate version, from `Cargo.toml`.
 pub const fn version() -> &'static str {
