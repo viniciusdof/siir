@@ -65,10 +65,22 @@ fn invalid_utf8_reports_the_byte() {
 }
 
 #[test]
-fn binary_needs_the_bsii_codec() {
-    let error = match open(&fixture("saves/1/game.sii")) {
-        Ok(_) => panic!("binary payloads are not supported yet"),
-        Err(error) => error,
-    };
-    assert_eq!(error.to_string(), "unsupported: BSII");
+fn binary_save_opens_and_writes_plain() {
+    let file = open(&fixture("saves/1/game.sii")).unwrap();
+    assert_eq!(file.origin(), Origin::EncryptedBinary);
+
+    let mut document = file.document().unwrap();
+    assert_eq!(document.units_of_class("economy").count(), 1);
+    assert!(document.units_of_class("vehicle").count() > 20);
+    {
+        let bank = document.get("bank").unwrap();
+        assert_eq!(bank.get("money_account"), Some("2000"));
+        assert_eq!(bank.get("coinsurance_ratio"), Some("&3dcccccd"));
+    }
+
+    let out = file.write(&document).unwrap();
+    assert!(out.starts_with(b"SiiNunit"));
+    let reopened = open(&out).unwrap();
+    assert_eq!(reopened.origin(), Origin::Plain);
+    assert_eq!(reopened.document().unwrap().to_text(), document.to_text());
 }

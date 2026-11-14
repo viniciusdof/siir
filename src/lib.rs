@@ -2,6 +2,7 @@
 
 pub mod container;
 
+mod binary;
 mod error;
 mod file;
 mod model;

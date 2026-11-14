@@ -23,7 +23,9 @@ enum Kind {
     InvalidName { reason: &'static str },
     InvalidValue { reason: &'static str },
     InvalidEncoding,
-    Unsupported(&'static str),
+    UnsupportedVersion(u32),
+    UnknownType(u32),
+    UnknownStructure(u32),
 }
 
 impl Error {
@@ -113,14 +115,29 @@ impl Error {
         }
     }
 
-    pub(crate) fn unsupported(what: &'static str) -> Self {
+    pub(crate) fn unsupported_version(version: u32) -> Self {
         Self {
-            kind: Kind::Unsupported(what),
+            kind: Kind::UnsupportedVersion(version),
             offset: 0,
         }
     }
 
-    /// Byte offset into the input where the error was detected.
+    pub(crate) fn unknown_type(kind: u32, offset: usize) -> Self {
+        Self {
+            kind: Kind::UnknownType(kind),
+            offset,
+        }
+    }
+
+    pub(crate) fn unknown_structure(id: u32, offset: usize) -> Self {
+        Self {
+            kind: Kind::UnknownStructure(id),
+            offset,
+        }
+    }
+
+    /// Byte offset into the payload being processed. For `ScsC` inputs the
+    /// payload is decompressed, so the offset is not a file offset.
     pub fn offset(&self) -> usize {
         self.offset
     }
@@ -132,7 +149,9 @@ impl fmt::Display for Error {
             Kind::MissingUnit { id } => return write!(f, "missing unit {id:?}"),
             Kind::DuplicateUnit { id } => return write!(f, "duplicate unit {id:?}"),
             Kind::InvalidName { reason } => return write!(f, "invalid name: {reason}"),
-            Kind::Unsupported(what) => return write!(f, "unsupported: {what}"),
+            Kind::UnsupportedVersion(version) => {
+                return write!(f, "unsupported BSII version {version}");
+            }
             _ => {}
         }
         match &self.kind {
@@ -153,10 +172,12 @@ impl fmt::Display for Error {
             Kind::MissingAttribute { name } => write!(f, "missing attribute {name:?}"),
             Kind::InvalidValue { reason } => write!(f, "invalid value: {reason}"),
             Kind::InvalidEncoding => write!(f, "payload is not valid UTF-8"),
+            Kind::UnknownType(kind) => write!(f, "unknown BSII data type {kind}"),
+            Kind::UnknownStructure(id) => write!(f, "unknown BSII structure {id}"),
             Kind::MissingUnit { .. }
             | Kind::DuplicateUnit { .. }
             | Kind::InvalidName { .. }
-            | Kind::Unsupported(_) => unreachable!(),
+            | Kind::UnsupportedVersion(_) => unreachable!(),
         }?;
         write!(f, " at offset {}", self.offset)
     }

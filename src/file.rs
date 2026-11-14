@@ -22,7 +22,13 @@ pub fn open(bytes: &[u8]) -> Result<File, Error> {
                 payload,
             })
         }
-        Origin::Binary | Origin::EncryptedBinary => Err(Error::unsupported("BSII")),
+        Origin::Binary | Origin::EncryptedBinary => {
+            let payload = crate::binary::decode(&opened.payload)?;
+            Ok(File {
+                origin: opened.origin,
+                payload,
+            })
+        }
     }
 }
 
