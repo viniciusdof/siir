@@ -3,16 +3,17 @@
 use siir::container::Origin;
 use siir::{Value, open};
 
-fn fixture(path: &str) -> Vec<u8> {
+fn fixture(game: &str, path: &str) -> Vec<u8> {
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("fixtures/ets2")
+        .join("fixtures")
+        .join(game)
         .join(path);
     std::fs::read(path).unwrap()
 }
 
 #[test]
 fn plain_text_round_trips() {
-    let bytes = fixture("text/gearbox_layout_volvo_12.sii");
+    let bytes = fixture("ets2", "text/gearbox_layout_volvo_12.sii");
     let file = open(&bytes).unwrap();
     assert_eq!(file.origin(), Origin::Plain);
 
@@ -36,7 +37,7 @@ fn plain_text_round_trips() {
 
 #[test]
 fn encrypted_text_writes_plain() {
-    let bytes = fixture("profile.sii");
+    let bytes = fixture("ets2", "profile.sii");
     let file = open(&bytes).unwrap();
     assert_eq!(file.origin(), Origin::EncryptedText);
 
@@ -55,6 +56,13 @@ fn encrypted_text_writes_plain() {
 }
 
 #[test]
+fn ats_info_is_encrypted_text() {
+    let file = open(&fixture("ats", "saves/1/info.sii")).unwrap();
+    assert_eq!(file.origin(), Origin::EncryptedText);
+    assert!(file.document().is_ok());
+}
+
+#[test]
 fn invalid_utf8_reports_the_byte() {
     let error = match open(b"SiiN\xff") {
         Ok(_) => panic!("invalid UTF-8 must fail"),
@@ -65,22 +73,28 @@ fn invalid_utf8_reports_the_byte() {
 }
 
 #[test]
-fn binary_save_opens_and_writes_plain() {
-    let file = open(&fixture("saves/1/game.sii")).unwrap();
-    assert_eq!(file.origin(), Origin::EncryptedBinary);
+fn binary_saves_open_and_write_plain() {
+    for (game, money) in [("ets2", "2000"), ("ats", "1500")] {
+        let file = open(&fixture(game, "saves/1/game.sii")).unwrap();
+        assert_eq!(file.origin(), Origin::EncryptedBinary, "{game}");
 
-    let mut document = file.document().unwrap();
-    assert_eq!(document.units_of_class("economy").count(), 1);
-    assert!(document.units_of_class("vehicle").count() > 20);
-    {
-        let bank = document.get("bank").unwrap();
-        assert_eq!(bank.get("money_account"), Some("2000"));
-        assert_eq!(bank.get("coinsurance_ratio"), Some("&3dcccccd"));
+        let mut document = file.document().unwrap();
+        assert_eq!(document.units_of_class("economy").count(), 1, "{game}");
+        {
+            let bank = document.get("bank").unwrap();
+            assert_eq!(bank.get("money_account"), Some(money), "{game}");
+            if game == "ets2" {
+                assert_eq!(bank.get("coinsurance_ratio"), Some("&3dcccccd"));
+            }
+        }
+        if game == "ets2" {
+            assert!(document.units_of_class("vehicle").count() > 20);
+        }
+
+        let out = file.write(&document).unwrap();
+        assert!(out.starts_with(b"SiiNunit"));
+        let reopened = open(&out).unwrap();
+        assert_eq!(reopened.origin(), Origin::Plain);
+        assert_eq!(reopened.document().unwrap().to_text(), document.to_text());
     }
-
-    let out = file.write(&document).unwrap();
-    assert!(out.starts_with(b"SiiNunit"));
-    let reopened = open(&out).unwrap();
-    assert_eq!(reopened.origin(), Origin::Plain);
-    assert_eq!(reopened.document().unwrap().to_text(), document.to_text());
 }
