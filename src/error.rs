@@ -26,6 +26,7 @@ enum Kind {
     UnsupportedVersion(u32),
     UnknownType(u32),
     UnknownStructure(u32),
+    MissingOrdinals,
 }
 
 impl Error {
@@ -136,6 +137,13 @@ impl Error {
         }
     }
 
+    pub(crate) fn missing_ordinals(offset: usize) -> Self {
+        Self {
+            kind: Kind::MissingOrdinals,
+            offset,
+        }
+    }
+
     /// Byte offset into the payload being processed. For `ScsC` inputs the
     /// payload is decompressed, so the offset is not a file offset.
     pub fn offset(&self) -> usize {
@@ -174,6 +182,7 @@ impl fmt::Display for Error {
             Kind::InvalidEncoding => write!(f, "payload is not valid UTF-8"),
             Kind::UnknownType(kind) => write!(f, "unknown BSII data type {kind}"),
             Kind::UnknownStructure(id) => write!(f, "unknown BSII structure {id}"),
+            Kind::MissingOrdinals => write!(f, "missing ordinal table"),
             Kind::MissingUnit { .. }
             | Kind::DuplicateUnit { .. }
             | Kind::InvalidName { .. }
