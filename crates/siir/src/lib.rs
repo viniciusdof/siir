@@ -10,4 +10,4 @@ mod text;
 
 pub use error::Error;
 pub use file::{File, open};
-pub use model::{Document, Unit, Value};
+pub use model::{Document, Index, Unit, Value};

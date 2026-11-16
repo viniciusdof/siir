@@ -1,6 +1,6 @@
 //! Public edit surface.
 
-use siir::{Document, Unit, Value};
+use siir::{Document, Index, Unit, Value};
 
 const SOURCE: &str = concat!(
     "SiiNunit\n{\n",
@@ -132,6 +132,8 @@ fn remove_drops_the_unit() {
     assert!(!text.contains("economy"));
     assert!(text.contains("SiiNunit"));
     assert!(document.get("economy").is_none());
+    assert_eq!(document.units().count(), 0);
+    assert_eq!(document.units_of_class("economy").count(), 0);
     assert!(document.remove("nope").is_err());
 }
 
@@ -270,6 +272,31 @@ fn set_nth_reaches_later_implicit_elements() {
     assert_eq!(
         document.get("u").unwrap().get_nth("entries[]", 1),
         Some("\"c\"")
+    );
+}
+
+#[test]
+fn attrs_lists_current_values() {
+    let mut document = Document::parse(SOURCE).unwrap();
+    let unit = document.get("economy").unwrap();
+    unit.set("other", Value::Int(8)).unwrap();
+    assert_eq!(
+        unit.attrs().collect::<Vec<_>>(),
+        vec![
+            ("money_account", Index::None, "1000"),
+            ("other", Index::None, "8"),
+        ]
+    );
+
+    let mut probe = Unit::new("probe", "probe.one");
+    probe.set("gears[0]", Value::Int(1)).unwrap();
+    probe.set("entries[]", Value::string("a")).unwrap();
+    assert_eq!(
+        probe.attrs().collect::<Vec<_>>(),
+        vec![
+            ("gears", Index::At(0), "1"),
+            ("entries", Index::Unspecified, "\"a\""),
+        ]
     );
 }
 

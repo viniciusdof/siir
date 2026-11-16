@@ -1,7 +1,7 @@
 //! Whole-file open and write.
 
 use siir::container::Origin;
-use siir::{Value, open};
+use siir::{Index, Value, open};
 
 fn fixture(game: &str, path: &str) -> Vec<u8> {
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -70,6 +70,36 @@ fn invalid_utf8_reports_the_byte() {
     };
     assert_eq!(error.offset(), 4);
     assert_eq!(error.to_string(), "payload is not valid UTF-8 at offset 4");
+}
+
+#[test]
+fn units_and_attrs_count_a_real_save() {
+    use std::collections::HashSet;
+
+    for (game, units, classes) in [("ets2", 22_498, 37), ("ats", 7_746, 35)] {
+        let file = open(&fixture(game, "saves/1/game.sii")).unwrap();
+        let document = file.document().unwrap();
+
+        let mut classes_seen = HashSet::new();
+        let mut attrs = 0;
+        for unit in document.units() {
+            classes_seen.insert(unit.class());
+            attrs += unit.attrs().count();
+        }
+
+        assert_eq!(document.units().count(), units, "{game}");
+        assert_eq!(classes_seen.len(), classes, "{game}");
+        assert!(attrs > units, "{game}");
+
+        if game == "ets2" {
+            let economy = document.units_of_class("economy").next().unwrap();
+            assert!(
+                economy
+                    .attrs()
+                    .any(|(name, index, _)| name == "companies" && index != Index::None)
+            );
+        }
+    }
 }
 
 #[test]

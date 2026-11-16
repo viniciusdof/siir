@@ -31,12 +31,14 @@ pub(crate) struct Attr<'a> {
     pub(crate) replacement: Option<Rendered>,
 }
 
+/// Where an attribute sits in an implicit array.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Index {
+pub enum Index {
+    /// Scalar attribute, `name`.
     None,
-    /// `name[]`
+    /// Array element without a written index, `name[]`.
     Unspecified,
-    /// `name[i]`
+    /// Array element at a fixed position, `name[i]`.
     At(u32),
 }
 
@@ -175,11 +177,14 @@ impl<'a> Document<'a> {
         self.units.get_mut(found)
     }
 
+    /// Every unit, in file order.
+    pub fn units(&self) -> impl Iterator<Item = &Unit<'a>> + '_ {
+        self.units.iter().filter(|unit| !unit.removed)
+    }
+
     /// Units of one class, in file order.
     pub fn units_of_class<'b>(&'b self, class: &'b str) -> impl Iterator<Item = &'b Unit<'a>> + 'b {
-        self.units
-            .iter()
-            .filter(move |unit| !unit.removed && unit.class == class)
+        self.units().filter(move |unit| unit.class == class)
     }
 
     /// Adds a unit before the closing brace.
@@ -299,6 +304,24 @@ impl<'a> Unit<'a> {
                     .as_ref()
                     .map_or(attr.value, |rendered| rendered.text.as_str())
             })
+    }
+
+    /// Attributes as `(name, index, value)`, with edits applied.
+    pub fn attrs(&self) -> impl Iterator<Item = (&str, Index, &str)> + '_ {
+        let parsed = self.attrs.iter().map(|attr| {
+            (
+                attr.name,
+                attr.index,
+                attr.replacement
+                    .as_ref()
+                    .map_or(attr.value, |rendered| rendered.text.as_str()),
+            )
+        });
+        let added = self.added.iter().map(|(name, rendered)| {
+            let (base, index) = split_name(name);
+            (base, index, rendered.text.as_str())
+        });
+        parsed.chain(added)
     }
 
     /// Sets `name`, `name[i]`, or `name[]`; adds it on an inserted unit.
