@@ -11,6 +11,7 @@ mod player;
 mod profile;
 mod trailer;
 mod truck;
+mod used;
 
 /// A save edit applied through [`apply`].
 pub enum Command {
@@ -96,6 +97,13 @@ pub enum Command {
         /// Accessory unit id.
         accessory: String,
     },
+    /// Sets one used-truck listing's price.
+    SetUsedTruckPrice {
+        /// Listing unit id.
+        id: String,
+        /// Asking price.
+        price: i64,
+    },
     /// Points the player's assigned vehicle slot at one truck.
     SetCurrentTruck(String),
     /// Moves the player's headquarters to the garage city holding one truck.
@@ -174,6 +182,7 @@ pub fn apply(document: &mut Document<'_>, _game: Game, command: Command) -> Resu
         Command::RemoveAccessory { id, accessory } => {
             truck::remove_accessory(document, &id, &accessory)
         }
+        Command::SetUsedTruckPrice { id, price } => used::set_price(document, &id, price),
         Command::SetCurrentTruck(id) => truck::set_current_truck(document, &id),
         Command::SetHqTruck(id) => truck::set_hq_truck(document, &id),
         Command::RepairTrailer(id) => trailer::repair_trailer(document, &id),

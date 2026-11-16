@@ -63,6 +63,11 @@ pub enum Error {
         /// Accessory unit id.
         accessory: String,
     },
+    /// A used-truck price is negative.
+    InvalidPrice {
+        /// Requested price.
+        price: i64,
+    },
     /// The truck is not assigned to any garage.
     NoGarage {
         /// Truck unit id.
@@ -146,6 +151,9 @@ impl fmt::Display for Error {
             Self::NoPaint { id } => write!(f, "no paint job on {id}"),
             Self::NoAccessory { id, accessory } => {
                 write!(f, "no accessory {accessory} on {id}")
+            }
+            Self::InvalidPrice { price } => {
+                write!(f, "used truck price {price} is negative")
             }
             Self::NoGarage { id } => write!(f, "no garage holds {id}"),
             Self::NoCurrentTruck => write!(f, "player has no current truck"),

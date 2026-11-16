@@ -582,6 +582,37 @@ fn ets2_accessory_path_survives_reopen() {
 }
 
 #[test]
+fn ets2_used_truck_price_survives_reopen() {
+    let bytes = fixture("ets2/saves/1/game.sii");
+    let file = siir::open(&bytes).unwrap();
+    let mut document = file.document().unwrap();
+    let id = read(&document, Game::Ets2).unwrap().used_trucks[0]
+        .id
+        .to_owned();
+
+    let old = written(&file, &document);
+    apply(
+        &mut document,
+        Game::Ets2,
+        Command::SetUsedTruckPrice {
+            id: id.clone(),
+            price: 100_000,
+        },
+    )
+    .unwrap();
+    let new = written(&file, &document);
+    let changed = changed_lines(&old, &new);
+    assert_eq!(changed.len(), 1);
+    assert_eq!(changed[0].1.trim_start(), "price: 100000\n");
+
+    let out = file.write(&document).unwrap();
+    let reopened = siir::open(&out).unwrap();
+    let document = reopened.document().unwrap();
+    let save = read(&document, Game::Ets2).unwrap();
+    assert_eq!(save.used_trucks[0].price, 100_000);
+}
+
+#[test]
 fn ets2_money_survives_reopen() {
     let bytes = fixture("ets2/saves/1/game.sii");
     let file = siir::open(&bytes).unwrap();
