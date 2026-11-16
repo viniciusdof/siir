@@ -35,6 +35,41 @@ fn get_finds_by_class_and_id() {
     assert!(document.get("economy").is_some());
     assert!(document.get("_nameless.0001.0002.0003.0004").is_some());
     assert_eq!(document.units_of_class("economy").count(), 1);
+    let unit = document.units_of_class("economy").next().unwrap();
+    assert_eq!(unit.class(), "economy");
+    assert_eq!(unit.id(), "_nameless.0001.0002.0003.0004");
+}
+
+#[test]
+fn sets_every_value_form() {
+    let mut document = Document::parse(SOURCE).unwrap();
+    let mut unit = Unit::new("probe", "probe.one");
+    unit.set("int", Value::Int(-7)).unwrap();
+    unit.set("uint", Value::UInt(u64::MAX)).unwrap();
+    unit.set("float", Value::Float(2.0)).unwrap();
+    unit.set("bool", Value::Bool(true)).unwrap();
+    unit.set("string", Value::string("a b")).unwrap();
+    unit.set("token", Value::token("trailer.two")).unwrap();
+    unit.set("nil", Value::Nil).unwrap();
+    unit.set("hex", Value::Hex(0x3f80_0000)).unwrap();
+    unit.set("vector", Value::Vector("(1, 2, 3)".to_owned()))
+        .unwrap();
+    document.insert(unit).unwrap();
+
+    let text = document.to_text();
+    for line in [
+        "int: -7",
+        "uint: 18446744073709551615",
+        "float: 2.0",
+        "bool: true",
+        "string: \"a b\"",
+        "token: trailer.two",
+        "nil: nil",
+        "hex: &3f800000",
+        "vector: (1, 2, 3)",
+    ] {
+        assert!(text.contains(line), "missing {line:?} in {text:?}");
+    }
 }
 
 #[test]
@@ -114,6 +149,21 @@ fn dangling_lists_cited_ids_without_a_unit() {
     );
     let document = Document::parse(source).unwrap();
     assert_eq!(document.dangling(), vec!["vehicle.volvo"]);
+}
+
+#[test]
+fn dangling_ignores_numbers_and_strings() {
+    let source = concat!(
+        "SiiNunit\n{\n",
+        "a : _nameless.0001.0002.0003.0004 {\n",
+        "    ratio: 1.5\n",
+        "    count: 12\n",
+        "    label: \"1.5\"\n",
+        "    bits: &3f800000\n",
+        "}\n}\n",
+    );
+    let document = Document::parse(source).unwrap();
+    assert!(document.dangling().is_empty());
 }
 
 #[test]

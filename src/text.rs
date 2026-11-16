@@ -1,7 +1,7 @@
 //! `SiiNunit` text parser.
 
 use crate::error::Error;
-use crate::model::{Attr, Document, Index, Kind, RawValue, Unit};
+use crate::model::{Attr, Document, Index, Unit};
 
 pub(crate) fn parse(source: &str) -> Result<Document<'_>, Error> {
     let mut parser = Parser { source, pos: 0 };
@@ -197,22 +197,19 @@ impl<'a> Parser<'a> {
         Err(self.error("`)`"))
     }
 
-    fn value(&mut self) -> Result<RawValue<'a>, Error> {
+    fn value(&mut self) -> Result<&'a str, Error> {
         let start = self.pos;
-        let kind = match self.peek() {
+        match self.peek() {
             None => return Err(self.error("value")),
             Some(b'"') => {
                 self.pos += 1;
-                let content_start = self.pos;
                 while self.peek().is_some_and(|b| b != b'"') {
                     self.pos += 1;
                 }
                 if self.peek().is_none() {
                     return Err(self.error("closing quote"));
                 }
-                let content = &self.source[content_start..self.pos];
                 self.pos += 1;
-                Kind::String(content)
             }
             Some(b'&') => {
                 self.pos += 1;
@@ -220,10 +217,8 @@ impl<'a> Parser<'a> {
                 while self.peek().is_some_and(|b| b.is_ascii_hexdigit()) {
                     self.pos += 1;
                 }
-                let digits = &self.source[digits_start..self.pos];
-                let bits =
-                    u32::from_str_radix(digits, 16).map_err(|_| self.error("32-bit hex value"))?;
-                Kind::Hex(bits)
+                u32::from_str_radix(&self.source[digits_start..self.pos], 16)
+                    .map_err(|_| self.error("32-bit hex value"))?;
             }
             Some(b'(') => {
                 self.group()?;
@@ -236,40 +231,12 @@ impl<'a> Parser<'a> {
                 } else {
                     self.pos = after_first;
                 }
-                Kind::Vector(&self.source[start..self.pos])
             }
-            Some(_) => match self.token()? {
-                "nil" => Kind::Nil,
-                "true" => Kind::Bool(true),
-                "false" => Kind::Bool(false),
-                token => number_or_token(token),
-            },
-        };
-
-        Ok(RawValue {
-            kind,
-            raw: &self.source[start..self.pos],
-        })
-    }
-}
-
-/// `1H` and `RHH` are tokens; `-5` and `1.5` are numbers.
-fn number_or_token(token: &str) -> Kind<'_> {
-    if !token
-        .bytes()
-        .next()
-        .is_some_and(|b| b.is_ascii_digit() || b == b'-')
-    {
-        return Kind::Token(token);
-    }
-    if let Ok(int) = token.parse::<i64>() {
-        Kind::Int(int)
-    } else if let Ok(uint) = token.parse::<u64>() {
-        Kind::UInt(uint)
-    } else if let Ok(float) = token.parse::<f32>() {
-        Kind::Float(float)
-    } else {
-        Kind::Token(token)
+            Some(_) => {
+                self.token()?;
+            }
+        }
+        Ok(&self.source[start..self.pos])
     }
 }
 
@@ -316,10 +283,11 @@ mod tests {
             if path.file_name().and_then(|name| name.to_str()) == Some("controls_osx.sii") {
                 let unit = &document.units[0];
                 assert_eq!(unit.class, "input_config");
-                assert!(matches!(
-                    attr(unit, "config_lines", Index::At(0)).value.kind,
-                    Kind::String(line) if line.starts_with("device keyboard")
-                ));
+                assert!(
+                    attr(unit, "config_lines", Index::At(0))
+                        .value
+                        .starts_with("\"device keyboard")
+                );
             }
             parsed += 1;
         }
@@ -355,74 +323,35 @@ mod tests {
         assert_eq!(unit.span.start, source.find("economy").unwrap());
         assert!(source[unit.span.clone()].ends_with('}'));
 
-        assert!(matches!(
-            attr(unit, "money_account", Index::None).value.kind,
-            Kind::Int(1_000_000)
-        ));
+        assert_eq!(attr(unit, "money_account", Index::None).value, "1000000");
         let money = attr(unit, "money_account", Index::None);
-        assert_eq!(money.value.raw, "1000000");
         assert_eq!(&source[money.span.clone()], "money_account: 1000000");
-        assert!(matches!(
-            attr(unit, "cargo", Index::None).value.kind,
-            Kind::UInt(u64::MAX)
-        ));
-        assert!(matches!(
-            attr(unit, "position", Index::None).value.kind,
-            Kind::Vector("(1.0, 2.0, 3.0)")
-        ));
-        assert!(matches!(
-            attr(unit, "placement", Index::None).value.kind,
-            Kind::Vector("(0, 0, 0) (1; 0, 0, 0)")
-        ));
-        assert!(matches!(
-            attr(unit, "entries", Index::Unspecified).value.kind,
-            Kind::String("a")
-        ));
-        assert!(
-            matches!(attr(unit, "ratio", Index::None).value.kind, Kind::Float(value) if value == 1.5)
+        assert_eq!(
+            attr(unit, "cargo", Index::None).value,
+            "18446744073709551615"
         );
-        assert!(matches!(
-            attr(unit, "label", Index::None).value.kind,
-            Kind::String("hello")
-        ));
-        assert!(matches!(
-            attr(unit, "active", Index::None).value.kind,
-            Kind::Bool(true)
-        ));
-        assert!(matches!(
-            attr(unit, "unused", Index::None).value.kind,
-            Kind::Nil
-        ));
-        assert!(matches!(
-            attr(unit, "bits", Index::None).value.kind,
-            Kind::Hex(0x3f80_0000)
-        ));
-        assert!(matches!(
-            attr(unit, "target", Index::None).value.kind,
-            Kind::Token("trailer.foo")
-        ));
-        assert!(matches!(
-            attr(unit, "gears", Index::None).value.kind,
-            Kind::Int(2)
-        ));
-        assert!(matches!(
-            attr(unit, "gears", Index::At(0)).value.kind,
-            Kind::Token("1H")
-        ));
-        assert!(matches!(
-            attr(unit, "gears", Index::At(1)).value.kind,
-            Kind::Token("_nameless.0001")
-        ));
+        assert_eq!(attr(unit, "position", Index::None).value, "(1.0, 2.0, 3.0)");
+        assert_eq!(
+            attr(unit, "placement", Index::None).value,
+            "(0, 0, 0) (1; 0, 0, 0)"
+        );
+        assert_eq!(attr(unit, "entries", Index::Unspecified).value, "\"a\"");
+        assert_eq!(attr(unit, "ratio", Index::None).value, "1.5");
+        assert_eq!(attr(unit, "label", Index::None).value, "\"hello\"");
+        assert_eq!(attr(unit, "active", Index::None).value, "true");
+        assert_eq!(attr(unit, "unused", Index::None).value, "nil");
+        assert_eq!(attr(unit, "bits", Index::None).value, "&3f800000");
+        assert_eq!(attr(unit, "target", Index::None).value, "trailer.foo");
+        assert_eq!(attr(unit, "gears", Index::None).value, "2");
+        assert_eq!(attr(unit, "gears", Index::At(0)).value, "1H");
+        assert_eq!(attr(unit, "gears", Index::At(1)).value, "_nameless.0001");
     }
 
     #[test]
     fn skips_comments() {
         let source = "SiiNunit\n{\n// line\n# hash\n/* block */\nunit : id { a: 1 } // tail\n}\n";
         let document = parse(source).unwrap();
-        assert!(matches!(
-            document.units[0].attrs[0].value.kind,
-            Kind::Int(1)
-        ));
+        assert_eq!(document.units[0].attrs[0].value, "1");
     }
 
     #[test]

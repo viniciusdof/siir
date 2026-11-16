@@ -26,7 +26,7 @@ pub struct Unit<'a> {
 pub(crate) struct Attr<'a> {
     pub(crate) name: &'a str,
     pub(crate) index: Index,
-    pub(crate) value: RawValue<'a>,
+    pub(crate) value: &'a str,
     pub(crate) span: Range<usize>,
     pub(crate) replacement: Option<Rendered>,
 }
@@ -38,30 +38,6 @@ pub(crate) enum Index {
     Unspecified,
     /// `name[i]`
     At(u32),
-}
-
-pub(crate) struct RawValue<'a> {
-    pub(crate) kind: Kind<'a>,
-    pub(crate) raw: &'a str,
-}
-
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "read by tests until the binary codec lands")
-)]
-pub(crate) enum Kind<'a> {
-    String(&'a str),
-    Token(&'a str),
-    Int(i64),
-    Float(f32),
-    Bool(bool),
-    Nil,
-    /// `&hex` float bits.
-    Hex(u32),
-    /// Parenthesized value; placement has two groups.
-    Vector(&'a str),
-    /// Above `i64::MAX`.
-    UInt(u64),
 }
 
 pub(crate) struct Rendered {
@@ -253,12 +229,8 @@ impl<'a> Document<'a> {
         for unit in self.units.iter().filter(|unit| !unit.removed) {
             for attr in &unit.attrs {
                 let candidate = match &attr.replacement {
-                    Some(rendered) if rendered.id => Some(rendered.text.as_str()),
-                    Some(_) => None,
-                    None => match attr.value.kind {
-                        Kind::Token(token) if is_id(token) => Some(token),
-                        _ => None,
-                    },
+                    Some(rendered) => rendered.id.then_some(rendered.text.as_str()),
+                    None => (is_id(attr.value) && !is_number(attr.value)).then_some(attr.value),
                 };
                 if let Some(id) = candidate
                     && !ids.contains(id)
@@ -325,7 +297,7 @@ impl<'a> Unit<'a> {
             .map(|attr| {
                 attr.replacement
                     .as_ref()
-                    .map_or(attr.value.raw, |rendered| rendered.text.as_str())
+                    .map_or(attr.value, |rendered| rendered.text.as_str())
             })
     }
 
@@ -379,7 +351,7 @@ impl<'a> Unit<'a> {
             let Some(rendered) = &attr.replacement else {
                 continue;
             };
-            let value_start = attr.span.end - attr.value.raw.len();
+            let value_start = attr.span.end - attr.value.len();
             out.push_str(&source[last..value_start]);
             out.push_str(&rendered.text);
             last = attr.span.end;
@@ -451,6 +423,10 @@ fn is_vector(text: &str) -> bool {
             byte.is_ascii_alphanumeric()
                 || matches!(byte, b' ' | b'.' | b',' | b';' | b'(' | b')' | b'+' | b'-')
         })
+}
+
+fn is_number(text: &str) -> bool {
+    text.parse::<i64>().is_ok() || text.parse::<u64>().is_ok() || text.parse::<f32>().is_ok()
 }
 
 fn is_id(token: &str) -> bool {
