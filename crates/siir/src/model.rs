@@ -203,7 +203,10 @@ impl<'a> Document<'a> {
         out.push_str(&self.source[last..self.closing_brace]);
         for unit in &self.units {
             if unit.inserted && !unit.removed {
-                unit.write_inserted(&mut out);
+                if !out.ends_with('\n') {
+                    out.push('\n');
+                }
+                out.push_str(&unit.to_text());
             }
         }
         out.push_str(&self.source[self.closing_brace..]);
@@ -233,13 +236,6 @@ impl<'a> Document<'a> {
     pub fn units_of_class<'b>(&'b self, class: &'b str) -> impl Iterator<Item = &'b Unit<'a>> + 'b {
         self.units()
             .filter(move |unit| unit.class.as_ref() == class)
-    }
-
-    /// Source text of a parsed unit, or `None` for an inserted one.
-    pub fn unit_text(&self, id: &str) -> Option<&'a str> {
-        self.units()
-            .find(|unit| !unit.inserted && unit.id() == id)
-            .map(|unit| &self.source[unit.span.clone()])
     }
 
     /// Adds a unit before the closing brace.
@@ -393,6 +389,24 @@ impl<'a> Unit<'a> {
         parsed.chain(added)
     }
 
+    /// Writes this unit with its current attributes.
+    pub fn to_text(&self) -> String {
+        let mut out = String::new();
+        out.push_str(self.class());
+        out.push_str(" : ");
+        out.push_str(self.id());
+        out.push_str(" {\n");
+        for (name, index, value) in self.attrs() {
+            out.push_str("    ");
+            out.push_str(&attr_name(name, index));
+            out.push_str(": ");
+            out.push_str(value);
+            out.push('\n');
+        }
+        out.push_str("}\n");
+        out
+    }
+
     /// Removes an attribute, edited or original. Accepts `name[i]`.
     pub fn remove_attr(&mut self, name: &str) -> Result<(), Error> {
         if !is_attr_name(name) {
@@ -531,24 +545,6 @@ impl<'a> Unit<'a> {
         }
         out.push('}');
     }
-
-    fn write_inserted(&self, out: &mut String) {
-        if !out.ends_with('\n') {
-            out.push('\n');
-        }
-        out.push_str(self.class.as_ref());
-        out.push_str(" : ");
-        out.push_str(self.id.as_ref());
-        out.push_str(" {\n");
-        for (name, rendered) in &self.added {
-            out.push_str("    ");
-            out.push_str(name);
-            out.push_str(": ");
-            out.push_str(&rendered.text);
-            out.push('\n');
-        }
-        out.push_str("}\n");
-    }
 }
 
 fn removal(source: &str, span: Range<usize>) -> (usize, usize) {
@@ -565,6 +561,14 @@ fn removal(source: &str, span: Range<usize>) -> (usize, usize) {
         (line_start, end)
     } else {
         (span.start, span.end)
+    }
+}
+
+fn attr_name(name: &str, index: Index) -> String {
+    match index {
+        Index::None => name.to_owned(),
+        Index::Unspecified => format!("{name}[]"),
+        Index::At(at) => format!("{name}[{at}]"),
     }
 }
 
@@ -606,16 +610,36 @@ fn is_token(text: &str) -> bool {
 }
 
 fn is_vector(text: &str) -> bool {
-    !text.is_empty()
-        && text.starts_with('(')
-        && text.ends_with(')')
-        && text.bytes().all(|byte| {
-            byte.is_ascii_alphanumeric()
-                || matches!(
-                    byte,
-                    b' ' | b'.' | b',' | b';' | b'(' | b')' | b'+' | b'-' | b'&'
-                )
-        })
+    let bytes = text.as_bytes();
+    if bytes.first() != Some(&b'(') || bytes.last() != Some(&b')') {
+        return false;
+    }
+    let mut groups = 0;
+    let mut depth = 0;
+    for &byte in bytes {
+        match byte {
+            b'(' => {
+                if depth != 0 {
+                    return false;
+                }
+                groups += 1;
+                if groups > 2 {
+                    return false;
+                }
+                depth = 1;
+            }
+            b')' => {
+                if depth == 0 {
+                    return false;
+                }
+                depth = 0;
+            }
+            b' ' | b'\t' | b'.' | b',' | b';' | b'+' | b'-' | b'&' => {}
+            _ if byte.is_ascii_alphanumeric() => {}
+            _ => return false,
+        }
+    }
+    depth == 0 && groups > 0
 }
 
 fn is_number(text: &str) -> bool {

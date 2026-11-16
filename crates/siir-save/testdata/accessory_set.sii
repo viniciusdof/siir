@@ -1,0 +1,27 @@
+SiiNunit
+{
+vehicle_accessory : set.data
+{
+    data_path: "/def/vehicle/truck/test.model/data.sii"
+}
+vehicle_accessory : set.engine
+{
+    data_path: "/def/vehicle/truck/test.model/engine/500.sii"
+}
+vehicle_accessory : set.transmission
+{
+    data_path: "/def/vehicle/truck/test.model/transmission/12.sii"
+}
+vehicle_accessory : set.cabin
+{
+    data_path: "/def/vehicle/truck/test.model/cabin/space.sii"
+}
+vehicle_accessory : set.chassis
+{
+    data_path: "/def/vehicle/truck/test.model/chassis/4x2.sii"
+}
+vehicle_accessory : set.paint
+{
+    data_path: "/def/vehicle/truck/test.model/paint_job/color1.sii"
+}
+}

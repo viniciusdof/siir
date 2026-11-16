@@ -2,6 +2,7 @@
 
 use siir::{Document, Unit, Value};
 
+use crate::accessory::write_accessories;
 use crate::error::Error;
 use crate::names::{self, indexed};
 use crate::value::{count, reference, unquote};
@@ -156,20 +157,6 @@ pub(super) fn remove_badge(document: &mut Document<'_>, id: &str) -> Result<(), 
 
     let unit = truck(document, id)?;
     write_accessories(unit, &kept, total)
-}
-
-fn write_accessories(unit: &mut Unit<'_>, kept: &[String], total: usize) -> Result<(), Error> {
-    unit.set(names::ACCESSORIES, Value::UInt(kept.len() as u64))?;
-    for (nth, accessory) in kept.iter().enumerate() {
-        unit.set(
-            &indexed(names::ACCESSORIES, nth),
-            Value::token(accessory.as_str()),
-        )?;
-    }
-    for nth in kept.len()..total {
-        unit.remove_attr(&indexed(names::ACCESSORIES, nth))?;
-    }
-    Ok(())
 }
 
 fn is_badge(path: &str) -> bool {

@@ -6,6 +6,7 @@ use std::collections::HashMap;
 
 use siir::{Document, Unit};
 
+pub mod accessory;
 pub mod catalog;
 mod color;
 mod command;
@@ -16,6 +17,7 @@ mod names;
 pub mod profiles;
 mod value;
 
+pub use accessory::{export_accessories, import_accessories};
 pub use color::Color;
 pub use command::{Command, apply};
 pub use error::Error;

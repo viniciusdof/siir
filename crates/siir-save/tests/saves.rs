@@ -1,7 +1,7 @@
 //! Read model and commands over the real ETS2 and ATS fixtures.
 
 use siir::Document;
-use siir_save::{Command, Game, Skills, apply, read};
+use siir_save::{Command, Game, Skills, apply, export_accessories, import_accessories, read};
 
 fn fixture(path: &str) -> Vec<u8> {
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -579,6 +579,63 @@ fn ets2_accessory_path_survives_reopen() {
         .find(|accessory| accessory.id == accessory_id)
         .unwrap();
     assert_eq!(accessory.path, Some(path));
+}
+
+fn accessories_export_and_import(path: &str, game: Game) {
+    let bytes = fixture(path);
+    let file = siir::open(&bytes).unwrap();
+    let mut document = file.document().unwrap();
+    let (source_id, source_count, target_id) = {
+        let save = read(&document, game).unwrap();
+        let source = save.current_truck().unwrap();
+        let target = save
+            .trucks
+            .iter()
+            .find(|truck| truck.id != source.id)
+            .unwrap();
+        (
+            source.id.to_owned(),
+            source.accessories.len(),
+            target.id.to_owned(),
+        )
+    };
+
+    let block = export_accessories(&document, &source_id).unwrap();
+    import_accessories(&mut document, &target_id, &block).unwrap();
+
+    let save = read(&document, game).unwrap();
+    let target = save.truck(&target_id).unwrap();
+    assert_eq!(target.accessories.len(), source_count);
+    assert!(
+        target
+            .accessories
+            .iter()
+            .any(|accessory| accessory.path.is_some())
+    );
+
+    let out = file.write(&document).unwrap();
+    let reopened = siir::open(&out).unwrap();
+    let document = reopened.document().unwrap();
+    let save = read(&document, game).unwrap();
+    assert_eq!(
+        save.truck(&target_id).unwrap().accessories.len(),
+        source_count
+    );
+    assert!(
+        export_accessories(&document, &target_id)
+            .unwrap()
+            .contains("vehicle_accessory")
+    );
+}
+
+#[test]
+fn ets2_accessories_export_and_import_between_trucks() {
+    accessories_export_and_import("ets2/saves/1/game.sii", Game::Ets2);
+}
+
+#[test]
+fn ats_accessories_export_and_import_between_trucks() {
+    accessories_export_and_import("ats/saves/1/game.sii", Game::Ats);
 }
 
 #[test]

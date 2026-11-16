@@ -5,15 +5,6 @@ use siir::{Document, Index, Unit, Value};
 const SOURCE: &str = include_str!("../testdata/economy.sii");
 
 #[test]
-fn unit_text_returns_the_parsed_block() {
-    let document = Document::parse(SOURCE).unwrap();
-    let text = document.unit_text("_nameless.0001.0002.0003.0004").unwrap();
-    assert!(text.starts_with("economy : _nameless.0001.0002.0003.0004 {"));
-    assert!(text.ends_with('}'));
-    assert!(document.unit_text("missing").is_none());
-}
-
-#[test]
 fn insert_accepts_an_owned_unit() {
     let mut document = Document::parse(SOURCE).unwrap();
     let mut unit = Unit::new_owned("trailer", "trailer.owned");
@@ -23,8 +14,20 @@ fn insert_accepts_an_owned_unit() {
 
     let text = document.to_text();
     assert!(text.contains("trailer : trailer.owned {\n    name: \"box\"\n    mass: 1.5\n}\n"));
-    assert!(document.unit_text("trailer.owned").is_none());
     assert_eq!(Document::parse(&text).unwrap().to_text(), text);
+}
+
+#[test]
+fn unit_to_text_writes_current_attributes() {
+    let mut document = Document::parse(SOURCE).unwrap();
+    document
+        .get("economy")
+        .unwrap()
+        .set("money_account", Value::int64(1))
+        .unwrap();
+    let text = document.units().next().unwrap().to_text();
+    assert!(text.starts_with("economy : _nameless.0001.0002.0003.0004 {"));
+    assert!(text.contains("money_account: 1\n"));
 }
 
 #[test]
@@ -40,6 +43,7 @@ fn parses_every_value_form() {
         ("1.0f", "1.0f"),
         ("&3f800000", "&3f800000"),
         ("(1; 0, 0, 0)", "(1; 0, 0, 0)"),
+        ("(1) (2)", "(1) (2)"),
         ("trailer.two", "trailer.two"),
         ("null", "null"),
     ] {
@@ -53,7 +57,15 @@ fn parses_every_value_form() {
         );
     }
 
-    for input in ["\"unterminated", "&zz", "(1, 2", ""] {
+    for input in [
+        "\"unterminated",
+        "&zz",
+        "(1, 2",
+        "(1))",
+        "(1) (2) (3)",
+        "((1))",
+        "",
+    ] {
         assert!(Value::parse(input).is_err(), "{input}");
     }
 }

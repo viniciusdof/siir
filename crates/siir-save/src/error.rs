@@ -68,6 +68,16 @@ pub enum Error {
         /// Requested price.
         price: i64,
     },
+    /// An imported block contains a unit that is not an accessory.
+    InvalidAccessoryClass {
+        /// Unit class found in the block.
+        class: String,
+    },
+    /// An imported block is missing a required truck part.
+    MissingAccessoryPart {
+        /// Part name, for example `engine`.
+        part: &'static str,
+    },
     /// The truck is not assigned to any garage.
     NoGarage {
         /// Truck unit id.
@@ -154,6 +164,12 @@ impl fmt::Display for Error {
             }
             Self::InvalidPrice { price } => {
                 write!(f, "used truck price {price} is negative")
+            }
+            Self::InvalidAccessoryClass { class } => {
+                write!(f, "invalid accessory class {class:?}")
+            }
+            Self::MissingAccessoryPart { part } => {
+                write!(f, "accessory set is missing the {part}")
             }
             Self::NoGarage { id } => write!(f, "no garage holds {id}"),
             Self::NoCurrentTruck => write!(f, "player has no current truck"),
