@@ -1,5 +1,6 @@
 //! Parsed document shared by the text and binary codecs.
 
+use std::borrow::Cow;
 use std::collections::HashSet;
 use std::ops::Range;
 
@@ -14,8 +15,8 @@ pub struct Document<'a> {
 
 /// One `class : id { ... }` block.
 pub struct Unit<'a> {
-    pub(crate) class: &'a str,
-    pub(crate) id: &'a str,
+    pub(crate) class: Cow<'a, str>,
+    pub(crate) id: Cow<'a, str>,
     pub(crate) attrs: Vec<Attr<'a>>,
     pub(crate) span: Range<usize>,
     pub(crate) inserted: bool,
@@ -85,6 +86,51 @@ impl Value {
     /// Bare token.
     pub fn token(value: impl Into<String>) -> Self {
         Self::Token(value.into())
+    }
+
+    /// Parses one attribute value from its text.
+    pub fn parse(text: &str) -> Result<Self, Error> {
+        if let Some(inner) = text
+            .strip_prefix('"')
+            .and_then(|text| text.strip_suffix('"'))
+        {
+            if inner.contains('"') || inner.contains('\n') || inner.contains('\r') {
+                return Err(Error::invalid_value("string has a quote or line break", 0));
+            }
+            return Ok(Self::String(inner.to_owned()));
+        }
+        if text == "nil" {
+            return Ok(Self::Nil);
+        }
+        if let Some(hex) = text.strip_prefix('&') {
+            let bits =
+                u32::from_str_radix(hex, 16).map_err(|_| Error::invalid_value("hex value", 0))?;
+            return Ok(Self::Hex(bits));
+        }
+        if text.starts_with('(') {
+            if !is_vector(text) {
+                return Err(Error::invalid_value("vector value", 0));
+            }
+            return Ok(Self::Vector(text.to_owned()));
+        }
+        if text == "true" || text == "false" {
+            return Ok(Self::Bool(text == "true"));
+        }
+        if let Ok(value) = text.parse::<i64>() {
+            return Ok(Self::Int(value));
+        }
+        if let Ok(value) = text.parse::<u64>() {
+            return Ok(Self::UInt(value));
+        }
+        if let Ok(value) = text.parse::<f32>()
+            && value.is_finite()
+        {
+            return Ok(Self::Float(value));
+        }
+        if is_token(text) {
+            return Ok(Self::Token(text.to_owned()));
+        }
+        Err(Error::invalid_value("unrecognized value", 0))
     }
 
     fn render(&self, offset: usize) -> Result<Rendered, Error> {
@@ -169,11 +215,11 @@ impl<'a> Document<'a> {
         let found = self
             .units
             .iter()
-            .position(|unit| !unit.removed && unit.id == name)
+            .position(|unit| !unit.removed && unit.id.as_ref() == name)
             .or_else(|| {
                 self.units
                     .iter()
-                    .position(|unit| !unit.removed && unit.class == name)
+                    .position(|unit| !unit.removed && unit.class.as_ref() == name)
             })?;
         self.units.get_mut(found)
     }
@@ -185,23 +231,31 @@ impl<'a> Document<'a> {
 
     /// Units of one class, in file order.
     pub fn units_of_class<'b>(&'b self, class: &'b str) -> impl Iterator<Item = &'b Unit<'a>> + 'b {
-        self.units().filter(move |unit| unit.class == class)
+        self.units()
+            .filter(move |unit| unit.class.as_ref() == class)
+    }
+
+    /// Source text of a parsed unit, or `None` for an inserted one.
+    pub fn unit_text(&self, id: &str) -> Option<&'a str> {
+        self.units()
+            .find(|unit| !unit.inserted && unit.id() == id)
+            .map(|unit| &self.source[unit.span.clone()])
     }
 
     /// Adds a unit before the closing brace.
     pub fn insert(&mut self, unit: Unit<'a>) -> Result<(), Error> {
-        if !is_word(unit.class) {
+        if !is_word(unit.class.as_ref()) {
             return Err(Error::invalid_name("unit class"));
         }
-        if !is_token(unit.id) {
+        if !is_token(unit.id.as_ref()) {
             return Err(Error::invalid_name("unit id"));
         }
         if self
             .units
             .iter()
-            .any(|existing| !existing.removed && existing.id == unit.id)
+            .any(|existing| !existing.removed && existing.id.as_ref() == unit.id.as_ref())
         {
-            return Err(Error::duplicate_unit(unit.id));
+            return Err(Error::duplicate_unit(unit.id.as_ref()));
         }
         self.units.push(unit);
         Ok(())
@@ -212,7 +266,7 @@ impl<'a> Document<'a> {
         match self
             .units
             .iter_mut()
-            .find(|unit| !unit.removed && unit.id == id)
+            .find(|unit| !unit.removed && unit.id.as_ref() == id)
         {
             Some(unit) => {
                 unit.removed = true;
@@ -228,7 +282,7 @@ impl<'a> Document<'a> {
             .units
             .iter()
             .filter(|unit| !unit.removed)
-            .map(|unit| unit.id)
+            .map(|unit| unit.id.as_ref())
             .collect();
         let mut seen = HashSet::new();
         let mut missing = Vec::new();
@@ -260,8 +314,21 @@ impl<'a> Unit<'a> {
     /// A new unit for [`Document::insert`].
     pub fn new(class: &'a str, id: &'a str) -> Self {
         Self {
-            class,
-            id,
+            class: Cow::Borrowed(class),
+            id: Cow::Borrowed(id),
+            attrs: Vec::new(),
+            span: 0..0,
+            inserted: true,
+            added: Vec::new(),
+            removed: false,
+        }
+    }
+
+    /// A new unit that owns its class and id, for [`Document::insert`].
+    pub fn new_owned(class: impl Into<String>, id: impl Into<String>) -> Self {
+        Self {
+            class: Cow::Owned(class.into()),
+            id: Cow::Owned(id.into()),
             attrs: Vec::new(),
             span: 0..0,
             inserted: true,
@@ -272,12 +339,12 @@ impl<'a> Unit<'a> {
 
     /// Unit class, for example `economy`.
     pub fn class(&self) -> &str {
-        self.class
+        self.class.as_ref()
     }
 
     /// Unit id, named or `_nameless`.
     pub fn id(&self) -> &str {
-        self.id
+        self.id.as_ref()
     }
 
     /// Current text of an attribute, edited or original. Accepts `name[i]`.
@@ -469,9 +536,9 @@ impl<'a> Unit<'a> {
         if !out.ends_with('\n') {
             out.push('\n');
         }
-        out.push_str(self.class);
+        out.push_str(self.class.as_ref());
         out.push_str(" : ");
-        out.push_str(self.id);
+        out.push_str(self.id.as_ref());
         out.push_str(" {\n");
         for (name, rendered) in &self.added {
             out.push_str("    ");

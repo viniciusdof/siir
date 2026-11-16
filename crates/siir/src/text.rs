@@ -3,6 +3,8 @@
 use crate::error::Error;
 use crate::model::{Attr, Document, Index, Unit};
 
+use std::borrow::Cow;
+
 pub(crate) fn parse(source: &str) -> Result<Document<'_>, Error> {
     let mut parser = Parser { source, pos: 0 };
     parser.skip_trivia()?;
@@ -136,8 +138,8 @@ impl<'a> Parser<'a> {
         }
 
         Ok(Unit {
-            class,
-            id,
+            class: Cow::Borrowed(class),
+            id: Cow::Borrowed(id),
             attrs,
             span: start..self.pos,
             inserted: false,
@@ -279,11 +281,16 @@ mod tests {
             assert_eq!(document.to_text(), source, "{}", path.display());
             assert!(!document.units.is_empty(), "{}", path.display());
             for unit in &document.units {
-                assert!(!unit.attrs.is_empty(), "{}: {}", path.display(), unit.class);
+                assert!(
+                    !unit.attrs.is_empty(),
+                    "{}: {}",
+                    path.display(),
+                    unit.class()
+                );
             }
             if path.file_name().and_then(|name| name.to_str()) == Some("controls_osx.sii") {
                 let unit = &document.units[0];
-                assert_eq!(unit.class, "input_config");
+                assert_eq!(unit.class(), "input_config");
                 assert!(
                     attr(unit, "config_lines", Index::At(0))
                         .value
@@ -300,8 +307,8 @@ mod tests {
         let source = include_str!("../testdata/values.sii");
         let document = parse(source).unwrap();
         let unit = &document.units[0];
-        assert_eq!(unit.class, "economy");
-        assert_eq!(unit.id, "_nameless.0001.0002.0003.0004");
+        assert_eq!(unit.class(), "economy");
+        assert_eq!(unit.id(), "_nameless.0001.0002.0003.0004");
         assert_eq!(unit.span.start, source.find("economy").unwrap());
         assert!(source[unit.span.clone()].ends_with('}'));
 

@@ -5,6 +5,60 @@ use siir::{Document, Index, Unit, Value};
 const SOURCE: &str = include_str!("../testdata/economy.sii");
 
 #[test]
+fn unit_text_returns_the_parsed_block() {
+    let document = Document::parse(SOURCE).unwrap();
+    let text = document.unit_text("_nameless.0001.0002.0003.0004").unwrap();
+    assert!(text.starts_with("economy : _nameless.0001.0002.0003.0004 {"));
+    assert!(text.ends_with('}'));
+    assert!(document.unit_text("missing").is_none());
+}
+
+#[test]
+fn insert_accepts_an_owned_unit() {
+    let mut document = Document::parse(SOURCE).unwrap();
+    let mut unit = Unit::new_owned("trailer", "trailer.owned");
+    unit.set("name", Value::parse("\"box\"").unwrap()).unwrap();
+    unit.set("mass", Value::parse("1.5").unwrap()).unwrap();
+    document.insert(unit).unwrap();
+
+    let text = document.to_text();
+    assert!(text.contains("trailer : trailer.owned {\n    name: \"box\"\n    mass: 1.5\n}\n"));
+    assert!(document.unit_text("trailer.owned").is_none());
+    assert_eq!(Document::parse(&text).unwrap().to_text(), text);
+}
+
+#[test]
+fn parses_every_value_form() {
+    for (input, expected) in [
+        ("\"a b\"", "\"a b\""),
+        ("nil", "nil"),
+        ("true", "true"),
+        ("false", "false"),
+        ("-7", "-7"),
+        ("18446744073709551615", "18446744073709551615"),
+        ("1.5", "1.5"),
+        ("1.0f", "1.0f"),
+        ("&3f800000", "&3f800000"),
+        ("(1; 0, 0, 0)", "(1; 0, 0, 0)"),
+        ("trailer.two", "trailer.two"),
+        ("null", "null"),
+    ] {
+        let mut document = Document::parse("SiiNunit\n{\n}\n").unwrap();
+        let mut unit = Unit::new("probe", "probe.one");
+        unit.set("value", Value::parse(input).unwrap()).unwrap();
+        document.insert(unit).unwrap();
+        assert!(
+            document.to_text().contains(&format!("value: {expected}\n")),
+            "{input}"
+        );
+    }
+
+    for input in ["\"unterminated", "&zz", "(1, 2", ""] {
+        assert!(Value::parse(input).is_err(), "{input}");
+    }
+}
+
+#[test]
 fn set_changes_only_the_value() {
     let mut document = Document::parse(SOURCE).unwrap();
     document
