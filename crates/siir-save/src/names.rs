@@ -62,6 +62,11 @@ pub(crate) const PROFILE_NAME: &str = "profile_name";
 pub(crate) const TRUCK_DIR: &str = "/def/vehicle/truck/";
 pub(crate) const DATA_SUFFIX: &str = "/data.sii";
 pub(crate) const ENGINE_DIR: &str = "/engine/";
+pub(crate) const TRANSMISSION_DIR: &str = "/transmission/";
+pub(crate) const CABIN_DIR: &str = "/cabin/";
+pub(crate) const CHASSIS_DIR: &str = "/chassis/";
+pub(crate) const PAINT_JOB_DIR: &str = "/paint_job/";
+pub(crate) const ACCESSORY_DIR: &str = "/accessory/";
 
 /// A garage id is `garage.<city>`.
 pub(crate) const GARAGE_PREFIX: &str = "garage.";

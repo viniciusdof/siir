@@ -43,15 +43,35 @@ vehicle : vehicle.one {
     transmission_wear: 0.5
     cabin_wear: 0
     fuel_relative: 1
-    accessories: 2
+    accessories: 7
     accessories[0]: accessory.data
     accessories[1]: accessory.engine
+    accessories[2]: accessory.transmission
+    accessories[3]: accessory.cabin
+    accessories[4]: accessory.chassis
+    accessories[5]: accessory.paint
+    accessories[6]: accessory.mirror
 }
 vehicle_accessory : accessory.data {
     data_path: "/def/vehicle/truck/test.model/data.sii"
 }
 vehicle_accessory : accessory.engine {
     data_path: "/def/vehicle/truck/test.model/engine/500.sii"
+}
+vehicle_accessory : accessory.transmission {
+    data_path: "/def/vehicle/truck/test.model/transmission/12.sii"
+}
+vehicle_accessory : accessory.cabin {
+    data_path: "/def/vehicle/truck/test.model/cabin/space.sii"
+}
+vehicle_accessory : accessory.chassis {
+    data_path: "/def/vehicle/truck/test.model/chassis/4x2.sii"
+}
+vehicle_accessory : accessory.paint {
+    data_path: "/def/vehicle/truck/test.model/paint_job/color1.sii"
+}
+vehicle_accessory : accessory.mirror {
+    data_path: "/def/vehicle/truck/test.model/accessory/mirror/shape1.sii"
 }
 trailer : trailer.one {
     trailer_definition: trailer_def.test

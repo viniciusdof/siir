@@ -45,6 +45,57 @@ pub enum Command {
     },
     /// Removes every badge accessory from one truck.
     RemoveBadge(String),
+    /// Sets one truck's engine `data_path`.
+    SetEngine {
+        /// Truck unit id.
+        id: String,
+        /// Engine `data_path` from the catalog.
+        path: String,
+    },
+    /// Sets one truck's transmission `data_path`.
+    SetTransmission {
+        /// Truck unit id.
+        id: String,
+        /// Transmission `data_path` from the catalog.
+        path: String,
+    },
+    /// Sets one truck's cabin `data_path`.
+    SetCabin {
+        /// Truck unit id.
+        id: String,
+        /// Cabin `data_path` from the catalog.
+        path: String,
+    },
+    /// Sets one truck's chassis `data_path`.
+    SetChassis {
+        /// Truck unit id.
+        id: String,
+        /// Chassis `data_path` from the catalog.
+        path: String,
+    },
+    /// Sets one truck's paint job `data_path`.
+    SetPaint {
+        /// Truck unit id.
+        id: String,
+        /// Paint job `data_path` from the catalog.
+        path: String,
+    },
+    /// Sets one accessory's `data_path`.
+    SetAccessory {
+        /// Truck unit id.
+        id: String,
+        /// Accessory unit id.
+        accessory: String,
+        /// Accessory `data_path`.
+        path: String,
+    },
+    /// Removes one accessory from a truck's accessory list.
+    RemoveAccessory {
+        /// Truck unit id.
+        id: String,
+        /// Accessory unit id.
+        accessory: String,
+    },
     /// Points the player's assigned vehicle slot at one truck.
     SetCurrentTruck(String),
     /// Moves the player's headquarters to the garage city holding one truck.
@@ -110,6 +161,19 @@ pub fn apply(document: &mut Document<'_>, _game: Game, command: Command) -> Resu
         Command::SetOdometer { id, km } => truck::set_odometer(document, &id, km),
         Command::SetLicensePlate { id, plate } => truck::set_license_plate(document, &id, plate),
         Command::RemoveBadge(id) => truck::remove_badge(document, &id),
+        Command::SetEngine { id, path } => truck::set_engine(document, &id, &path),
+        Command::SetTransmission { id, path } => truck::set_transmission(document, &id, &path),
+        Command::SetCabin { id, path } => truck::set_cabin(document, &id, &path),
+        Command::SetChassis { id, path } => truck::set_chassis(document, &id, &path),
+        Command::SetPaint { id, path } => truck::set_paint(document, &id, &path),
+        Command::SetAccessory {
+            id,
+            accessory,
+            path,
+        } => truck::set_accessory(document, &id, &accessory, &path),
+        Command::RemoveAccessory { id, accessory } => {
+            truck::remove_accessory(document, &id, &accessory)
+        }
         Command::SetCurrentTruck(id) => truck::set_current_truck(document, &id),
         Command::SetHqTruck(id) => truck::set_hq_truck(document, &id),
         Command::RepairTrailer(id) => trailer::repair_trailer(document, &id),

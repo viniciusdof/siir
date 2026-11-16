@@ -30,10 +30,16 @@ vehicle : vehicle.one {
     integrity_odometer: 10
     trip_distance_km: 10
     license_plate: "OLD"
-    accessories: 3
+    accessories: 9
     accessories[0]: accessory.data
     accessories[1]: accessory.badge
     accessories[2]: accessory.wheel
+    accessories[3]: accessory.engine
+    accessories[4]: accessory.transmission
+    accessories[5]: accessory.cabin
+    accessories[6]: accessory.chassis
+    accessories[7]: accessory.paint
+    accessories[8]: accessory.mirror
 }
 vehicle : vehicle.two {
     engine_wear: &3f800000
@@ -53,6 +59,24 @@ vehicle_accessory : accessory.badge {
 }
 vehicle_accessory : accessory.wheel {
     data_path: "/def/vehicle/truck/test.model/accessory/wheel/test.sii"
+}
+vehicle_accessory : accessory.engine {
+    data_path: "/def/vehicle/truck/test.model/engine/500.sii"
+}
+vehicle_accessory : accessory.transmission {
+    data_path: "/def/vehicle/truck/test.model/transmission/12.sii"
+}
+vehicle_accessory : accessory.cabin {
+    data_path: "/def/vehicle/truck/test.model/cabin/space.sii"
+}
+vehicle_accessory : accessory.chassis {
+    data_path: "/def/vehicle/truck/test.model/chassis/4x2.sii"
+}
+vehicle_accessory : accessory.paint {
+    data_path: "/def/vehicle/truck/test.model/paint_job/color1.sii"
+}
+vehicle_accessory : accessory.mirror {
+    data_path: "/def/vehicle/truck/test.model/accessory/mirror/shape1.sii"
 }
 garage : garage.prague {
     vehicles: 1

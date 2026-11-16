@@ -18,8 +18,8 @@ mod value;
 pub use command::{Command, apply};
 pub use error::Error;
 pub use model::{
-    Bank, Company, Driver, Game, Garage, Job, Offence, Offer, Player, Save, Skills, Trailer, Truck,
-    UsedTruck,
+    Accessory, Bank, Company, Driver, Game, Garage, Job, Offence, Offer, Player, Save, Skills,
+    Trailer, Truck, UsedTruck,
 };
 
 use value::{array, count, float, integer, reference, string, text, unquote};
@@ -76,14 +76,20 @@ pub fn read<'a>(document: &'a Document<'_>, game: Game) -> Result<Save<'a>, Erro
     let mut trucks = Vec::new();
     for unit in document.units_of_class(names::VEHICLE) {
         let slot = slots.get(unit.id()).copied();
-        let parts = parts(unit, &units)?;
+        let accessories = accessories(unit, &units)?;
+        let parts = parts(&accessories);
         trucks.push(Truck {
             id: unit.id(),
             slot: slot.map(|slot| slot.id()),
             trailer: slot.and_then(|slot| reference(slot, names::TRAILER)),
+            accessories,
             model: parts.model,
             data_path: parts.data_path,
             engine: parts.engine,
+            transmission: parts.transmission,
+            cabin: parts.cabin,
+            chassis: parts.chassis,
+            paint_job: parts.paint_job,
             engine_wear: float(unit, "engine_wear")?,
             transmission_wear: float(unit, "transmission_wear")?,
             cabin_wear: float(unit, "cabin_wear")?,
@@ -211,42 +217,82 @@ fn job<'a>(unit: &'a Unit<'_>) -> Result<Job<'a>, Error> {
     })
 }
 
-/// Truck definition, chassis and model path come from the accessory hop.
-fn parts<'a, 'd>(
-    unit: &'a Unit<'d>,
-    units: &HashMap<&'a str, &'a Unit<'d>>,
-) -> Result<Parts<'a>, Error> {
-    let mut data_path = None;
-    let mut engine = None;
+/// The truck's accessory units, in `accessories[]` order.
+fn accessories<'d>(
+    unit: &Unit<'d>,
+    units: &HashMap<&str, &'d Unit<'d>>,
+) -> Result<Vec<Accessory<'d>>, Error> {
+    let mut list = Vec::new();
     for id in array(unit, names::ACCESSORIES)? {
         let Some(accessory) = units.get(id).copied() else {
             continue;
         };
-        let Some(path) = accessory.get(names::DATA_PATH) else {
+        let path = accessory.get(names::DATA_PATH).map(unquote);
+        list.push(Accessory {
+            id: accessory.id(),
+            class: accessory.class(),
+            path,
+            slot: path.and_then(slot),
+        });
+    }
+    Ok(list)
+}
+
+fn slot(path: &str) -> Option<&str> {
+    let rest = path.split_once(names::ACCESSORY_DIR)?.1;
+    let slot = rest.split('/').next()?;
+    (!slot.is_empty()).then_some(slot)
+}
+
+/// The part paths selected by the accessory list.
+fn parts<'a>(accessories: &[Accessory<'a>]) -> Parts<'a> {
+    let mut data_path = None;
+    let mut engine = None;
+    let mut transmission = None;
+    let mut cabin = None;
+    let mut chassis = None;
+    let mut paint_job = None;
+    for accessory in accessories {
+        let Some(path) = accessory.path else {
             continue;
         };
-        let path = unquote(path);
         if path.ends_with(names::DATA_SUFFIX) {
             data_path = Some(path);
         } else if path.contains(names::ENGINE_DIR) {
             engine = Some(path);
+        } else if path.contains(names::TRANSMISSION_DIR) {
+            transmission = Some(path);
+        } else if path.contains(names::CABIN_DIR) {
+            cabin = Some(path);
+        } else if path.contains(names::CHASSIS_DIR) {
+            chassis = Some(path);
+        } else if path.contains(names::PAINT_JOB_DIR) {
+            paint_job = Some(path);
         }
     }
     let model = data_path.and_then(|path| {
         path.strip_prefix(names::TRUCK_DIR)
             .and_then(|path| path.strip_suffix(names::DATA_SUFFIX))
     });
-    Ok(Parts {
+    Parts {
         model,
         data_path,
         engine,
-    })
+        transmission,
+        cabin,
+        chassis,
+        paint_job,
+    }
 }
 
 struct Parts<'a> {
     model: Option<&'a str>,
     data_path: Option<&'a str>,
     engine: Option<&'a str>,
+    transmission: Option<&'a str>,
+    cabin: Option<&'a str>,
+    chassis: Option<&'a str>,
+    paint_job: Option<&'a str>,
 }
 
 #[cfg(test)]
@@ -297,6 +343,29 @@ mod tests {
             truck.engine,
             Some("/def/vehicle/truck/test.model/engine/500.sii")
         );
+        assert_eq!(
+            truck.transmission,
+            Some("/def/vehicle/truck/test.model/transmission/12.sii")
+        );
+        assert_eq!(
+            truck.cabin,
+            Some("/def/vehicle/truck/test.model/cabin/space.sii")
+        );
+        assert_eq!(
+            truck.chassis,
+            Some("/def/vehicle/truck/test.model/chassis/4x2.sii")
+        );
+        assert_eq!(
+            truck.paint_job,
+            Some("/def/vehicle/truck/test.model/paint_job/color1.sii")
+        );
+        let mirror = truck
+            .accessories
+            .iter()
+            .find(|accessory| accessory.id == "accessory.mirror")
+            .unwrap();
+        assert_eq!(mirror.class, "vehicle_accessory");
+        assert_eq!(mirror.slot, Some("mirror"));
         assert_eq!(truck.engine_wear, 1.0);
         assert_eq!(truck.transmission_wear, 0.5);
         assert_eq!(truck.cabin_wear, 0.0);

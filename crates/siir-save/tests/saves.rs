@@ -369,6 +369,219 @@ fn ats_commands_change_only_expected_lines() {
 }
 
 #[test]
+fn ets2_engine_and_transmission_survive_reopen() {
+    let bytes = fixture("ets2/saves/1/game.sii");
+    let file = siir::open(&bytes).unwrap();
+    let mut document = file.document().unwrap();
+    let id = read(&document, Game::Ets2)
+        .unwrap()
+        .current_truck()
+        .unwrap()
+        .id
+        .to_owned();
+
+    let engine = "/def/vehicle/truck/renault.etech_t/engine/330kw.sii";
+    let old = written(&file, &document);
+    apply(
+        &mut document,
+        Game::Ets2,
+        Command::SetEngine {
+            id: id.clone(),
+            path: engine.into(),
+        },
+    )
+    .unwrap();
+    let new = written(&file, &document);
+    let changed = changed_lines(&old, &new);
+    assert_eq!(changed.len(), 1);
+    assert_eq!(
+        changed[0].1.trim_start(),
+        format!("data_path: \"{engine}\"\n")
+    );
+    assert_eq!(
+        read(&document, Game::Ets2)
+            .unwrap()
+            .current_truck()
+            .unwrap()
+            .engine,
+        Some(engine)
+    );
+
+    let transmission = "/def/vehicle/truck/renault.etech_t/transmission/test.sii";
+    let old = new;
+    apply(
+        &mut document,
+        Game::Ets2,
+        Command::SetTransmission {
+            id: id.clone(),
+            path: transmission.into(),
+        },
+    )
+    .unwrap();
+    let new = written(&file, &document);
+    let changed = changed_lines(&old, &new);
+    assert_eq!(changed.len(), 1);
+    assert_eq!(
+        changed[0].1.trim_start(),
+        format!("data_path: \"{transmission}\"\n")
+    );
+
+    let out = file.write(&document).unwrap();
+    let reopened = siir::open(&out).unwrap();
+    let document = reopened.document().unwrap();
+    let save = read(&document, Game::Ets2).unwrap();
+    let truck = save.current_truck().unwrap();
+    assert_eq!(truck.engine, Some(engine));
+    assert_eq!(truck.transmission, Some(transmission));
+}
+
+#[test]
+fn ets2_cabin_and_chassis_survive_reopen() {
+    let bytes = fixture("ets2/saves/1/game.sii");
+    let file = siir::open(&bytes).unwrap();
+    let mut document = file.document().unwrap();
+    let id = read(&document, Game::Ets2)
+        .unwrap()
+        .current_truck()
+        .unwrap()
+        .id
+        .to_owned();
+
+    let cabin = "/def/vehicle/truck/renault.etech_t/cabin/test.sii";
+    let old = written(&file, &document);
+    apply(
+        &mut document,
+        Game::Ets2,
+        Command::SetCabin {
+            id: id.clone(),
+            path: cabin.into(),
+        },
+    )
+    .unwrap();
+    let new = written(&file, &document);
+    let changed = changed_lines(&old, &new);
+    assert_eq!(changed.len(), 1);
+    assert_eq!(
+        changed[0].1.trim_start(),
+        format!("data_path: \"{cabin}\"\n")
+    );
+
+    let chassis = "/def/vehicle/truck/renault.etech_t/chassis/test.sii";
+    let old = new;
+    apply(
+        &mut document,
+        Game::Ets2,
+        Command::SetChassis {
+            id: id.clone(),
+            path: chassis.into(),
+        },
+    )
+    .unwrap();
+    let new = written(&file, &document);
+    let changed = changed_lines(&old, &new);
+    assert_eq!(changed.len(), 1);
+    assert_eq!(
+        changed[0].1.trim_start(),
+        format!("data_path: \"{chassis}\"\n")
+    );
+
+    let out = file.write(&document).unwrap();
+    let reopened = siir::open(&out).unwrap();
+    let document = reopened.document().unwrap();
+    let save = read(&document, Game::Ets2).unwrap();
+    let truck = save.current_truck().unwrap();
+    assert_eq!(truck.cabin, Some(cabin));
+    assert_eq!(truck.chassis, Some(chassis));
+}
+
+#[test]
+fn ets2_paint_survives_reopen() {
+    let bytes = fixture("ets2/saves/1/game.sii");
+    let file = siir::open(&bytes).unwrap();
+    let mut document = file.document().unwrap();
+    let id = read(&document, Game::Ets2)
+        .unwrap()
+        .current_truck()
+        .unwrap()
+        .id
+        .to_owned();
+
+    let paint = "/def/vehicle/truck/renault.etech_t/paint_job/test.sii";
+    let old = written(&file, &document);
+    apply(
+        &mut document,
+        Game::Ets2,
+        Command::SetPaint {
+            id,
+            path: paint.into(),
+        },
+    )
+    .unwrap();
+    let new = written(&file, &document);
+    let changed = changed_lines(&old, &new);
+    assert_eq!(changed.len(), 1);
+    assert_eq!(
+        changed[0].1.trim_start(),
+        format!("data_path: \"{paint}\"\n")
+    );
+
+    let out = file.write(&document).unwrap();
+    let reopened = siir::open(&out).unwrap();
+    let document = reopened.document().unwrap();
+    let save = read(&document, Game::Ets2).unwrap();
+    assert_eq!(save.current_truck().unwrap().paint_job, Some(paint));
+}
+
+#[test]
+fn ets2_accessory_path_survives_reopen() {
+    let bytes = fixture("ets2/saves/1/game.sii");
+    let file = siir::open(&bytes).unwrap();
+    let mut document = file.document().unwrap();
+    let (id, accessory_id) = {
+        let save = read(&document, Game::Ets2).unwrap();
+        let truck = save.current_truck().unwrap();
+        let accessory = truck
+            .accessories
+            .iter()
+            .find(|accessory| accessory.slot.is_some())
+            .unwrap();
+        (truck.id.to_owned(), accessory.id.to_owned())
+    };
+
+    let path = "/def/vehicle/truck/renault.etech_t/accessory/test.sii";
+    let old = written(&file, &document);
+    apply(
+        &mut document,
+        Game::Ets2,
+        Command::SetAccessory {
+            id: id.clone(),
+            accessory: accessory_id.clone(),
+            path: path.into(),
+        },
+    )
+    .unwrap();
+    let new = written(&file, &document);
+    let changed = changed_lines(&old, &new);
+    assert_eq!(changed.len(), 1);
+    assert_eq!(
+        changed[0].1.trim_start(),
+        format!("data_path: \"{path}\"\n")
+    );
+
+    let out = file.write(&document).unwrap();
+    let reopened = siir::open(&out).unwrap();
+    let document = reopened.document().unwrap();
+    let save = read(&document, Game::Ets2).unwrap();
+    let truck = save.current_truck().unwrap();
+    let accessory = truck
+        .accessories
+        .iter()
+        .find(|accessory| accessory.id == accessory_id)
+        .unwrap();
+    assert_eq!(accessory.path, Some(path));
+}
+
+#[test]
 fn ets2_money_survives_reopen() {
     let bytes = fixture("ets2/saves/1/game.sii");
     let file = siir::open(&bytes).unwrap();

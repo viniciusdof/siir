@@ -70,6 +70,18 @@ impl<'a> Save<'a> {
     }
 }
 
+/// One accessory referenced by a truck.
+pub struct Accessory<'a> {
+    /// Accessory unit id.
+    pub id: &'a str,
+    /// Unit class, for example `vehicle_accessory`.
+    pub class: &'a str,
+    /// `data_path`, unquoted.
+    pub path: Option<&'a str>,
+    /// Slot under `/accessory/`, when the path names one.
+    pub slot: Option<&'a str>,
+}
+
 /// One `vehicle` unit.
 pub struct Truck<'a> {
     /// Unit id.
@@ -78,12 +90,22 @@ pub struct Truck<'a> {
     pub slot: Option<&'a str>,
     /// Trailer assigned to the owning slot, when there is one.
     pub trailer: Option<&'a str>,
+    /// Accessories referenced by this truck.
+    pub accessories: Vec<Accessory<'a>>,
     /// Model folder under `/def/vehicle/truck/`, for example `renault.etech_t`.
     pub model: Option<&'a str>,
     /// The model's `data.sii` path.
     pub data_path: Option<&'a str>,
     /// The engine's `data.sii` path.
     pub engine: Option<&'a str>,
+    /// The transmission's `data.sii` path.
+    pub transmission: Option<&'a str>,
+    /// The cabin's `data.sii` path.
+    pub cabin: Option<&'a str>,
+    /// The chassis's `data.sii` path.
+    pub chassis: Option<&'a str>,
+    /// The paint job's `data.sii` path.
+    pub paint_job: Option<&'a str>,
     /// Engine wear, from 0 to 1.
     pub engine_wear: f32,
     /// Transmission wear, from 0 to 1.

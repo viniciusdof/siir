@@ -31,6 +31,38 @@ pub enum Error {
         /// Truck unit id.
         id: String,
     },
+    /// The truck has no engine accessory.
+    NoEngine {
+        /// Truck unit id.
+        id: String,
+    },
+    /// The truck has no transmission accessory.
+    NoTransmission {
+        /// Truck unit id.
+        id: String,
+    },
+    /// The truck has no cabin accessory.
+    NoCabin {
+        /// Truck unit id.
+        id: String,
+    },
+    /// The truck has no chassis accessory.
+    NoChassis {
+        /// Truck unit id.
+        id: String,
+    },
+    /// The truck has no paint job accessory.
+    NoPaint {
+        /// Truck unit id.
+        id: String,
+    },
+    /// The truck does not reference the accessory.
+    NoAccessory {
+        /// Truck unit id.
+        id: String,
+        /// Accessory unit id.
+        accessory: String,
+    },
     /// The truck is not assigned to any garage.
     NoGarage {
         /// Truck unit id.
@@ -107,6 +139,14 @@ impl fmt::Display for Error {
             }
             Self::MissingUnit { id } => write!(f, "missing unit {id:?}"),
             Self::NoBadge { id } => write!(f, "no badge on {id}"),
+            Self::NoEngine { id } => write!(f, "no engine on {id}"),
+            Self::NoTransmission { id } => write!(f, "no transmission on {id}"),
+            Self::NoCabin { id } => write!(f, "no cabin on {id}"),
+            Self::NoChassis { id } => write!(f, "no chassis on {id}"),
+            Self::NoPaint { id } => write!(f, "no paint job on {id}"),
+            Self::NoAccessory { id, accessory } => {
+                write!(f, "no accessory {accessory} on {id}")
+            }
             Self::NoGarage { id } => write!(f, "no garage holds {id}"),
             Self::NoCurrentTruck => write!(f, "player has no current truck"),
             Self::NoCurrentTrailer => write!(f, "player has no current trailer"),

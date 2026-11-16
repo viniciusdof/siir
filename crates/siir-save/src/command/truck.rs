@@ -155,9 +155,16 @@ pub(super) fn remove_badge(document: &mut Document<'_>, id: &str) -> Result<(), 
     };
 
     let unit = truck(document, id)?;
+    write_accessories(unit, &kept, total)
+}
+
+fn write_accessories(unit: &mut Unit<'_>, kept: &[String], total: usize) -> Result<(), Error> {
     unit.set(names::ACCESSORIES, Value::UInt(kept.len() as u64))?;
     for (nth, accessory) in kept.iter().enumerate() {
-        unit.set(&indexed(names::ACCESSORIES, nth), Value::token(accessory))?;
+        unit.set(
+            &indexed(names::ACCESSORIES, nth),
+            Value::token(accessory.as_str()),
+        )?;
     }
     for nth in kept.len()..total {
         unit.remove_attr(&indexed(names::ACCESSORIES, nth))?;
@@ -168,6 +175,152 @@ pub(super) fn remove_badge(document: &mut Document<'_>, id: &str) -> Result<(), 
 fn is_badge(path: &str) -> bool {
     path.split('/')
         .any(|part| part == names::BADGE || part.ends_with(names::BADGE_SUFFIX))
+}
+
+pub(super) fn set_engine(document: &mut Document<'_>, id: &str, path: &str) -> Result<(), Error> {
+    if set_part(document, id, names::ENGINE_DIR, path)? {
+        Ok(())
+    } else {
+        Err(Error::NoEngine { id: id.to_owned() })
+    }
+}
+
+pub(super) fn set_transmission(
+    document: &mut Document<'_>,
+    id: &str,
+    path: &str,
+) -> Result<(), Error> {
+    if set_part(document, id, names::TRANSMISSION_DIR, path)? {
+        Ok(())
+    } else {
+        Err(Error::NoTransmission { id: id.to_owned() })
+    }
+}
+
+pub(super) fn set_cabin(document: &mut Document<'_>, id: &str, path: &str) -> Result<(), Error> {
+    if set_part(document, id, names::CABIN_DIR, path)? {
+        Ok(())
+    } else {
+        Err(Error::NoCabin { id: id.to_owned() })
+    }
+}
+
+pub(super) fn set_chassis(document: &mut Document<'_>, id: &str, path: &str) -> Result<(), Error> {
+    if set_part(document, id, names::CHASSIS_DIR, path)? {
+        Ok(())
+    } else {
+        Err(Error::NoChassis { id: id.to_owned() })
+    }
+}
+
+pub(super) fn set_paint(document: &mut Document<'_>, id: &str, path: &str) -> Result<(), Error> {
+    if set_part(document, id, names::PAINT_JOB_DIR, path)? {
+        Ok(())
+    } else {
+        Err(Error::NoPaint { id: id.to_owned() })
+    }
+}
+
+pub(super) fn set_accessory(
+    document: &mut Document<'_>,
+    id: &str,
+    accessory: &str,
+    path: &str,
+) -> Result<(), Error> {
+    let listed = {
+        let unit = document
+            .units_of_class(names::VEHICLE)
+            .find(|unit| unit.id() == id)
+            .ok_or_else(|| Error::MissingUnit { id: id.to_owned() })?;
+        let total = count(unit, names::ACCESSORIES)? as usize;
+        (0..total).any(|nth| unit.get(&indexed(names::ACCESSORIES, nth)) == Some(accessory))
+    };
+    if !listed {
+        return Err(Error::NoAccessory {
+            id: id.to_owned(),
+            accessory: accessory.to_owned(),
+        });
+    }
+    let unit = document.get(accessory).ok_or_else(|| Error::MissingUnit {
+        id: accessory.to_owned(),
+    })?;
+    unit.set(names::DATA_PATH, Value::String(path.to_owned()))?;
+    Ok(())
+}
+
+pub(super) fn remove_accessory(
+    document: &mut Document<'_>,
+    id: &str,
+    accessory: &str,
+) -> Result<(), Error> {
+    let (total, kept) = {
+        let unit = document
+            .units_of_class(names::VEHICLE)
+            .find(|unit| unit.id() == id)
+            .ok_or_else(|| Error::MissingUnit { id: id.to_owned() })?;
+        let total = count(unit, names::ACCESSORIES)? as usize;
+        let mut kept = Vec::with_capacity(total);
+        let mut removed = false;
+        for nth in 0..total {
+            let current = unit
+                .get(&indexed(names::ACCESSORIES, nth))
+                .ok_or_else(|| Error::missing(unit.class(), names::ACCESSORIES))?;
+            if current == accessory {
+                removed = true;
+            } else {
+                kept.push(current.to_owned());
+            }
+        }
+        if !removed {
+            return Err(Error::NoAccessory {
+                id: id.to_owned(),
+                accessory: accessory.to_owned(),
+            });
+        }
+        (total, kept)
+    };
+
+    let unit = truck(document, id)?;
+    write_accessories(unit, &kept, total)
+}
+
+fn set_part(
+    document: &mut Document<'_>,
+    id: &str,
+    marker: &str,
+    path: &str,
+) -> Result<bool, Error> {
+    let accessories = {
+        let unit = document
+            .units_of_class(names::VEHICLE)
+            .find(|unit| unit.id() == id)
+            .ok_or_else(|| Error::MissingUnit { id: id.to_owned() })?;
+        let total = count(unit, names::ACCESSORIES)? as usize;
+        let mut ids = Vec::with_capacity(total);
+        for nth in 0..total {
+            ids.push(
+                unit.get(&indexed(names::ACCESSORIES, nth))
+                    .ok_or_else(|| Error::missing(unit.class(), names::ACCESSORIES))?
+                    .to_owned(),
+            );
+        }
+        ids
+    };
+
+    let mut found = false;
+    for accessory in accessories {
+        let Some(unit) = document.get(&accessory) else {
+            continue;
+        };
+        if unit
+            .get(names::DATA_PATH)
+            .is_some_and(|value| unquote(value).contains(marker))
+        {
+            unit.set(names::DATA_PATH, Value::String(path.to_owned()))?;
+            found = true;
+        }
+    }
+    Ok(found)
 }
 
 pub(super) fn set_current_truck(document: &mut Document<'_>, id: &str) -> Result<(), Error> {
@@ -336,7 +489,7 @@ mod tests {
         .unwrap();
         assert_eq!(
             value(&document, "vehicle.one", names::ACCESSORIES),
-            Some("2")
+            Some("8")
         );
         assert_eq!(
             value(&document, "vehicle.one", "accessories[0]"),
@@ -346,11 +499,35 @@ mod tests {
             value(&document, "vehicle.one", "accessories[1]"),
             Some("accessory.wheel")
         );
-        assert_eq!(value(&document, "vehicle.one", "accessories[2]"), None);
+        assert_eq!(
+            value(&document, "vehicle.one", "accessories[2]"),
+            Some("accessory.engine")
+        );
+        assert_eq!(
+            value(&document, "vehicle.one", "accessories[3]"),
+            Some("accessory.transmission")
+        );
+        assert_eq!(
+            value(&document, "vehicle.one", "accessories[4]"),
+            Some("accessory.cabin")
+        );
+        assert_eq!(
+            value(&document, "vehicle.one", "accessories[5]"),
+            Some("accessory.chassis")
+        );
+        assert_eq!(
+            value(&document, "vehicle.one", "accessories[6]"),
+            Some("accessory.paint")
+        );
+        assert_eq!(
+            value(&document, "vehicle.one", "accessories[7]"),
+            Some("accessory.mirror")
+        );
+        assert_eq!(value(&document, "vehicle.one", "accessories[8]"), None);
         assert!(
             !document
                 .to_text()
-                .contains("accessories[2]: accessory.wheel")
+                .contains("accessories[1]: accessory.badge")
         );
 
         let error = apply(
@@ -360,6 +537,210 @@ mod tests {
         )
         .unwrap_err();
         assert_eq!(error.to_string(), "no badge on vehicle.one");
+    }
+
+    #[test]
+    fn sets_engine_and_transmission() {
+        let mut document = source();
+        apply(
+            &mut document,
+            Game::Ets2,
+            Command::SetEngine {
+                id: "vehicle.one".into(),
+                path: "/def/vehicle/truck/test.model/engine/600.sii".into(),
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            value(&document, "accessory.engine", names::DATA_PATH),
+            Some("\"/def/vehicle/truck/test.model/engine/600.sii\"")
+        );
+
+        apply(
+            &mut document,
+            Game::Ets2,
+            Command::SetTransmission {
+                id: "vehicle.one".into(),
+                path: "/def/vehicle/truck/test.model/transmission/6.sii".into(),
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            value(&document, "accessory.transmission", names::DATA_PATH),
+            Some("\"/def/vehicle/truck/test.model/transmission/6.sii\"")
+        );
+
+        let error = apply(
+            &mut document,
+            Game::Ets2,
+            Command::SetEngine {
+                id: "vehicle.two".into(),
+                path: "/def/vehicle/truck/test.model/engine/600.sii".into(),
+            },
+        )
+        .unwrap_err();
+        assert_eq!(error.to_string(), "no engine on vehicle.two");
+
+        let error = apply(
+            &mut document,
+            Game::Ets2,
+            Command::SetTransmission {
+                id: "vehicle.two".into(),
+                path: "/def/vehicle/truck/test.model/transmission/6.sii".into(),
+            },
+        )
+        .unwrap_err();
+        assert_eq!(error.to_string(), "no transmission on vehicle.two");
+    }
+
+    #[test]
+    fn sets_cabin_and_chassis() {
+        let mut document = source();
+        apply(
+            &mut document,
+            Game::Ets2,
+            Command::SetCabin {
+                id: "vehicle.one".into(),
+                path: "/def/vehicle/truck/test.model/cabin/sleeper.sii".into(),
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            value(&document, "accessory.cabin", names::DATA_PATH),
+            Some("\"/def/vehicle/truck/test.model/cabin/sleeper.sii\"")
+        );
+
+        apply(
+            &mut document,
+            Game::Ets2,
+            Command::SetChassis {
+                id: "vehicle.one".into(),
+                path: "/def/vehicle/truck/test.model/chassis/6x2.sii".into(),
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            value(&document, "accessory.chassis", names::DATA_PATH),
+            Some("\"/def/vehicle/truck/test.model/chassis/6x2.sii\"")
+        );
+
+        let error = apply(
+            &mut document,
+            Game::Ets2,
+            Command::SetCabin {
+                id: "vehicle.two".into(),
+                path: "/def/vehicle/truck/test.model/cabin/sleeper.sii".into(),
+            },
+        )
+        .unwrap_err();
+        assert_eq!(error.to_string(), "no cabin on vehicle.two");
+
+        let error = apply(
+            &mut document,
+            Game::Ets2,
+            Command::SetChassis {
+                id: "vehicle.two".into(),
+                path: "/def/vehicle/truck/test.model/chassis/6x2.sii".into(),
+            },
+        )
+        .unwrap_err();
+        assert_eq!(error.to_string(), "no chassis on vehicle.two");
+    }
+
+    #[test]
+    fn sets_paint() {
+        let mut document = source();
+        apply(
+            &mut document,
+            Game::Ets2,
+            Command::SetPaint {
+                id: "vehicle.one".into(),
+                path: "/def/vehicle/truck/test.model/paint_job/color2.sii".into(),
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            value(&document, "accessory.paint", names::DATA_PATH),
+            Some("\"/def/vehicle/truck/test.model/paint_job/color2.sii\"")
+        );
+
+        let error = apply(
+            &mut document,
+            Game::Ets2,
+            Command::SetPaint {
+                id: "vehicle.two".into(),
+                path: "/def/vehicle/truck/test.model/paint_job/color2.sii".into(),
+            },
+        )
+        .unwrap_err();
+        assert_eq!(error.to_string(), "no paint job on vehicle.two");
+    }
+
+    #[test]
+    fn sets_and_removes_an_accessory() {
+        let mut document = source();
+        apply(
+            &mut document,
+            Game::Ets2,
+            Command::SetAccessory {
+                id: "vehicle.one".into(),
+                accessory: "accessory.mirror".into(),
+                path: "/def/vehicle/truck/test.model/accessory/mirror/shape2.sii".into(),
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            value(&document, "accessory.mirror", names::DATA_PATH),
+            Some("\"/def/vehicle/truck/test.model/accessory/mirror/shape2.sii\"")
+        );
+
+        apply(
+            &mut document,
+            Game::Ets2,
+            Command::RemoveAccessory {
+                id: "vehicle.one".into(),
+                accessory: "accessory.mirror".into(),
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            value(&document, "vehicle.one", names::ACCESSORIES),
+            Some("8")
+        );
+        assert_eq!(
+            value(&document, "vehicle.one", "accessories[7]"),
+            Some("accessory.paint")
+        );
+        assert_eq!(value(&document, "vehicle.one", "accessories[8]"), None);
+
+        let error = apply(
+            &mut document,
+            Game::Ets2,
+            Command::RemoveAccessory {
+                id: "vehicle.one".into(),
+                accessory: "accessory.mirror".into(),
+            },
+        )
+        .unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "no accessory accessory.mirror on vehicle.one"
+        );
+
+        let error = apply(
+            &mut document,
+            Game::Ets2,
+            Command::SetAccessory {
+                id: "vehicle.one".into(),
+                accessory: "accessory.missing".into(),
+                path: "/def/vehicle/truck/test.model/accessory/mirror/shape2.sii".into(),
+            },
+        )
+        .unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "no accessory accessory.missing on vehicle.one"
+        );
     }
 
     #[test]
