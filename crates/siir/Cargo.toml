@@ -1,0 +1,16 @@
+[package]
+name = "siir"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.99.1"
+description = "Read, edit, and write SCS Software SII files"
+repository = "https://codeberg.org/viniciusdof/siir"
+publish = false
+
+[dependencies]
+aes = "0.8"
+cbc = "0.1"
+flate2 = "1"
+
+[lints]
+workspace = true
