@@ -1,12 +1,12 @@
-//! Typed view and edits for SCS Software save documents.
+//! Typed read model and edits for SCS save documents.
 //!
-//! [`read`] turns a [`siir::Document`] into a [`Save`]. The view borrows the
-//! document; rebuild it after an edit. [`apply`] edits the document in place.
+//! [`read`] borrows the document and [`apply`] edits it in place.
 
 use std::collections::HashMap;
 
 use siir::{Document, Unit};
 
+pub mod catalog;
 mod command;
 pub mod config;
 mod error;

@@ -1,0 +1,10 @@
+SiiNunit
+{
+accessory_engine_data : 100.test.model.engine
+{
+	name: "Test 100"
+	torque: 500
+	info[]: " 136 @@hp@@ (100@@kw@@)"
+	@include "sound.sui"
+}
+}

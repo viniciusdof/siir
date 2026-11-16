@@ -1,0 +1,8 @@
+SiiNunit
+{
+accessory_truck_data : vehicle.test.model
+{
+	info[]: "@@brand_test@@"
+	info[]: "@@series_model@@"
+}
+}

@@ -1,0 +1,9 @@
+SiiNunit
+{
+accessory_engine_data : 200.test.model.engine
+{
+	name: "@@engine_200@@"
+	torque: 1200
+	info[]: " 272 @@hp@@ (200@@kw@@)"
+}
+}

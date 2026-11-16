@@ -1,0 +1,7 @@
+SiiNunit
+{
+accessory_chassis_data : 4x2.test.model.chassis
+{
+	name: "4x2"
+}
+}

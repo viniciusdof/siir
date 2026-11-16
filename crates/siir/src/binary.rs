@@ -1,7 +1,7 @@
 //! BSII binary decoder.
 //!
-//! Turns a `BSII` payload into `SiiNunit` text. Field names, types, and
-//! string tables come from the structure blocks in the file itself.
+//! Field names, types, and string tables come from the structure blocks in the
+//! file itself.
 
 use std::collections::HashMap;
 

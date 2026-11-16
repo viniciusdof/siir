@@ -1,0 +1,7 @@
+SiiNunit
+{
+accessory_cabin_data : space.test.model.cabin
+{
+	name: "Space"
+}
+}
