@@ -15,6 +15,14 @@ pub struct Save<'a> {
     pub game: Game,
     /// The profile's bank, when the save has one.
     pub bank: Option<Bank>,
+    /// Total experience points.
+    pub experience: u64,
+    /// Player skill levels.
+    pub skills: Skills,
+    /// Cities the player has visited.
+    pub visited_cities: Vec<&'a str>,
+    /// Dealerships discovered, as city names.
+    pub unlocked_dealers: Vec<&'a str>,
     /// The profile's player, when the save has one.
     pub player: Option<Player<'a>>,
     /// Every `vehicle` unit, including AI and market trucks.
@@ -176,6 +184,23 @@ pub struct Offence<'a> {
 pub struct Bank {
     /// Current account balance.
     pub money_account: i64,
+}
+
+/// Player skill levels stored in the economy.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Skills {
+    /// ADR class bitmask.
+    pub adr: u64,
+    /// Long-distance skill level.
+    pub long_dist: u64,
+    /// Heavy-cargo skill level.
+    pub heavy: u64,
+    /// Fragile-cargo skill level.
+    pub fragile: u64,
+    /// Urgent-delivery skill level.
+    pub urgent: u64,
+    /// Mechanical skill level.
+    pub mechanical: u64,
 }
 
 /// The profile's player.

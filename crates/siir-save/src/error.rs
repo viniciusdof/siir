@@ -45,8 +45,38 @@ pub enum Error {
         /// Requested level.
         level: f32,
     },
+    /// A garage status is outside the set the game writes.
+    InvalidGarageStatus {
+        /// Requested status.
+        status: u64,
+    },
+    /// A garage still holds vehicles or drivers.
+    GarageOccupied {
+        /// Garage unit id.
+        id: String,
+    },
     /// The document rejected the edit.
     Document(siir::Error),
+    /// A file operation failed.
+    Io(std::io::Error),
+    /// A profile archive could not be read or written.
+    Zip(zip::result::ZipError),
+    /// The archive contains a path that escapes the destination.
+    InvalidArchive,
+    /// A profile directory with the requested name already exists.
+    ProfileExists(String),
+    /// A profile symlink points outside the profile directory.
+    ExternalLink {
+        /// Relative path of the symlink.
+        path: String,
+    },
+    /// A required `config.cfg` setting is absent.
+    MissingConfig {
+        /// Setting name, for example `g_developer`.
+        key: String,
+    },
+    /// `cams.txt` has no parseable placement.
+    InvalidCamera,
 }
 
 impl Error {
@@ -83,7 +113,20 @@ impl fmt::Display for Error {
             Self::InvalidFuel { level } => {
                 write!(f, "fuel level {level} is not between 0 and 1")
             }
+            Self::InvalidGarageStatus { status } => {
+                write!(f, "garage status {status} is not 1, 2, 3, or 6")
+            }
+            Self::GarageOccupied { id } => write!(f, "garage {id} still holds vehicles or drivers"),
             Self::Document(error) => error.fmt(f),
+            Self::Io(error) => error.fmt(f),
+            Self::Zip(error) => error.fmt(f),
+            Self::InvalidArchive => write!(f, "archive path escapes the destination"),
+            Self::ProfileExists(name) => write!(f, "profile {name:?} already exists"),
+            Self::ExternalLink { path } => {
+                write!(f, "profile link {path:?} points outside the profile")
+            }
+            Self::MissingConfig { key } => write!(f, "config setting {key:?} is missing"),
+            Self::InvalidCamera => write!(f, "cams.txt has no parseable placement"),
         }
     }
 }
@@ -92,6 +135,8 @@ impl std::error::Error for Error {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::Document(error) => Some(error),
+            Self::Io(error) => Some(error),
+            Self::Zip(error) => Some(error),
             _ => None,
         }
     }
@@ -100,5 +145,17 @@ impl std::error::Error for Error {
 impl From<siir::Error> for Error {
     fn from(error: siir::Error) -> Self {
         Self::Document(error)
+    }
+}
+
+impl From<std::io::Error> for Error {
+    fn from(error: std::io::Error) -> Self {
+        Self::Io(error)
+    }
+}
+
+impl From<zip::result::ZipError> for Error {
+    fn from(error: zip::result::ZipError) -> Self {
+        Self::Zip(error)
     }
 }

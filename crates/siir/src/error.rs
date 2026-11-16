@@ -20,6 +20,7 @@ enum Kind {
     MissingAttribute { name: String },
     MissingUnit { id: String },
     DuplicateUnit { id: String },
+    DuplicateAttribute { name: String },
     InvalidName { reason: &'static str },
     InvalidValue { reason: &'static str },
     InvalidEncoding,
@@ -95,6 +96,15 @@ impl Error {
         }
     }
 
+    pub(crate) fn duplicate_attribute(name: &str, offset: usize) -> Self {
+        Self {
+            kind: Kind::DuplicateAttribute {
+                name: name.to_owned(),
+            },
+            offset,
+        }
+    }
+
     pub(crate) fn invalid_name(reason: &'static str) -> Self {
         Self {
             kind: Kind::InvalidName { reason },
@@ -156,6 +166,9 @@ impl fmt::Display for Error {
         match &self.kind {
             Kind::MissingUnit { id } => return write!(f, "missing unit {id:?}"),
             Kind::DuplicateUnit { id } => return write!(f, "duplicate unit {id:?}"),
+            Kind::DuplicateAttribute { name } => {
+                return write!(f, "duplicate attribute {name:?}");
+            }
             Kind::InvalidName { reason } => return write!(f, "invalid name: {reason}"),
             Kind::UnsupportedVersion(version) => {
                 return write!(f, "unsupported BSII version {version}");
@@ -185,6 +198,7 @@ impl fmt::Display for Error {
             Kind::MissingOrdinals => write!(f, "missing ordinal table"),
             Kind::MissingUnit { .. }
             | Kind::DuplicateUnit { .. }
+            | Kind::DuplicateAttribute { .. }
             | Kind::InvalidName { .. }
             | Kind::UnsupportedVersion(_) => unreachable!(),
         }?;

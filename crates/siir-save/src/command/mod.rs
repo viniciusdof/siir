@@ -3,8 +3,12 @@
 use siir::Document;
 
 use crate::Game;
+use crate::Skills;
 use crate::error::Error;
 
+mod economy;
+mod player;
+mod profile;
 mod trailer;
 mod truck;
 
@@ -67,6 +71,32 @@ pub enum Command {
     UnlockInRestrictedAreas(String),
     /// Points the player's assigned vehicle slot at one trailer.
     SetCurrentTrailer(String),
+    /// Sets the bank balance.
+    SetMoney(i64),
+    /// Sets the player's experience points.
+    SetExperience(u64),
+    /// Sets the player's skill levels.
+    SetSkills(Skills),
+    /// Marks every city visited, or clears the visited list.
+    SetVisitedCities(bool),
+    /// Marks every dealership discovered, or clears the list.
+    SetDealershipsDiscovered(bool),
+    /// Sets one garage's status, expanding or clearing its slots.
+    SetGarageStatus {
+        /// Garage unit id.
+        id: String,
+        /// Status the game writes: 1, 2, 3, or 6.
+        status: u64,
+    },
+    /// Sets the assigned vehicle slot's placement.
+    SetPlayerPosition {
+        /// Location vector text, parentheses included.
+        location: String,
+        /// Rotation vector text, parentheses included.
+        rotation: String,
+    },
+    /// Renames the profile in a `profile.sii` document.
+    RenameProfile(String),
 }
 
 /// Applies one command to a save document.
@@ -90,5 +120,17 @@ pub fn apply(document: &mut Document<'_>, _game: Game, command: Command) -> Resu
         }
         Command::UnlockInRestrictedAreas(id) => trailer::unlock_in_restricted_areas(document, &id),
         Command::SetCurrentTrailer(id) => trailer::set_current_trailer(document, &id),
+        Command::SetMoney(money) => economy::set_money(document, money),
+        Command::SetExperience(experience) => economy::set_experience(document, experience),
+        Command::SetSkills(skills) => economy::set_skills(document, skills),
+        Command::SetVisitedCities(all) => economy::set_visited_cities(document, all),
+        Command::SetDealershipsDiscovered(all) => economy::set_dealerships(document, all),
+        Command::SetGarageStatus { id, status } => {
+            economy::set_garage_status(document, &id, status)
+        }
+        Command::SetPlayerPosition { location, rotation } => {
+            player::set_position(document, &location, &rotation)
+        }
+        Command::RenameProfile(name) => profile::rename(document, name),
     }
 }

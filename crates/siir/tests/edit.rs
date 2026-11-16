@@ -298,6 +298,33 @@ fn remove_attr_handles_arrays_and_inserted_units() {
 }
 
 #[test]
+fn insert_attr_appends_a_parsed_attribute() {
+    let mut document = Document::parse(SOURCE).unwrap();
+    {
+        let unit = document.get("economy").unwrap();
+        unit.insert_attr("visited_cities", Value::UInt(1)).unwrap();
+        unit.insert_attr("visited_cities[0]", Value::token("prague"))
+            .unwrap();
+        assert_eq!(unit.get("visited_cities"), Some("1"));
+        assert_eq!(unit.get("visited_cities[0]"), Some("prague"));
+        assert_eq!(
+            unit.insert_attr("visited_cities", Value::Int(2))
+                .unwrap_err()
+                .to_string(),
+            "duplicate attribute \"visited_cities\""
+        );
+    }
+    let text = document.to_text();
+    assert!(text.contains(" visited_cities: 1\n"));
+    assert!(text.contains(" visited_cities[0]: prague\n"));
+    assert!(Document::parse(&text).is_ok());
+
+    let unit = document.get("economy").unwrap();
+    unit.remove_attr("visited_cities[0]").unwrap();
+    assert_eq!(unit.get("visited_cities[0]"), None);
+}
+
+#[test]
 fn float_keeps_a_decimal_point() {
     let mut document = Document::parse(SOURCE).unwrap();
     document

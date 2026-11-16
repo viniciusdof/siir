@@ -8,15 +8,17 @@ use std::collections::HashMap;
 use siir::{Document, Unit};
 
 mod command;
+pub mod config;
 mod error;
 mod model;
 mod names;
+pub mod profiles;
 mod value;
 
 pub use command::{Command, apply};
 pub use error::Error;
 pub use model::{
-    Bank, Company, Driver, Game, Garage, Job, Offence, Offer, Player, Save, Trailer, Truck,
+    Bank, Company, Driver, Game, Garage, Job, Offence, Offer, Player, Save, Skills, Trailer, Truck,
     UsedTruck,
 };
 
@@ -29,6 +31,16 @@ pub fn read<'a>(document: &'a Document<'_>, game: Game) -> Result<Save<'a>, Erro
     let economy = first(document, names::ECONOMY);
     let bank = linked(economy, names::BANK, &units).or_else(|| first(document, names::BANK));
     let player = linked(economy, names::PLAYER, &units).or_else(|| first(document, names::PLAYER));
+
+    let (experience, skills, visited_cities, unlocked_dealers) = match economy {
+        Some(unit) => (
+            count(unit, names::EXPERIENCE_POINTS)?,
+            skills(unit)?,
+            array(unit, names::VISITED_CITIES)?,
+            array(unit, names::UNLOCKED_DEALERS)?,
+        ),
+        None => (0, Skills::default(), Vec::new(), Vec::new()),
+    };
 
     let assigned = player.and_then(|unit| reference(unit, names::ASSIGNED_VEHICLES));
     let mut slots: HashMap<&str, &Unit<'_>> = HashMap::new();
@@ -76,7 +88,7 @@ pub fn read<'a>(document: &'a Document<'_>, game: Game) -> Result<Save<'a>, Erro
             transmission_wear: float(unit, "transmission_wear")?,
             cabin_wear: float(unit, "cabin_wear")?,
             fuel_relative: float(unit, "fuel_relative")?,
-            placement: slot.and_then(|slot| slot.get("stored_vehicle_placement")),
+            placement: slot.and_then(|slot| slot.get(names::STORED_VEHICLE_PLACEMENT)),
         });
     }
 
@@ -97,7 +109,7 @@ pub fn read<'a>(document: &'a Document<'_>, game: Game) -> Result<Save<'a>, Erro
     for unit in document.units_of_class(names::GARAGE) {
         garages.push(Garage {
             id: unit.id(),
-            status: count(unit, "status")?,
+            status: count(unit, names::STATUS)?,
         });
     }
 
@@ -148,6 +160,10 @@ pub fn read<'a>(document: &'a Document<'_>, game: Game) -> Result<Save<'a>, Erro
     Ok(Save {
         game,
         bank,
+        experience,
+        skills,
+        visited_cities,
+        unlocked_dealers,
         player,
         trucks,
         trailers,
@@ -172,6 +188,17 @@ fn linked<'a, 'd>(
     units: &HashMap<&'a str, &'a Unit<'d>>,
 ) -> Option<&'a Unit<'d>> {
     units.get(reference(unit?, name)?).copied()
+}
+
+fn skills(unit: &Unit<'_>) -> Result<Skills, Error> {
+    Ok(Skills {
+        adr: count(unit, names::ADR)?,
+        long_dist: count(unit, names::LONG_DIST)?,
+        heavy: count(unit, names::HEAVY)?,
+        fragile: count(unit, names::FRAGILE)?,
+        urgent: count(unit, names::URGENT)?,
+        mechanical: count(unit, names::MECHANICAL)?,
+    })
 }
 
 fn job<'a>(unit: &'a Unit<'_>) -> Result<Job<'a>, Error> {
@@ -234,6 +261,20 @@ mod tests {
         let save = read(&document, Game::Ets2).unwrap();
 
         assert_eq!(save.bank.as_ref().unwrap().money_account, 500);
+        assert_eq!(save.experience, 100);
+        assert_eq!(
+            save.skills,
+            Skills {
+                adr: 1,
+                long_dist: 2,
+                heavy: 3,
+                fragile: 4,
+                urgent: 5,
+                mechanical: 6,
+            }
+        );
+        assert_eq!(save.visited_cities, ["prague"]);
+        assert!(save.unlocked_dealers.is_empty());
 
         let player = save.player.as_ref().unwrap();
         assert_eq!(player.hq_city, "prague");

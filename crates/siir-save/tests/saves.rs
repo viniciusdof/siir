@@ -1,7 +1,7 @@
 //! Read model and commands over the real ETS2 and ATS fixtures.
 
 use siir::Document;
-use siir_save::{Command, Game, apply, read};
+use siir_save::{Command, Game, Skills, apply, read};
 
 fn fixture(path: &str) -> Vec<u8> {
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -36,6 +36,7 @@ struct Case {
     game: Game,
     money: i64,
     hq_city: &'static str,
+    visited_city: &'static str,
     trucks: usize,
     garages: usize,
     drivers: usize,
@@ -67,6 +68,7 @@ const CASES: [Case; 2] = [
         game: Game::Ets2,
         money: 2000,
         hq_city: "prague",
+        visited_city: "prague",
         trucks: 27,
         garages: 237,
         drivers: 354,
@@ -96,6 +98,7 @@ const CASES: [Case; 2] = [
         game: Game::Ats,
         money: 1500,
         hq_city: "seattle",
+        visited_city: "seattle",
         trucks: 13,
         garages: 59,
         drivers: 354,
@@ -134,6 +137,10 @@ fn assert_case(case: &Case) {
         case.money,
         "{name}"
     );
+    assert_eq!(save.experience, 0, "{name}");
+    assert_eq!(save.skills, Skills::default(), "{name}");
+    assert_eq!(save.visited_cities, [case.visited_city], "{name}");
+    assert!(save.unlocked_dealers.is_empty(), "{name}");
 
     let player = save.player.as_ref().unwrap();
     assert_eq!(player.hq_city, case.hq_city, "{name}");
@@ -359,6 +366,20 @@ fn ats_commands_change_only_expected_lines() {
 
     let reopened = siir::open(after.as_bytes()).unwrap();
     assert_eq!(reopened.document().unwrap().to_text(), after);
+}
+
+#[test]
+fn ets2_money_survives_reopen() {
+    let bytes = fixture("ets2/saves/1/game.sii");
+    let file = siir::open(&bytes).unwrap();
+    let mut document = file.document().unwrap();
+    apply(&mut document, Game::Ets2, Command::SetMoney(12_345)).unwrap();
+    let out = file.write(&document).unwrap();
+
+    let reopened = siir::open(&out).unwrap();
+    let document = reopened.document().unwrap();
+    let save = read(&document, Game::Ets2).unwrap();
+    assert_eq!(save.bank.unwrap().money_account, 12_345);
 }
 
 #[test]

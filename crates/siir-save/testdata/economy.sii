@@ -1,0 +1,43 @@
+SiiNunit
+{
+economy : economy.one {
+    bank: bank.one
+    experience_points: 0
+    adr: 0
+    long_dist: 0
+    heavy: 0
+    fragile: 0
+    urgent: 0
+    mechanical: 0
+    companies: 3
+    companies[0]: company.volatile.a.prague
+    companies[1]: company.volatile.b.brno
+    companies[2]: company.volatile.c.prague
+    visited_cities: 1
+    visited_cities[0]: prague
+    visited_cities_count: 1
+    visited_cities_count[0]: 1
+    unlocked_dealers: 0
+}
+bank : bank.one {
+    money_account: 100
+}
+garage : garage.one {
+    vehicles: 0
+    drivers: 0
+    status: 0
+}
+garage : garage.two {
+    vehicles: 1
+    vehicles[0]: null
+    drivers: 1
+    drivers[0]: null
+    status: 6
+}
+garage : garage.three {
+    vehicles: 1
+    vehicles[0]: vehicle.one
+    drivers: 0
+    status: 0
+}
+}

@@ -9,6 +9,7 @@ publish = false
 
 [dependencies]
 siir = { path = "../siir", version = "0.1.0" }
+zip = { version = "9.6.0", default-features = false }
 
 [lints]
 workspace = true

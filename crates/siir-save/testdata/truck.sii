@@ -13,6 +13,10 @@ player : player.one {
 }
 player_vehicles : slot.one {
     vehicle: vehicle.one
+    stored_vehicle_placement: (1, 2, 3) (1; 0, 0, 0)
+    stored_trailer_placements: 1
+    stored_trailer_placements[0]: (4, 5, 6) (1; 0, 0, 0)
+    stored_trailer_attached: false
 }
 vehicle : vehicle.one {
     engine_wear: &3f800000

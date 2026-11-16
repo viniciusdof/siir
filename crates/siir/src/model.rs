@@ -288,23 +288,24 @@ impl<'a> Unit<'a> {
     /// Current text of the `nth` element of an implicit array (`name[]`).
     pub fn get_nth(&self, name: &str, nth: usize) -> Option<&str> {
         let (base, index) = split_name(name);
-        if self.inserted {
-            return self
-                .added
-                .iter()
-                .filter(|(added, _)| added == name)
-                .nth(nth)
-                .map(|(_, rendered)| rendered.text.as_str());
-        }
-        self.attrs
+        let parsed = self
+            .attrs
             .iter()
             .filter(|attr| !attr.removed && attr.name == base && attr.index == index)
-            .nth(nth)
             .map(|attr| {
                 attr.replacement
                     .as_ref()
                     .map_or(attr.value, |rendered| rendered.text.as_str())
+            });
+        let added = self
+            .added
+            .iter()
+            .filter(|(added, _)| {
+                let (added_base, added_index) = split_name(added);
+                added_base == base && added_index == index
             })
+            .map(|(_, rendered)| rendered.text.as_str());
+        parsed.chain(added).nth(nth)
     }
 
     /// Attributes as `(name, index, value)`, with edits applied.
@@ -330,22 +331,46 @@ impl<'a> Unit<'a> {
         if !is_attr_name(name) {
             return Err(Error::invalid_name("attribute name"));
         }
-        if self.inserted {
-            let Some(position) = self.added.iter().position(|(added, _)| added == name) else {
-                return Err(Error::missing_attribute(name, 0));
-            };
-            self.added.remove(position);
-            return Ok(());
-        }
         let (base, index) = split_name(name);
-        let Some(position) = self
+        if let Some(position) = self
             .attrs
             .iter()
             .position(|attr| !attr.removed && attr.name == base && attr.index == index)
-        else {
-            return Err(Error::missing_attribute(name, self.span.start));
-        };
-        self.attrs[position].removed = true;
+        {
+            self.attrs[position].removed = true;
+            return Ok(());
+        }
+        if let Some(position) = self.added.iter().position(|(added, _)| {
+            let (added_base, added_index) = split_name(added);
+            added_base == base && added_index == index
+        }) {
+            self.added.remove(position);
+            return Ok(());
+        }
+        let offset = if self.inserted { 0 } else { self.span.start };
+        Err(Error::missing_attribute(name, offset))
+    }
+
+    /// Adds an attribute, failing when the same name and index already exist.
+    pub fn insert_attr(&mut self, name: &str, value: Value) -> Result<(), Error> {
+        if !is_attr_name(name) {
+            return Err(Error::invalid_name("attribute name"));
+        }
+        let offset = if self.inserted { 0 } else { self.span.start };
+        let (base, index) = split_name(name);
+        let exists = self
+            .attrs
+            .iter()
+            .any(|attr| !attr.removed && attr.name == base && attr.index == index)
+            || self.added.iter().any(|(added, _)| {
+                let (added_base, added_index) = split_name(added);
+                added_base == base && added_index == index
+            });
+        if exists {
+            return Err(Error::duplicate_attribute(name, offset));
+        }
+        let rendered = value.render(offset)?;
+        self.added.push((name.to_owned(), rendered));
         Ok(())
     }
 
@@ -379,18 +404,28 @@ impl<'a> Unit<'a> {
             return Err(Error::missing_attribute(name, offset));
         }
         let (base, index) = split_name(name);
-        match self
+        if let Some(attr) = self
             .attrs
             .iter_mut()
             .filter(|attr| !attr.removed && attr.name == base && attr.index == index)
             .nth(nth)
         {
-            Some(attr) => {
-                attr.replacement = Some(rendered);
-                Ok(())
-            }
-            None => Err(Error::missing_attribute(name, offset)),
+            attr.replacement = Some(rendered);
+            return Ok(());
         }
+        if let Some((_, current)) = self
+            .added
+            .iter_mut()
+            .filter(|(added, _)| {
+                let (added_base, added_index) = split_name(added);
+                added_base == base && added_index == index
+            })
+            .nth(nth)
+        {
+            *current = rendered;
+            return Ok(());
+        }
+        Err(Error::missing_attribute(name, offset))
     }
 
     fn write_parsed(&self, source: &str, out: &mut String) {
@@ -411,7 +446,23 @@ impl<'a> Unit<'a> {
             out.push_str(&rendered.text);
             last = attr.span.end;
         }
-        out.push_str(&source[last..self.span.end]);
+        if self.added.is_empty() {
+            out.push_str(&source[last..self.span.end]);
+            return;
+        }
+        let brace = self.span.end - 1;
+        out.push_str(&source[last..brace]);
+        if !out.ends_with('\n') {
+            out.push('\n');
+        }
+        for (name, rendered) in &self.added {
+            out.push(' ');
+            out.push_str(name);
+            out.push_str(": ");
+            out.push_str(&rendered.text);
+            out.push('\n');
+        }
+        out.push('}');
     }
 
     fn write_inserted(&self, out: &mut String) {
@@ -493,7 +544,10 @@ fn is_vector(text: &str) -> bool {
         && text.ends_with(')')
         && text.bytes().all(|byte| {
             byte.is_ascii_alphanumeric()
-                || matches!(byte, b' ' | b'.' | b',' | b';' | b'(' | b')' | b'+' | b'-')
+                || matches!(
+                    byte,
+                    b' ' | b'.' | b',' | b';' | b'(' | b')' | b'+' | b'-' | b'&'
+                )
         })
 }
 

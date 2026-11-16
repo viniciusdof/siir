@@ -3,6 +3,18 @@ SiiNunit
 economy : economy {
     bank: bank.one
     player: player.one
+    experience_points: 100
+    adr: 1
+    long_dist: 2
+    heavy: 3
+    fragile: 4
+    urgent: 5
+    mechanical: 6
+    visited_cities: 1
+    visited_cities[0]: prague
+    visited_cities_count: 1
+    visited_cities_count[0]: 1
+    unlocked_dealers: 0
 }
 bank : bank.one {
     money_account: 500
