@@ -1,0 +1,50 @@
+SiiNunit
+{
+economy : economy {
+    player: player.one
+}
+player : player.one {
+    trailers: 1
+    trailers[0]: trailer.one
+    assigned_vehicles: slot.one
+}
+player_vehicles : slot.one {
+    trailer: trailer.one
+}
+trailer : trailer.one {
+    trailer_definition: trailer_def.test
+    cargo_mass: 1000
+    slave_trailer: trailer.two
+    license_plate: "OLD"
+    trailer_body_wear: &3f800000
+    trailer_body_wear_unfixable: &3f800000
+    chassis_wear: 0.5
+    chassis_wear_unfixable: 0.5
+    wheels_wear: 2
+    wheels_wear[0]: &3f800000
+    wheels_wear[1]: 0.5
+    wheels_wear_unfixable: 2
+    wheels_wear_unfixable[0]: &3f800000
+    wheels_wear_unfixable[1]: 0.5
+}
+trailer : trailer.two {
+    trailer_definition: trailer_def.test
+    cargo_mass: 500
+    slave_trailer: null
+    license_plate: "OLD2"
+    trailer_body_wear: 0.5
+    trailer_body_wear_unfixable: 0.5
+    chassis_wear: 0.5
+    chassis_wear_unfixable: 0.5
+    wheels_wear: 1
+    wheels_wear[0]: 0.5
+    wheels_wear_unfixable: 1
+    wheels_wear_unfixable[0]: 0.5
+}
+trailer_def : trailer_def.test {
+    country_validity: 2
+    country_validity[0]: "czech"
+    country_validity[1]: "germany"
+    source_name: "source"
+}
+}

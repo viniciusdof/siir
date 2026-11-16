@@ -5,6 +5,7 @@ use siir::Document;
 use crate::Game;
 use crate::error::Error;
 
+mod trailer;
 mod truck;
 
 /// A save edit applied through [`apply`].
@@ -44,6 +45,28 @@ pub enum Command {
     SetCurrentTruck(String),
     /// Moves the player's headquarters to the garage city holding one truck.
     SetHqTruck(String),
+    /// Repairs every wear attribute on one trailer and its slaves.
+    RepairTrailer(String),
+    /// Repairs every trailer the player owns.
+    RepairAllTrailers,
+    /// Sets cargo mass on one trailer and its slaves.
+    SetCargoMass {
+        /// Trailer unit id.
+        id: String,
+        /// Cargo mass in kilograms.
+        mass: f32,
+    },
+    /// Sets one trailer's license plate text on it and its slaves.
+    SetTrailerLicensePlate {
+        /// Trailer unit id.
+        id: String,
+        /// Raw plate text.
+        plate: String,
+    },
+    /// Removes the country restrictions from one trailer's definition.
+    UnlockInRestrictedAreas(String),
+    /// Points the player's assigned vehicle slot at one trailer.
+    SetCurrentTrailer(String),
 }
 
 /// Applies one command to a save document.
@@ -59,5 +82,13 @@ pub fn apply(document: &mut Document<'_>, _game: Game, command: Command) -> Resu
         Command::RemoveBadge(id) => truck::remove_badge(document, &id),
         Command::SetCurrentTruck(id) => truck::set_current_truck(document, &id),
         Command::SetHqTruck(id) => truck::set_hq_truck(document, &id),
+        Command::RepairTrailer(id) => trailer::repair_trailer(document, &id),
+        Command::RepairAllTrailers => trailer::repair_all_trailers(document),
+        Command::SetCargoMass { id, mass } => trailer::set_cargo_mass(document, &id, mass),
+        Command::SetTrailerLicensePlate { id, plate } => {
+            trailer::set_license_plate(document, &id, plate)
+        }
+        Command::UnlockInRestrictedAreas(id) => trailer::unlock_in_restricted_areas(document, &id),
+        Command::SetCurrentTrailer(id) => trailer::set_current_trailer(document, &id),
     }
 }

@@ -52,6 +52,10 @@ struct Case {
     engine: &'static str,
     engine_wear: f32,
     fuel: f32,
+    trailer_id: &'static str,
+    trailer_definition: &'static str,
+    trailer_mass: f32,
+    trailer_plate: &'static str,
     job_cargo: &'static str,
     job_km: u64,
 }
@@ -79,6 +83,10 @@ const CASES: [Case; 2] = [
         engine: "/def/vehicle/truck/renault.etech_t/engine/490kw.sii",
         engine_wear: f32::from_bits(0x36c9_53b6),
         fuel: f32::from_bits(0x3f7d_cfde),
+        trailer_id: "_nameless.7f9f.ff9f.5450",
+        trailer_definition: "trailer_def.wielton.scrapm.ch_3_10.scrapm",
+        trailer_mass: 21_000.0,
+        trailer_plate: "4A1<offset vshift=-8><img src=/material/ui/lp/czech/b.mat width=20 height=40 color=FFFFFFFF><offset vshift=8>8956|czech",
         job_cargo: "cargo.stones",
         job_km: 183,
     },
@@ -104,6 +112,10 @@ const CASES: [Case; 2] = [
         engine: "/def/vehicle/truck/volvo.vnr_e/engine/e340.sii",
         engine_wear: 0.0,
         fuel: 1.0,
+        trailer_id: "_nameless.7fef.7fdb.2310",
+        trailer_definition: "trailer_def.scs.flatbed.single_45sp.curtain",
+        trailer_mass: f32::from_bits(0x468e_4b34),
+        trailer_plate: "75705TR|washington",
         job_cargo: "cargo.mortar",
         job_km: 51,
     },
@@ -126,6 +138,8 @@ fn assert_case(case: &Case) {
     let player = save.player.as_ref().unwrap();
     assert_eq!(player.hq_city, case.hq_city, "{name}");
     assert_eq!(player.my_vehicles.len(), 3, "{name}");
+    assert!(player.trucks.is_empty(), "{name}");
+    assert!(player.trailers.is_empty(), "{name}");
     assert!(player.assigned_vehicles.is_some(), "{name}");
     assert!(player.current_job.is_some(), "{name}");
 
@@ -154,6 +168,7 @@ fn assert_case(case: &Case) {
 
     let truck = save.current_truck().unwrap();
     assert_eq!(truck.id, case.truck_id, "{name}");
+    assert_eq!(truck.trailer, Some(case.trailer_id), "{name}");
     assert_eq!(truck.model, Some(case.model), "{name}");
     assert_eq!(truck.data_path, Some(case.data_path), "{name}");
     assert_eq!(truck.engine, Some(case.engine), "{name}");
@@ -161,6 +176,16 @@ fn assert_case(case: &Case) {
     assert_eq!(truck.fuel_relative, case.fuel, "{name}");
     assert!(truck.placement.unwrap().starts_with('('), "{name}");
     assert!(save.truck(truck.id).is_some(), "{name}");
+
+    let trailer = save.current_trailer().unwrap();
+    assert_eq!(trailer.id, case.trailer_id, "{name}");
+    assert_eq!(trailer.definition, case.trailer_definition, "{name}");
+    assert_eq!(trailer.cargo_mass, case.trailer_mass, "{name}");
+    assert_eq!(trailer.license_plate, case.trailer_plate, "{name}");
+    assert_eq!(trailer.slave_trailer, None, "{name}");
+    assert_eq!(trailer.body_wear, 0.0, "{name}");
+    assert_eq!(trailer.chassis_wear, 0.0, "{name}");
+    assert!(save.trailer(trailer.id).is_some(), "{name}");
 
     let job = save.player_job.as_ref().unwrap();
     assert_eq!(job.cargo, Some(case.job_cargo), "{name}");
@@ -334,6 +359,113 @@ fn ats_commands_change_only_expected_lines() {
 
     let reopened = siir::open(after.as_bytes()).unwrap();
     assert_eq!(reopened.document().unwrap().to_text(), after);
+}
+
+#[test]
+fn ets2_trailer_commands_change_only_expected_lines() {
+    let bytes = fixture("ets2/saves/1/game.sii");
+    let file = siir::open(&bytes).unwrap();
+    let mut document = file.document().unwrap();
+    let id = read(&document, Game::Ets2)
+        .unwrap()
+        .current_trailer()
+        .unwrap()
+        .id
+        .to_owned();
+
+    let old = written(&file, &document);
+    apply(
+        &mut document,
+        Game::Ets2,
+        Command::RepairTrailer(id.clone()),
+    )
+    .unwrap();
+    let new = written(&file, &document);
+    let changed = changed_lines(&old, &new);
+    assert_eq!(changed.len(), 6);
+    for (old, new) in changed {
+        assert!(old.trim_start().starts_with("wheels_wear"));
+        assert!(new.trim_start().ends_with(": 0\n"));
+    }
+
+    let old = new;
+    apply(
+        &mut document,
+        Game::Ets2,
+        Command::SetCargoMass {
+            id: id.clone(),
+            mass: 15_000.0,
+        },
+    )
+    .unwrap();
+    let new = written(&file, &document);
+    let changed = changed_lines(&old, &new);
+    assert_eq!(changed.len(), 1);
+    assert_eq!(changed[0].1.trim_start(), "cargo_mass: 15000.0\n");
+
+    let old = new;
+    apply(
+        &mut document,
+        Game::Ets2,
+        Command::SetTrailerLicensePlate {
+            id,
+            plate: "NEW".into(),
+        },
+    )
+    .unwrap();
+    let new = written(&file, &document);
+    let changed = changed_lines(&old, &new);
+    assert_eq!(changed.len(), 1);
+    assert_eq!(changed[0].1.trim_start(), "license_plate: \"NEW\"\n");
+
+    let reopened = siir::open(new.as_bytes()).unwrap();
+    assert_eq!(reopened.document().unwrap().to_text(), new);
+}
+
+#[test]
+fn ats_trailer_commands_change_only_expected_lines() {
+    let bytes = fixture("ats/saves/1/game.sii");
+    let file = siir::open(&bytes).unwrap();
+    let mut document = file.document().unwrap();
+    let id = read(&document, Game::Ats)
+        .unwrap()
+        .current_trailer()
+        .unwrap()
+        .id
+        .to_owned();
+
+    let old = written(&file, &document);
+    apply(
+        &mut document,
+        Game::Ats,
+        Command::SetCargoMass {
+            id: id.clone(),
+            mass: 10_000.0,
+        },
+    )
+    .unwrap();
+    let new = written(&file, &document);
+    let changed = changed_lines(&old, &new);
+    assert_eq!(changed.len(), 1);
+    assert_eq!(changed[0].1.trim_start(), "cargo_mass: 10000.0\n");
+
+    let old = new;
+    apply(
+        &mut document,
+        Game::Ats,
+        Command::SetTrailerLicensePlate {
+            id,
+            plate: "NEW".into(),
+        },
+    )
+    .unwrap();
+    let new = written(&file, &document);
+    let changed = changed_lines(&old, &new);
+    assert_eq!(changed.len(), 1);
+    assert_eq!(changed[0].1.trim_start(), "license_plate: \"NEW\"\n");
+
+    let reopened = siir::open(new.as_bytes()).unwrap();
+    assert_eq!(reopened.document().unwrap().to_text(), new);
 }
 
 #[test]

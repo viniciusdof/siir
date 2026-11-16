@@ -54,6 +54,7 @@ pub fn read<'a>(document: &'a Document<'_>, game: Game) -> Result<Save<'a>, Erro
             hq_city: text(unit, names::HQ_CITY)?,
             my_vehicles: array(unit, names::MY_VEHICLES)?,
             trucks: array(unit, names::TRUCKS)?,
+            trailers: array(unit, names::TRAILERS)?,
             assigned_vehicles: reference(unit, names::ASSIGNED_VEHICLES),
             current_job: reference(unit, "current_job"),
         }),
@@ -67,6 +68,7 @@ pub fn read<'a>(document: &'a Document<'_>, game: Game) -> Result<Save<'a>, Erro
         trucks.push(Truck {
             id: unit.id(),
             slot: slot.map(|slot| slot.id()),
+            trailer: slot.and_then(|slot| reference(slot, names::TRAILER)),
             model: parts.model,
             data_path: parts.data_path,
             engine: parts.engine,
@@ -82,7 +84,12 @@ pub fn read<'a>(document: &'a Document<'_>, game: Game) -> Result<Save<'a>, Erro
     for unit in document.units_of_class(names::TRAILER) {
         trailers.push(Trailer {
             id: unit.id(),
-            definition: text(unit, "trailer_definition")?,
+            definition: text(unit, names::TRAILER_DEFINITION)?,
+            cargo_mass: float(unit, names::CARGO_MASS)?,
+            license_plate: string(unit, names::LICENSE_PLATE)?,
+            slave_trailer: reference(unit, names::SLAVE_TRAILER),
+            body_wear: float(unit, names::TRAILER_BODY_WEAR)?,
+            chassis_wear: float(unit, names::CHASSIS_WEAR)?,
         });
     }
 
@@ -232,12 +239,14 @@ mod tests {
         assert_eq!(player.hq_city, "prague");
         assert_eq!(player.my_vehicles, ["slot.one"]);
         assert_eq!(player.trucks, ["vehicle.one"]);
+        assert_eq!(player.trailers, ["trailer.one"]);
         assert_eq!(player.assigned_vehicles, Some("slot.one"));
         assert_eq!(player.current_job, Some("player_job.one"));
 
         let truck = save.current_truck().unwrap();
         assert_eq!(truck.id, "vehicle.one");
         assert_eq!(truck.slot, Some("slot.one"));
+        assert_eq!(truck.trailer, Some("trailer.one"));
         assert_eq!(truck.model, Some("test.model"));
         assert_eq!(
             truck.data_path,
@@ -253,7 +262,14 @@ mod tests {
         assert_eq!(truck.fuel_relative, 1.0);
         assert_eq!(truck.placement, Some("(1, 2, 3) (1; 0, 0, 0)"));
 
-        assert_eq!(save.trailers[0].definition, "trailer_def.test");
+        let trailer = save.current_trailer().unwrap();
+        assert_eq!(trailer.id, "trailer.one");
+        assert_eq!(trailer.definition, "trailer_def.test");
+        assert_eq!(trailer.cargo_mass, 1000.0);
+        assert_eq!(trailer.license_plate, "TEST");
+        assert_eq!(trailer.slave_trailer, None);
+        assert_eq!(trailer.body_wear, 1.0);
+        assert_eq!(trailer.chassis_wear, 0.5);
         assert_eq!(save.garages[0].status, 2);
         assert_eq!(save.drivers[0].experience_points, 10);
         assert_eq!(save.companies[0].permanent_data, "company.permanent.test");

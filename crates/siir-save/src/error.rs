@@ -38,6 +38,8 @@ pub enum Error {
     },
     /// The player has no assigned vehicle slot.
     NoCurrentTruck,
+    /// The player has no trailer in the assigned vehicle slot.
+    NoCurrentTrailer,
     /// A fuel level is outside the range the game accepts.
     InvalidFuel {
         /// Requested level.
@@ -77,6 +79,7 @@ impl fmt::Display for Error {
             Self::NoBadge { id } => write!(f, "no badge on {id}"),
             Self::NoGarage { id } => write!(f, "no garage holds {id}"),
             Self::NoCurrentTruck => write!(f, "player has no current truck"),
+            Self::NoCurrentTrailer => write!(f, "player has no current trailer"),
             Self::InvalidFuel { level } => {
                 write!(f, "fuel level {level} is not between 0 and 1")
             }

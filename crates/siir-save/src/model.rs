@@ -50,6 +50,16 @@ impl<'a> Save<'a> {
         let slot = self.player.as_ref()?.assigned_vehicles?;
         self.trucks.iter().find(|truck| truck.slot == Some(slot))
     }
+
+    /// A trailer by its unit id.
+    pub fn trailer(&self, id: &str) -> Option<&Trailer<'a>> {
+        self.trailers.iter().find(|trailer| trailer.id == id)
+    }
+
+    /// The trailer in the player's assigned vehicle slot.
+    pub fn current_trailer(&self) -> Option<&Trailer<'a>> {
+        self.trailer(self.current_truck()?.trailer?)
+    }
 }
 
 /// One `vehicle` unit.
@@ -58,6 +68,8 @@ pub struct Truck<'a> {
     pub id: &'a str,
     /// Owning `player_vehicles` slot, when one references this truck.
     pub slot: Option<&'a str>,
+    /// Trailer assigned to the owning slot, when there is one.
+    pub trailer: Option<&'a str>,
     /// Model folder under `/def/vehicle/truck/`, for example `renault.etech_t`.
     pub model: Option<&'a str>,
     /// The model's `data.sii` path.
@@ -82,6 +94,16 @@ pub struct Trailer<'a> {
     pub id: &'a str,
     /// Trailer definition the unit uses.
     pub definition: &'a str,
+    /// Cargo mass in kilograms.
+    pub cargo_mass: f32,
+    /// Raw license plate text.
+    pub license_plate: &'a str,
+    /// Slave trailer unit id, when this trailer tows one.
+    pub slave_trailer: Option<&'a str>,
+    /// Body wear, from 0 to 1.
+    pub body_wear: f32,
+    /// Chassis wear, from 0 to 1.
+    pub chassis_wear: f32,
 }
 
 /// One garage.
@@ -164,6 +186,8 @@ pub struct Player<'a> {
     pub my_vehicles: Vec<&'a str>,
     /// Owned truck vehicle unit ids.
     pub trucks: Vec<&'a str>,
+    /// Owned trailer unit ids.
+    pub trailers: Vec<&'a str>,
     /// Assigned `player_vehicles` slot id, when there is one.
     pub assigned_vehicles: Option<&'a str>,
     /// The player's current `player_job` unit id, when there is one.

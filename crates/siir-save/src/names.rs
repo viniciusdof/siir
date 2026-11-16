@@ -20,10 +20,22 @@ pub(crate) const POLICE_OFFENCE_LOG: &str = "police_offence_log";
 pub(crate) const HQ_CITY: &str = "hq_city";
 pub(crate) const MY_VEHICLES: &str = "my_vehicles";
 pub(crate) const TRUCKS: &str = "trucks";
+pub(crate) const TRAILERS: &str = "trailers";
 pub(crate) const ASSIGNED_VEHICLES: &str = "assigned_vehicles";
 pub(crate) const ACCESSORIES: &str = "accessories";
 pub(crate) const DATA_PATH: &str = "data_path";
 pub(crate) const VEHICLES: &str = "vehicles";
+pub(crate) const TRAILER_DEFINITION: &str = "trailer_definition";
+pub(crate) const SLAVE_TRAILER: &str = "slave_trailer";
+pub(crate) const CARGO_MASS: &str = "cargo_mass";
+pub(crate) const LICENSE_PLATE: &str = "license_plate";
+pub(crate) const TRAILER_DEF: &str = "trailer_def";
+pub(crate) const COUNTRY_VALIDITY: &str = "country_validity";
+pub(crate) const SOURCE_NAME: &str = "source_name";
+pub(crate) const TRAILER_BODY_WEAR: &str = "trailer_body_wear";
+pub(crate) const TRAILER_BODY_WEAR_UNFIXABLE: &str = "trailer_body_wear_unfixable";
+pub(crate) const CHASSIS_WEAR: &str = "chassis_wear";
+pub(crate) const CHASSIS_WEAR_UNFIXABLE: &str = "chassis_wear_unfixable";
 
 // Paths.
 /// Truck definitions live under `/def/vehicle/truck/<brand>.<model>/`.

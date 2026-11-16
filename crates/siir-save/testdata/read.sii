@@ -13,11 +13,14 @@ player : player.one {
     my_vehicles[0]: slot.one
     trucks: 1
     trucks[0]: vehicle.one
+    trailers: 1
+    trailers[0]: trailer.one
     assigned_vehicles: slot.one
     current_job: player_job.one
 }
 player_vehicles : slot.one {
     vehicle: vehicle.one
+    trailer: trailer.one
     stored_vehicle_placement: (1, 2, 3) (1; 0, 0, 0)
 }
 player_vehicles : slot.two {
@@ -40,6 +43,11 @@ vehicle_accessory : accessory.engine {
 }
 trailer : trailer.one {
     trailer_definition: trailer_def.test
+    cargo_mass: 1000
+    slave_trailer: null
+    license_plate: "TEST"
+    trailer_body_wear: &3f800000
+    chassis_wear: 0.5
 }
 garage : garage.one {
     status: 2
