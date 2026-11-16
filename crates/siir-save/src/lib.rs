@@ -7,6 +7,7 @@ use std::collections::HashMap;
 use siir::{Document, Unit};
 
 pub mod catalog;
+mod color;
 mod command;
 pub mod config;
 mod error;
@@ -15,6 +16,7 @@ mod names;
 pub mod profiles;
 mod value;
 
+pub use color::Color;
 pub use command::{Command, apply};
 pub use error::Error;
 pub use model::{
