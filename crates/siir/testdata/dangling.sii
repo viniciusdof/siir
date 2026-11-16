@@ -1,0 +1,10 @@
+SiiNunit
+{
+a : _nameless.0001.0002.0003.0004 {
+    target: _nameless.0002.0003.0004.0005
+    named: vehicle.volvo
+    token: analog
+}
+b : _nameless.0002.0003.0004.0005 {
+}
+}

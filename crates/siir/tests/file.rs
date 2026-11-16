@@ -5,7 +5,7 @@ use siir::{Index, Value, open};
 
 fn fixture(game: &str, path: &str) -> Vec<u8> {
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("fixtures")
+        .join("../../fixtures")
         .join(game)
         .join(path);
     std::fs::read(path).unwrap()

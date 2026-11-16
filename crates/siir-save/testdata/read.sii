@@ -1,0 +1,77 @@
+SiiNunit
+{
+economy : economy {
+    bank: bank.one
+    player: player.one
+}
+bank : bank.one {
+    money_account: 500
+}
+player : player.one {
+    hq_city: prague
+    my_vehicles: 1
+    my_vehicles[0]: slot.one
+    trucks: 1
+    trucks[0]: vehicle.one
+    assigned_vehicles: slot.one
+    current_job: player_job.one
+}
+player_vehicles : slot.one {
+    vehicle: vehicle.one
+    stored_vehicle_placement: (1, 2, 3) (1; 0, 0, 0)
+}
+player_vehicles : slot.two {
+    vehicle: vehicle.one
+}
+vehicle : vehicle.one {
+    engine_wear: &3f800000
+    transmission_wear: 0.5
+    cabin_wear: 0
+    fuel_relative: 1
+    accessories: 2
+    accessories[0]: accessory.data
+    accessories[1]: accessory.engine
+}
+vehicle_accessory : accessory.data {
+    data_path: "/def/vehicle/truck/test.model/data.sii"
+}
+vehicle_accessory : accessory.engine {
+    data_path: "/def/vehicle/truck/test.model/engine/500.sii"
+}
+trailer : trailer.one {
+    trailer_definition: trailer_def.test
+}
+garage : garage.one {
+    status: 2
+}
+driver_ai : driver.one {
+    experience_points: 10
+}
+company : company.one {
+    permanent_data: company.permanent.test
+}
+job_info : job.one {
+    cargo: null
+    planned_distance_km: 0
+}
+player_job : player_job.one {
+    cargo: cargo.stone
+    source_company: company.a
+    target_company: company.b
+    planned_distance_km: 12
+}
+job_offer_data : offer.one {
+    target: "city.name"
+    cargo: cargo.stone
+    shortest_distance_km: 7
+}
+used_truck_offer : used.one {
+    truck: vehicle.one
+    price: 100
+}
+police_offence_log : offences {
+}
+mystery : unknown.one {
+    whatever: 1
+}
+}

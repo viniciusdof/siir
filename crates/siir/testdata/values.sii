@@ -1,0 +1,20 @@
+SiiNunit
+{
+economy : _nameless.0001.0002.0003.0004 {
+    money_account: 1000000
+    cargo: 18446744073709551615
+    position: (1.0, 2.0, 3.0)
+    placement: (0, 0, 0) (1; 0, 0, 0)
+    entries[]: "a"
+    entries[]: "b"
+    ratio: 1.5
+    label: "hello"
+    active: true
+    unused: nil
+    bits: &3f800000
+    target: trailer.foo
+    gears: 2
+    gears[0]: 1H
+    gears[1]: _nameless.0001
+}
+}

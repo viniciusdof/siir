@@ -1,0 +1,57 @@
+SiiNunit
+{
+economy : economy {
+    player: player.one
+}
+player : player.one {
+    hq_city: brno
+    my_vehicles: 1
+    my_vehicles[0]: slot.one
+    trucks: 1
+    trucks[0]: vehicle.two
+    assigned_vehicles: slot.one
+}
+player_vehicles : slot.one {
+    vehicle: vehicle.one
+}
+vehicle : vehicle.one {
+    engine_wear: &3f800000
+    transmission_wear: 0.5
+    cabin_wear: 0.25
+    engine_wear_unfixable: &3f800000
+    transmission_wear_unfixable: 0.5
+    cabin_wear_unfixable: 0.25
+    fuel_relative: 0.5
+    odometer: 10
+    integrity_odometer: 10
+    trip_distance_km: 10
+    license_plate: "OLD"
+    accessories: 3
+    accessories[0]: accessory.data
+    accessories[1]: accessory.badge
+    accessories[2]: accessory.wheel
+}
+vehicle : vehicle.two {
+    engine_wear: &3f800000
+    transmission_wear: 0.5
+    cabin_wear: 0.25
+    engine_wear_unfixable: &3f800000
+    transmission_wear_unfixable: 0.5
+    cabin_wear_unfixable: 0.25
+    fuel_relative: 0.5
+    accessories: 0
+}
+vehicle_accessory : accessory.data {
+    data_path: "/def/vehicle/truck/test.model/data.sii"
+}
+vehicle_accessory : accessory.badge {
+    data_path: "/def/vehicle/truck/test.model/accessory/s_badge/test.sii"
+}
+vehicle_accessory : accessory.wheel {
+    data_path: "/def/vehicle/truck/test.model/accessory/wheel/test.sii"
+}
+garage : garage.prague {
+    vehicles: 1
+    vehicles[0]: vehicle.one
+}
+}

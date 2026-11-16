@@ -5,7 +5,7 @@ use std::fs;
 use siir::container::{Origin, open};
 
 const SCSC_HEADER_LEN: usize = 56;
-const FIXTURES: &str = "fixtures/ets2";
+const FIXTURES: &str = "../../fixtures/ets2";
 
 fn fixture(path: &str) -> Vec<u8> {
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))

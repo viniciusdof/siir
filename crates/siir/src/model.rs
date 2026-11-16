@@ -29,6 +29,7 @@ pub(crate) struct Attr<'a> {
     pub(crate) value: &'a str,
     pub(crate) span: Range<usize>,
     pub(crate) replacement: Option<Rendered>,
+    pub(crate) removed: bool,
 }
 
 /// Where an attribute sits in an implicit array.
@@ -232,7 +233,7 @@ impl<'a> Document<'a> {
         let mut seen = HashSet::new();
         let mut missing = Vec::new();
         for unit in self.units.iter().filter(|unit| !unit.removed) {
-            for attr in &unit.attrs {
+            for attr in unit.attrs.iter().filter(|attr| !attr.removed) {
                 let candidate = match &attr.replacement {
                     Some(rendered) => rendered.id.then_some(rendered.text.as_str()),
                     None => (is_id(attr.value) && !is_number(attr.value)).then_some(attr.value),
@@ -297,7 +298,7 @@ impl<'a> Unit<'a> {
         }
         self.attrs
             .iter()
-            .filter(|attr| attr.name == base && attr.index == index)
+            .filter(|attr| !attr.removed && attr.name == base && attr.index == index)
             .nth(nth)
             .map(|attr| {
                 attr.replacement
@@ -308,7 +309,7 @@ impl<'a> Unit<'a> {
 
     /// Attributes as `(name, index, value)`, with edits applied.
     pub fn attrs(&self) -> impl Iterator<Item = (&str, Index, &str)> + '_ {
-        let parsed = self.attrs.iter().map(|attr| {
+        let parsed = self.attrs.iter().filter(|attr| !attr.removed).map(|attr| {
             (
                 attr.name,
                 attr.index,
@@ -322,6 +323,30 @@ impl<'a> Unit<'a> {
             (base, index, rendered.text.as_str())
         });
         parsed.chain(added)
+    }
+
+    /// Removes an attribute, edited or original. Accepts `name[i]`.
+    pub fn remove_attr(&mut self, name: &str) -> Result<(), Error> {
+        if !is_attr_name(name) {
+            return Err(Error::invalid_name("attribute name"));
+        }
+        if self.inserted {
+            let Some(position) = self.added.iter().position(|(added, _)| added == name) else {
+                return Err(Error::missing_attribute(name, 0));
+            };
+            self.added.remove(position);
+            return Ok(());
+        }
+        let (base, index) = split_name(name);
+        let Some(position) = self
+            .attrs
+            .iter()
+            .position(|attr| !attr.removed && attr.name == base && attr.index == index)
+        else {
+            return Err(Error::missing_attribute(name, self.span.start));
+        };
+        self.attrs[position].removed = true;
+        Ok(())
     }
 
     /// Sets `name`, `name[i]`, or `name[]`; adds it on an inserted unit.
@@ -357,7 +382,7 @@ impl<'a> Unit<'a> {
         match self
             .attrs
             .iter_mut()
-            .filter(|attr| attr.name == base && attr.index == index)
+            .filter(|attr| !attr.removed && attr.name == base && attr.index == index)
             .nth(nth)
         {
             Some(attr) => {
@@ -371,6 +396,13 @@ impl<'a> Unit<'a> {
     fn write_parsed(&self, source: &str, out: &mut String) {
         let mut last = self.span.start;
         for attr in &self.attrs {
+            if attr.removed {
+                let (start, end) = removal(source, attr.span.clone());
+                let start = start.max(last);
+                out.push_str(&source[last..start]);
+                last = end;
+                continue;
+            }
             let Some(rendered) = &attr.replacement else {
                 continue;
             };
@@ -398,6 +430,23 @@ impl<'a> Unit<'a> {
             out.push('\n');
         }
         out.push_str("}\n");
+    }
+}
+
+fn removal(source: &str, span: Range<usize>) -> (usize, usize) {
+    let line_start = source[..span.start]
+        .rfind('\n')
+        .map_or(0, |newline| newline + 1);
+    if source[line_start..span.start]
+        .bytes()
+        .all(|byte| byte == b' ' || byte == b'\t')
+    {
+        let end = source[span.end..]
+            .find('\n')
+            .map_or(span.end, |newline| span.end + newline + 1);
+        (line_start, end)
+    } else {
+        (span.start, span.end)
     }
 }
 

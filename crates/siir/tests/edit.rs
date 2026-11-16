@@ -2,13 +2,7 @@
 
 use siir::{Document, Index, Unit, Value};
 
-const SOURCE: &str = concat!(
-    "SiiNunit\n{\n",
-    "economy : _nameless.0001.0002.0003.0004 {\n",
-    "    money_account: 1000\n",
-    "    other: 7\n",
-    "}\n}\n",
-);
+const SOURCE: &str = include_str!("../testdata/economy.sii");
 
 #[test]
 fn set_changes_only_the_value() {
@@ -19,13 +13,7 @@ fn set_changes_only_the_value() {
         .set("money_account", Value::int64(1_000_000))
         .unwrap();
 
-    let expected = concat!(
-        "SiiNunit\n{\n",
-        "economy : _nameless.0001.0002.0003.0004 {\n",
-        "    money_account: 1000000\n",
-        "    other: 7\n",
-        "}\n}\n",
-    );
+    let expected = include_str!("../testdata/economy_money.sii");
     assert_eq!(document.to_text(), expected);
 }
 
@@ -74,14 +62,7 @@ fn sets_every_value_form() {
 
 #[test]
 fn set_changes_one_array_element() {
-    let source = concat!(
-        "SiiNunit\n{\n",
-        "u : _nameless.0001.0002.0003.0004 {\n",
-        "    gears: 2\n",
-        "    gears[0]: 1H\n",
-        "    gears[1]: 2L\n",
-        "}\n}\n",
-    );
+    let source = include_str!("../testdata/gears.sii");
     let mut document = Document::parse(source).unwrap();
     document
         .get("u")
@@ -139,31 +120,14 @@ fn remove_drops_the_unit() {
 
 #[test]
 fn dangling_lists_cited_ids_without_a_unit() {
-    let source = concat!(
-        "SiiNunit\n{\n",
-        "a : _nameless.0001.0002.0003.0004 {\n",
-        "    target: _nameless.0002.0003.0004.0005\n",
-        "    named: vehicle.volvo\n",
-        "    token: analog\n",
-        "}\n",
-        "b : _nameless.0002.0003.0004.0005 {\n",
-        "}\n}\n",
-    );
+    let source = include_str!("../testdata/dangling.sii");
     let document = Document::parse(source).unwrap();
     assert_eq!(document.dangling(), vec!["vehicle.volvo"]);
 }
 
 #[test]
 fn dangling_ignores_numbers_and_strings() {
-    let source = concat!(
-        "SiiNunit\n{\n",
-        "a : _nameless.0001.0002.0003.0004 {\n",
-        "    ratio: 1.5\n",
-        "    count: 12\n",
-        "    label: \"1.5\"\n",
-        "    bits: &3f800000\n",
-        "}\n}\n",
-    );
+    let source = include_str!("../testdata/dangling_numbers.sii");
     let document = Document::parse(source).unwrap();
     assert!(document.dangling().is_empty());
 }
@@ -252,13 +216,7 @@ fn dangling_sees_edits_and_inserted_units() {
 
 #[test]
 fn set_nth_reaches_later_implicit_elements() {
-    let source = concat!(
-        "SiiNunit\n{\n",
-        "u : _nameless.0001.0002.0003.0004 {\n",
-        "    entries[]: \"a\"\n",
-        "    entries[]: \"b\"\n",
-        "}\n}\n",
-    );
+    let source = include_str!("../testdata/entries.sii");
     let mut document = Document::parse(source).unwrap();
     document
         .get("u")
@@ -301,6 +259,45 @@ fn attrs_lists_current_values() {
 }
 
 #[test]
+fn remove_attr_drops_the_line() {
+    let mut document = Document::parse(SOURCE).unwrap();
+    let unit = document.get("economy").unwrap();
+    unit.remove_attr("money_account").unwrap();
+    assert_eq!(unit.get("money_account"), None);
+    assert_eq!(
+        unit.set("money_account", Value::Int(1))
+            .unwrap_err()
+            .to_string(),
+        "missing attribute \"money_account\" at offset 11"
+    );
+    let error = unit.remove_attr("money_account").unwrap_err();
+    assert_eq!(
+        error.to_string(),
+        "missing attribute \"money_account\" at offset 11"
+    );
+    assert_eq!(
+        document.to_text(),
+        include_str!("../testdata/economy_without_money.sii")
+    );
+}
+
+#[test]
+fn remove_attr_handles_arrays_and_inserted_units() {
+    let source = include_str!("../testdata/gears.sii");
+    let mut document = Document::parse(source).unwrap();
+    document.get("u").unwrap().remove_attr("gears[0]").unwrap();
+    let text = document.to_text();
+    assert!(!text.contains("gears[0]"));
+    assert!(text.contains("gears[1]: 2L"));
+
+    let mut unit = Unit::new("probe", "probe.one");
+    unit.set("a", Value::Int(1)).unwrap();
+    unit.remove_attr("a").unwrap();
+    assert_eq!(unit.get("a"), None);
+    assert_eq!(unit.attrs().count(), 0);
+}
+
+#[test]
 fn float_keeps_a_decimal_point() {
     let mut document = Document::parse(SOURCE).unwrap();
     document
@@ -314,7 +311,7 @@ fn float_keeps_a_decimal_point() {
 #[test]
 fn untouched_text_is_byte_identical() {
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("fixtures/ets2/text/gearbox_layout_volvo_12.sii");
+        .join("../../fixtures/ets2/text/gearbox_layout_volvo_12.sii");
     let source = std::fs::read_to_string(path).unwrap();
     let document = Document::parse(&source).unwrap();
     assert_eq!(document.to_text(), source);

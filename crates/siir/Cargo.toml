@@ -3,7 +3,7 @@ name = "siir"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.99.1"
-description = "Read, edit, and write SCS Software SII files"
+description = "Read, edit, and write the SCS Software SII file format"
 repository = "https://codeberg.org/viniciusdof/siir"
 publish = false
 

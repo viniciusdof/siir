@@ -182,6 +182,7 @@ impl<'a> Parser<'a> {
             value,
             span: start..self.pos,
             replacement: None,
+            removed: false,
         })
     }
 
@@ -247,7 +248,7 @@ mod tests {
 
     use super::*;
 
-    const FIXTURES: &str = "fixtures/ets2/text";
+    const FIXTURES: &str = "../../fixtures/ets2/text";
 
     fn attr<'a>(unit: &'a Unit<'a>, name: &str, index: Index) -> &'a Attr<'a> {
         unit.attrs
@@ -296,26 +297,7 @@ mod tests {
 
     #[test]
     fn parses_every_value_form() {
-        let source = concat!(
-            "SiiNunit\n{\n",
-            "economy : _nameless.0001.0002.0003.0004 {\n",
-            "    money_account: 1000000\n",
-            "    cargo: 18446744073709551615\n",
-            "    position: (1.0, 2.0, 3.0)\n",
-            "    placement: (0, 0, 0) (1; 0, 0, 0)\n",
-            "    entries[]: \"a\"\n",
-            "    entries[]: \"b\"\n",
-            "    ratio: 1.5\n",
-            "    label: \"hello\"\n",
-            "    active: true\n",
-            "    unused: nil\n",
-            "    bits: &3f800000\n",
-            "    target: trailer.foo\n",
-            "    gears: 2\n",
-            "    gears[0]: 1H\n",
-            "    gears[1]: _nameless.0001\n",
-            "}\n}\n",
-        );
+        let source = include_str!("../testdata/values.sii");
         let document = parse(source).unwrap();
         let unit = &document.units[0];
         assert_eq!(unit.class, "economy");
@@ -349,7 +331,7 @@ mod tests {
 
     #[test]
     fn skips_comments() {
-        let source = "SiiNunit\n{\n// line\n# hash\n/* block */\nunit : id { a: 1 } // tail\n}\n";
+        let source = include_str!("../testdata/comments.sii");
         let document = parse(source).unwrap();
         assert_eq!(document.units[0].attrs[0].value, "1");
     }
@@ -363,7 +345,7 @@ mod tests {
 
     #[test]
     fn missing_closing_quote_reports_end() {
-        let source = "SiiNunit { u : i { s: \"open }";
+        let source = include_str!("../testdata/unclosed_quote.sii");
         let error = error(source);
         assert_eq!(error.offset(), source.len());
         assert_eq!(
@@ -374,7 +356,7 @@ mod tests {
 
     #[test]
     fn trailing_garbage_is_rejected() {
-        let source = "SiiNunit { u : i { } } extra";
+        let source = include_str!("../testdata/trailing_garbage.sii");
         let error = error(source);
         let offset = source.find("extra").unwrap();
         assert_eq!(error.offset(), offset);

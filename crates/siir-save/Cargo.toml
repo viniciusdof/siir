@@ -1,0 +1,14 @@
+[package]
+name = "siir-save"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.99.1"
+description = "Typed save model and edits for ETS2 and ATS"
+repository = "https://codeberg.org/viniciusdof/siir"
+publish = false
+
+[dependencies]
+siir = { path = "../siir", version = "0.1.0" }
+
+[lints]
+workspace = true

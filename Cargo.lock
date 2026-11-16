@@ -138,6 +138,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "siir-save"
+version = "0.1.0"
+dependencies = [
+ "siir",
+]
+
+[[package]]
 name = "simd-adler32"
 version = "0.3.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
