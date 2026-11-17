@@ -26,44 +26,44 @@ pub enum Error {
         /// Unit id that is absent.
         id: String,
     },
-    /// The truck has no badge accessory.
+    /// The vehicle has no badge accessory.
     NoBadge {
-        /// Truck unit id.
+        /// Vehicle unit id.
         id: String,
     },
-    /// The truck has no engine accessory.
+    /// The vehicle has no engine accessory.
     NoEngine {
-        /// Truck unit id.
+        /// Vehicle unit id.
         id: String,
     },
-    /// The truck has no transmission accessory.
+    /// The vehicle has no transmission accessory.
     NoTransmission {
-        /// Truck unit id.
+        /// Vehicle unit id.
         id: String,
     },
-    /// The truck has no cabin accessory.
+    /// The vehicle has no cabin accessory.
     NoCabin {
-        /// Truck unit id.
+        /// Vehicle unit id.
         id: String,
     },
-    /// The truck has no chassis accessory.
+    /// The vehicle has no chassis accessory.
     NoChassis {
-        /// Truck unit id.
+        /// Vehicle unit id.
         id: String,
     },
-    /// The truck has no paint job accessory.
+    /// The vehicle has no paint job accessory.
     NoPaint {
-        /// Truck unit id.
+        /// Vehicle unit id.
         id: String,
     },
-    /// The truck does not reference the accessory.
+    /// The vehicle does not reference the accessory.
     NoAccessory {
-        /// Truck unit id.
+        /// Vehicle unit id.
         id: String,
         /// Accessory unit id.
         accessory: String,
     },
-    /// A required truck part cannot be removed.
+    /// A required vehicle part cannot be removed.
     CannotRemovePart {
         /// Part name, for example `engine`.
         part: &'static str,
@@ -78,18 +78,18 @@ pub enum Error {
         /// Unit class found in the block.
         class: String,
     },
-    /// An imported block is missing a required truck part.
+    /// An imported block is missing a required vehicle part.
     MissingAccessoryPart {
         /// Part name, for example `engine`.
         part: &'static str,
     },
-    /// The truck is not assigned to any garage.
+    /// The vehicle is not assigned to any garage.
     NoGarage {
-        /// Truck unit id.
+        /// Vehicle unit id.
         id: String,
     },
     /// The player has no assigned vehicle slot.
-    NoCurrentTruck,
+    NoCurrentVehicle,
     /// The player has no trailer in the assigned vehicle slot.
     NoCurrentTrailer,
     /// The player has no current job.
@@ -192,7 +192,7 @@ impl fmt::Display for Error {
                 write!(f, "accessory set is missing the {part}")
             }
             Self::NoGarage { id } => write!(f, "no garage holds {id}"),
-            Self::NoCurrentTruck => write!(f, "player has no current truck"),
+            Self::NoCurrentVehicle => write!(f, "player has no assigned vehicle slot"),
             Self::NoCurrentTrailer => write!(f, "player has no current trailer"),
             Self::NoCurrentJob => write!(f, "player has no current job"),
             Self::InvalidFuel { level } => {

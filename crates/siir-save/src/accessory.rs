@@ -15,7 +15,7 @@ const PARTS: [&str; 6] = [
     "paint",
 ];
 
-/// One of the six parts a truck accessory set must contain.
+/// One of the six parts a vehicle accessory set must contain.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Part {
     Data,
@@ -43,9 +43,9 @@ impl Part {
     }
 }
 
-/// Exports one truck's accessory units as a `SiiNunit` text block.
+/// Exports one vehicle's accessory units as a `SiiNunit` text block.
 pub fn export_accessories(document: &Document<'_>, id: &str) -> Result<String, Error> {
-    let accessories = array(truck(document, id)?, names::ACCESSORIES)?;
+    let accessories = array(vehicle(document, id)?, names::ACCESSORIES)?;
     let mut out = String::from("SiiNunit\n{\n");
     for accessory in accessories {
         let unit = document
@@ -60,9 +60,9 @@ pub fn export_accessories(document: &Document<'_>, id: &str) -> Result<String, E
     Ok(out)
 }
 
-/// Replaces one truck's accessory list with the units in `block`.
+/// Replaces one vehicle's accessory list with the units in `block`.
 pub fn import_accessories(document: &mut Document<'_>, id: &str, block: &str) -> Result<(), Error> {
-    let old: Vec<String> = array(truck(document, id)?, names::ACCESSORIES)?
+    let old: Vec<String> = array(vehicle(document, id)?, names::ACCESSORIES)?
         .into_iter()
         .map(str::to_owned)
         .collect();
@@ -169,7 +169,7 @@ pub(crate) fn write_accessories(
     Ok(())
 }
 
-fn truck<'a, 'd>(document: &'a Document<'d>, id: &str) -> Result<&'a Unit<'d>, Error> {
+fn vehicle<'a, 'd>(document: &'a Document<'d>, id: &str) -> Result<&'a Unit<'d>, Error> {
     document
         .units_of_class(names::VEHICLE)
         .find(|unit| unit.id() == id)
@@ -202,7 +202,7 @@ fn indexed_name(name: &str, index: Index) -> String {
 mod tests {
     use super::*;
 
-    const SOURCE: &str = include_str!("../testdata/truck.sii");
+    const SOURCE: &str = include_str!("../testdata/vehicle.sii");
 
     #[test]
     fn exports_and_imports_a_full_set() {

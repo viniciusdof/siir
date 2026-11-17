@@ -16,89 +16,89 @@ mod plate;
 mod player;
 mod profile;
 mod trailer;
-mod truck;
 mod used;
+mod vehicle;
 
 /// A save edit applied through [`apply`].
 pub enum Command {
-    /// Repairs every wear attribute on one truck.
-    RepairTruck(String),
-    /// Repairs every truck the player owns.
-    RepairAllTrucks,
-    /// Sets one truck's fuel level, from 0 to 1.
+    /// Repairs every wear attribute on one vehicle.
+    RepairVehicle(String),
+    /// Repairs every vehicle the player owns.
+    RepairAllVehicles,
+    /// Sets one vehicle's fuel level, from 0 to 1.
     SetFuel {
-        /// Truck unit id.
+        /// Vehicle unit id.
         id: String,
         /// Fuel level, from 0 to 1.
         level: f32,
     },
-    /// Fills every truck the player owns.
-    FillAllTrucks,
-    /// Fills one truck.
+    /// Fills every vehicle the player owns.
+    FillAllVehicles,
+    /// Fills one vehicle.
     SetInfiniteFuel(String),
-    /// Sets one truck's odometer, in kilometers.
+    /// Sets one vehicle's odometer, in kilometers.
     SetOdometer {
-        /// Truck unit id.
+        /// Vehicle unit id.
         id: String,
         /// Odometer in kilometers.
         km: u64,
     },
-    /// Sets one truck's license plate to raw text.
+    /// Sets one vehicle's license plate to raw text.
     SetLicensePlate {
-        /// Truck unit id.
+        /// Vehicle unit id.
         id: String,
         /// Raw plate text.
         plate: String,
     },
-    /// Removes every badge accessory from one truck.
+    /// Removes every badge accessory from one vehicle.
     RemoveBadge(String),
-    /// Sets one truck's engine `data_path`.
+    /// Sets one vehicle's engine `data_path`.
     SetEngine {
-        /// Truck unit id.
+        /// Vehicle unit id.
         id: String,
         /// Engine `data_path` from the catalog.
         path: String,
     },
-    /// Sets one truck's transmission `data_path`.
+    /// Sets one vehicle's transmission `data_path`.
     SetTransmission {
-        /// Truck unit id.
+        /// Vehicle unit id.
         id: String,
         /// Transmission `data_path` from the catalog.
         path: String,
     },
-    /// Sets one truck's cabin `data_path`.
+    /// Sets one vehicle's cabin `data_path`.
     SetCabin {
-        /// Truck unit id.
+        /// Vehicle unit id.
         id: String,
         /// Cabin `data_path` from the catalog.
         path: String,
     },
-    /// Sets one truck's chassis `data_path`.
+    /// Sets one vehicle's chassis `data_path`.
     SetChassis {
-        /// Truck unit id.
+        /// Vehicle unit id.
         id: String,
         /// Chassis `data_path` from the catalog.
         path: String,
     },
-    /// Sets one truck's paint job `data_path`.
+    /// Sets one vehicle's paint job `data_path`.
     SetPaint {
-        /// Truck unit id.
+        /// Vehicle unit id.
         id: String,
         /// Paint job `data_path` from the catalog.
         path: String,
     },
     /// Sets one accessory's `data_path`.
     SetAccessory {
-        /// Truck unit id.
+        /// Vehicle unit id.
         id: String,
         /// Accessory unit id.
         accessory: String,
         /// Accessory `data_path`.
         path: String,
     },
-    /// Removes one accessory from a truck's accessory list.
+    /// Removes one accessory from a vehicle's accessory list.
     RemoveAccessory {
-        /// Truck unit id.
+        /// Vehicle unit id.
         id: String,
         /// Accessory unit id.
         accessory: String,
@@ -110,10 +110,10 @@ pub enum Command {
         /// Asking price.
         price: i64,
     },
-    /// Points the player's assigned vehicle slot at one truck.
-    SetCurrentTruck(String),
-    /// Moves the player's headquarters to the garage city holding one truck.
-    SetHqTruck(String),
+    /// Points the player's assigned vehicle slot at one vehicle.
+    SetCurrentVehicle(String),
+    /// Moves the player's headquarters to the garage city holding one vehicle.
+    SetHqVehicle(String),
     /// Repairs every wear attribute on one trailer and its slaves.
     RepairTrailer(String),
     /// Repairs every trailer the player owns.
@@ -222,9 +222,9 @@ pub enum Command {
     ClearOffences,
     /// Sets the cargo a player's current job hauls.
     SetCurrentJobCargo(String),
-    /// Sets a truck's or trailer's license plate country.
+    /// Sets a vehicle's or trailer's license plate country.
     SetLicensePlateCountry {
-        /// Truck or trailer unit id.
+        /// Vehicle or trailer unit id.
         id: String,
         /// Country name after `|`.
         country: String,
@@ -243,30 +243,30 @@ pub enum Command {
 /// Applies one command to a save document.
 pub fn apply(document: &mut Document<'_>, _game: Game, command: Command) -> Result<(), Error> {
     match command {
-        Command::RepairTruck(id) => truck::repair_truck(document, &id),
-        Command::RepairAllTrucks => truck::repair_all_trucks(document),
-        Command::SetFuel { id, level } => truck::set_fuel(document, &id, level),
-        Command::FillAllTrucks => truck::fill_all_trucks(document),
-        Command::SetInfiniteFuel(id) => truck::set_infinite_fuel(document, &id),
-        Command::SetOdometer { id, km } => truck::set_odometer(document, &id, km),
-        Command::SetLicensePlate { id, plate } => truck::set_license_plate(document, &id, plate),
-        Command::RemoveBadge(id) => truck::remove_badge(document, &id),
-        Command::SetEngine { id, path } => truck::set_engine(document, &id, &path),
-        Command::SetTransmission { id, path } => truck::set_transmission(document, &id, &path),
-        Command::SetCabin { id, path } => truck::set_cabin(document, &id, &path),
-        Command::SetChassis { id, path } => truck::set_chassis(document, &id, &path),
-        Command::SetPaint { id, path } => truck::set_paint(document, &id, &path),
+        Command::RepairVehicle(id) => vehicle::repair_vehicle(document, &id),
+        Command::RepairAllVehicles => vehicle::repair_all_vehicles(document),
+        Command::SetFuel { id, level } => vehicle::set_fuel(document, &id, level),
+        Command::FillAllVehicles => vehicle::fill_all_vehicles(document),
+        Command::SetInfiniteFuel(id) => vehicle::set_infinite_fuel(document, &id),
+        Command::SetOdometer { id, km } => vehicle::set_odometer(document, &id, km),
+        Command::SetLicensePlate { id, plate } => vehicle::set_license_plate(document, &id, plate),
+        Command::RemoveBadge(id) => vehicle::remove_badge(document, &id),
+        Command::SetEngine { id, path } => vehicle::set_engine(document, &id, &path),
+        Command::SetTransmission { id, path } => vehicle::set_transmission(document, &id, &path),
+        Command::SetCabin { id, path } => vehicle::set_cabin(document, &id, &path),
+        Command::SetChassis { id, path } => vehicle::set_chassis(document, &id, &path),
+        Command::SetPaint { id, path } => vehicle::set_paint(document, &id, &path),
         Command::SetAccessory {
             id,
             accessory,
             path,
-        } => truck::set_accessory(document, &id, &accessory, &path),
+        } => vehicle::set_accessory(document, &id, &accessory, &path),
         Command::RemoveAccessory { id, accessory } => {
-            truck::remove_accessory(document, &id, &accessory)
+            vehicle::remove_accessory(document, &id, &accessory)
         }
         Command::SetUsedTruckPrice { id, price } => used::set_price(document, &id, price),
-        Command::SetCurrentTruck(id) => truck::set_current_truck(document, &id),
-        Command::SetHqTruck(id) => truck::set_hq_truck(document, &id),
+        Command::SetCurrentVehicle(id) => vehicle::set_current_vehicle(document, &id),
+        Command::SetHqVehicle(id) => vehicle::set_hq_vehicle(document, &id),
         Command::RepairTrailer(id) => trailer::repair_trailer(document, &id),
         Command::RepairAllTrailers => trailer::repair_all_trailers(document),
         Command::SetCargoMass { id, mass } => trailer::set_cargo_mass(document, &id, mass),

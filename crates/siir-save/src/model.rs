@@ -25,8 +25,8 @@ pub struct Save<'a> {
     pub unlocked_dealers: Vec<&'a str>,
     /// The profile's player, when the save has one.
     pub player: Option<Player<'a>>,
-    /// Every `vehicle` unit, including AI and market trucks.
-    pub trucks: Vec<Truck<'a>>,
+    /// Every `vehicle` unit, including buses, cars, and AI vehicles.
+    pub vehicles: Vec<Vehicle<'a>>,
     /// Every `trailer` unit.
     pub trailers: Vec<Trailer<'a>>,
     /// Every garage.
@@ -50,15 +50,17 @@ pub struct Save<'a> {
 }
 
 impl<'a> Save<'a> {
-    /// A truck by its vehicle unit id.
-    pub fn truck(&self, id: &str) -> Option<&Truck<'a>> {
-        self.trucks.iter().find(|truck| truck.id == id)
+    /// A vehicle by its unit id.
+    pub fn vehicle(&self, id: &str) -> Option<&Vehicle<'a>> {
+        self.vehicles.iter().find(|vehicle| vehicle.id == id)
     }
 
-    /// The truck in the player's assigned vehicle slot.
-    pub fn current_truck(&self) -> Option<&Truck<'a>> {
+    /// The vehicle in the player's assigned slot.
+    pub fn current_vehicle(&self) -> Option<&Vehicle<'a>> {
         let slot = self.player.as_ref()?.assigned_vehicles?;
-        self.trucks.iter().find(|truck| truck.slot == Some(slot))
+        self.vehicles
+            .iter()
+            .find(|vehicle| vehicle.slot == Some(slot))
     }
 
     /// A trailer by its unit id.
@@ -68,11 +70,11 @@ impl<'a> Save<'a> {
 
     /// The trailer in the player's assigned vehicle slot.
     pub fn current_trailer(&self) -> Option<&Trailer<'a>> {
-        self.trailer(self.current_truck()?.trailer?)
+        self.trailer(self.current_vehicle()?.trailer?)
     }
 }
 
-/// One accessory referenced by a truck.
+/// One accessory referenced by a vehicle.
 pub struct Accessory<'a> {
     /// Accessory unit id.
     pub id: &'a str,
@@ -85,14 +87,14 @@ pub struct Accessory<'a> {
 }
 
 /// One `vehicle` unit.
-pub struct Truck<'a> {
+pub struct Vehicle<'a> {
     /// Unit id.
     pub id: &'a str,
-    /// Owning `player_vehicles` slot, when one references this truck.
+    /// Owning `player_vehicles` slot, when one references this vehicle.
     pub slot: Option<&'a str>,
     /// Trailer assigned to the owning slot, when there is one.
     pub trailer: Option<&'a str>,
-    /// Accessories referenced by this truck.
+    /// Accessories referenced by this vehicle.
     pub accessories: Vec<Accessory<'a>>,
     /// Model folder under `/def/vehicle/truck/`, for example `renault.etech_t`.
     pub model: Option<&'a str>,
@@ -279,7 +281,7 @@ pub struct Player<'a> {
     pub hq_city: &'a str,
     /// Owned `player_vehicles` slot ids.
     pub my_vehicles: Vec<&'a str>,
-    /// Owned truck vehicle unit ids.
+    /// Owned `vehicle` unit ids, from `player.trucks`.
     pub trucks: Vec<&'a str>,
     /// Owned trailer unit ids.
     pub trailers: Vec<&'a str>,

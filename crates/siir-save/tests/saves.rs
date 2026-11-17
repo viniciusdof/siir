@@ -39,7 +39,7 @@ struct Case {
     money: i64,
     hq_city: &'static str,
     visited_city: &'static str,
-    trucks: usize,
+    vehicles: usize,
     garages: usize,
     drivers: usize,
     companies: usize,
@@ -71,7 +71,7 @@ const CASES: [Case; 2] = [
         money: 2000,
         hq_city: "prague",
         visited_city: "prague",
-        trucks: 27,
+        vehicles: 27,
         garages: 237,
         drivers: 354,
         companies: 1886,
@@ -101,7 +101,7 @@ const CASES: [Case; 2] = [
         money: 1500,
         hq_city: "seattle",
         visited_city: "seattle",
-        trucks: 13,
+        vehicles: 13,
         garages: 59,
         drivers: 354,
         companies: 885,
@@ -152,7 +152,7 @@ fn assert_case(case: &Case) {
     assert!(player.assigned_vehicles.is_some(), "{name}");
     assert!(player.current_job.is_some(), "{name}");
 
-    assert_eq!(save.trucks.len(), case.trucks, "{name}");
+    assert_eq!(save.vehicles.len(), case.vehicles, "{name}");
     assert_eq!(save.trailers.len(), 1, "{name}");
     assert_eq!(save.garages.len(), case.garages, "{name}");
     assert_eq!(
@@ -175,7 +175,7 @@ fn assert_case(case: &Case) {
     assert_eq!(save.used_trucks[0].price, case.price, "{name}");
     assert!(save.offence.is_some(), "{name}");
 
-    let truck = save.current_truck().unwrap();
+    let truck = save.current_vehicle().unwrap();
     assert_eq!(truck.id, case.truck_id, "{name}");
     assert_eq!(truck.trailer, Some(case.trailer_id), "{name}");
     assert_eq!(truck.model, Some(case.model), "{name}");
@@ -184,7 +184,7 @@ fn assert_case(case: &Case) {
     assert_eq!(truck.engine_wear, case.engine_wear, "{name}");
     assert_eq!(truck.fuel_relative, case.fuel, "{name}");
     assert!(truck.placement.unwrap().starts_with('('), "{name}");
-    assert!(save.truck(truck.id).is_some(), "{name}");
+    assert!(save.vehicle(truck.id).is_some(), "{name}");
 
     let trailer = save.current_trailer().unwrap();
     assert_eq!(trailer.id, case.trailer_id, "{name}");
@@ -217,17 +217,25 @@ fn ets2_commands_change_only_expected_lines() {
     let file = siir::open(&bytes).unwrap();
     let mut document = file.document().unwrap();
     let save = read(&document, Game::Ets2).unwrap();
-    let id = save.current_truck().unwrap().id.to_owned();
+    let id = save.current_vehicle().unwrap().id.to_owned();
     let target = save.used_trucks[0].truck.to_owned();
 
     let old = written(&file, &document);
-    apply(&mut document, Game::Ets2, Command::RepairTruck(id.clone())).unwrap();
+    apply(
+        &mut document,
+        Game::Ets2,
+        Command::RepairVehicle(id.clone()),
+    )
+    .unwrap();
     let new = written(&file, &document);
     let changed = changed_lines(&old, &new);
-    assert_eq!(changed.len(), 4);
+    assert_eq!(changed.len(), 8);
     for (old, new) in changed {
         let name = old.trim_start().split(':').next().unwrap();
-        assert!(name.ends_with("_wear") || name.ends_with("_unfixable"));
+        assert!(
+            name.split('[').next().unwrap().ends_with("_wear")
+                || name.split('[').next().unwrap().ends_with("_unfixable")
+        );
         assert!(new.trim_start().ends_with(": 0\n"));
     }
     let unit = document.units().find(|unit| unit.id() == id).unwrap();
@@ -235,11 +243,19 @@ fn ets2_commands_change_only_expected_lines() {
         "engine_wear",
         "transmission_wear",
         "cabin_wear",
+        "chassis_wear",
         "engine_wear_unfixable",
         "transmission_wear_unfixable",
         "cabin_wear_unfixable",
+        "chassis_wear_unfixable",
     ] {
         assert_eq!(unit.get(name), Some("0"), "{name}");
+    }
+    for name in ["wheels_wear", "wheels_wear_unfixable"] {
+        for nth in 0..2 {
+            let name = format!("{name}[{nth}]");
+            assert_eq!(unit.get(&name), Some("0"), "{name}");
+        }
     }
 
     let old = new;
@@ -297,7 +313,7 @@ fn ets2_commands_change_only_expected_lines() {
     apply(
         &mut document,
         Game::Ets2,
-        Command::SetCurrentTruck(target.clone()),
+        Command::SetCurrentVehicle(target.clone()),
     )
     .unwrap();
     let new = written(&file, &document);
@@ -306,14 +322,14 @@ fn ets2_commands_change_only_expected_lines() {
     assert_eq!(changed[0].1.trim_start(), format!("vehicle: {target}\n"));
 
     let save = read(&document, Game::Ets2).unwrap();
-    assert_eq!(save.current_truck().unwrap().id, target);
+    assert_eq!(save.current_vehicle().unwrap().id, target);
 
     let reopened = siir::open(new.as_bytes()).unwrap();
     assert_eq!(reopened.document().unwrap().to_text(), new);
 }
 
 #[test]
-fn bulk_commands_reach_the_assigned_truck_and_trailer() {
+fn bulk_commands_reach_the_assigned_vehicle_and_trailer() {
     for (path, game) in [
         ("ets2/saves/1/game.sii", Game::Ets2),
         ("ats/saves/1/game.sii", Game::Ats),
@@ -324,7 +340,7 @@ fn bulk_commands_reach_the_assigned_truck_and_trailer() {
         let (truck, trailer) = {
             let save = read(&document, game).unwrap();
             (
-                save.current_truck().unwrap().id.to_owned(),
+                save.current_vehicle().unwrap().id.to_owned(),
                 save.current_trailer().unwrap().id.to_owned(),
             )
         };
@@ -339,7 +355,7 @@ fn bulk_commands_reach_the_assigned_truck_and_trailer() {
         )
         .unwrap();
         let old = written(&file, &document);
-        apply(&mut document, game, Command::FillAllTrucks).unwrap();
+        apply(&mut document, game, Command::FillAllVehicles).unwrap();
         let new = written(&file, &document);
         let changed = changed_lines(&old, &new);
         assert_eq!(changed.len(), 1, "{path}");
@@ -362,7 +378,7 @@ fn bulk_commands_reach_the_assigned_truck_and_trailer() {
             .unwrap()
             .set("engine_wear", Value::Int(1))
             .unwrap();
-        apply(&mut document, game, Command::RepairAllTrucks).unwrap();
+        apply(&mut document, game, Command::RepairAllVehicles).unwrap();
         assert_eq!(
             document.get(&truck).unwrap().get("engine_wear"),
             Some("0"),
@@ -408,7 +424,7 @@ fn ats_commands_change_only_expected_lines() {
     let mut document = file.document().unwrap();
     let id = read(&document, Game::Ats)
         .unwrap()
-        .current_truck()
+        .current_vehicle()
         .unwrap()
         .id
         .to_owned();
@@ -466,7 +482,7 @@ fn ets2_engine_and_transmission_survive_reopen() {
     let mut document = file.document().unwrap();
     let id = read(&document, Game::Ets2)
         .unwrap()
-        .current_truck()
+        .current_vehicle()
         .unwrap()
         .id
         .to_owned();
@@ -492,7 +508,7 @@ fn ets2_engine_and_transmission_survive_reopen() {
     assert_eq!(
         read(&document, Game::Ets2)
             .unwrap()
-            .current_truck()
+            .current_vehicle()
             .unwrap()
             .engine,
         Some(engine)
@@ -521,7 +537,7 @@ fn ets2_engine_and_transmission_survive_reopen() {
     let reopened = siir::open(&out).unwrap();
     let document = reopened.document().unwrap();
     let save = read(&document, Game::Ets2).unwrap();
-    let truck = save.current_truck().unwrap();
+    let truck = save.current_vehicle().unwrap();
     assert_eq!(truck.engine, Some(engine));
     assert_eq!(truck.transmission, Some(transmission));
 }
@@ -533,7 +549,7 @@ fn ets2_cabin_and_chassis_survive_reopen() {
     let mut document = file.document().unwrap();
     let id = read(&document, Game::Ets2)
         .unwrap()
-        .current_truck()
+        .current_vehicle()
         .unwrap()
         .id
         .to_owned();
@@ -580,7 +596,7 @@ fn ets2_cabin_and_chassis_survive_reopen() {
     let reopened = siir::open(&out).unwrap();
     let document = reopened.document().unwrap();
     let save = read(&document, Game::Ets2).unwrap();
-    let truck = save.current_truck().unwrap();
+    let truck = save.current_vehicle().unwrap();
     assert_eq!(truck.cabin, Some(cabin));
     assert_eq!(truck.chassis, Some(chassis));
 }
@@ -592,7 +608,7 @@ fn ets2_paint_survives_reopen() {
     let mut document = file.document().unwrap();
     let id = read(&document, Game::Ets2)
         .unwrap()
-        .current_truck()
+        .current_vehicle()
         .unwrap()
         .id
         .to_owned();
@@ -620,7 +636,7 @@ fn ets2_paint_survives_reopen() {
     let reopened = siir::open(&out).unwrap();
     let document = reopened.document().unwrap();
     let save = read(&document, Game::Ets2).unwrap();
-    assert_eq!(save.current_truck().unwrap().paint_job, Some(paint));
+    assert_eq!(save.current_vehicle().unwrap().paint_job, Some(paint));
 }
 
 #[test]
@@ -630,7 +646,7 @@ fn ets2_accessory_path_survives_reopen() {
     let mut document = file.document().unwrap();
     let (id, accessory_id) = {
         let save = read(&document, Game::Ets2).unwrap();
-        let truck = save.current_truck().unwrap();
+        let truck = save.current_vehicle().unwrap();
         let accessory = truck
             .accessories
             .iter()
@@ -663,7 +679,7 @@ fn ets2_accessory_path_survives_reopen() {
     let reopened = siir::open(&out).unwrap();
     let document = reopened.document().unwrap();
     let save = read(&document, Game::Ets2).unwrap();
-    let truck = save.current_truck().unwrap();
+    let truck = save.current_vehicle().unwrap();
     let accessory = truck
         .accessories
         .iter()
@@ -678,9 +694,9 @@ fn accessories_export_and_import(path: &str, game: Game) {
     let mut document = file.document().unwrap();
     let (source_id, source_count, target_id) = {
         let save = read(&document, game).unwrap();
-        let source = save.current_truck().unwrap();
+        let source = save.current_vehicle().unwrap();
         let target = save
-            .trucks
+            .vehicles
             .iter()
             .find(|truck| truck.id != source.id)
             .unwrap();
@@ -695,7 +711,7 @@ fn accessories_export_and_import(path: &str, game: Game) {
     import_accessories(&mut document, &target_id, &block).unwrap();
 
     let save = read(&document, game).unwrap();
-    let target = save.truck(&target_id).unwrap();
+    let target = save.vehicle(&target_id).unwrap();
     assert_eq!(target.accessories.len(), source_count);
     assert!(
         target
@@ -709,7 +725,7 @@ fn accessories_export_and_import(path: &str, game: Game) {
     let document = reopened.document().unwrap();
     let save = read(&document, game).unwrap();
     assert_eq!(
-        save.truck(&target_id).unwrap().accessories.len(),
+        save.vehicle(&target_id).unwrap().accessories.len(),
         source_count
     );
     assert!(
@@ -720,12 +736,12 @@ fn accessories_export_and_import(path: &str, game: Game) {
 }
 
 #[test]
-fn ets2_accessories_export_and_import_between_trucks() {
+fn ets2_accessories_export_and_import_between_vehicles() {
     accessories_export_and_import("ets2/saves/1/game.sii", Game::Ets2);
 }
 
 #[test]
-fn ats_accessories_export_and_import_between_trucks() {
+fn ats_accessories_export_and_import_between_vehicles() {
     accessories_export_and_import("ats/saves/1/game.sii", Game::Ats);
 }
 
@@ -889,7 +905,7 @@ fn ets2_remove_badge_changes_only_the_accessory_list() {
     let before = written(&file, &document);
     let id = read(&document, Game::Ets2)
         .unwrap()
-        .current_truck()
+        .current_vehicle()
         .unwrap()
         .id
         .to_owned();
@@ -952,7 +968,7 @@ fn ets2_plate_country_changes_only_the_plate() {
     let mut document = file.document().unwrap();
     let id = read(&document, Game::Ets2)
         .unwrap()
-        .current_truck()
+        .current_vehicle()
         .unwrap()
         .id
         .to_owned();
@@ -977,7 +993,7 @@ fn ets2_plate_country_changes_only_the_plate() {
     let reopened = siir::open(&out).unwrap();
     let document = reopened.document().unwrap();
     let save = read(&document, Game::Ets2).unwrap();
-    let plate = LicensePlate::parse(save.current_truck().unwrap().license_plate);
+    let plate = LicensePlate::parse(save.current_vehicle().unwrap().license_plate);
     assert_eq!(plate.country, Some("poland"));
     assert!(!plate.text.is_empty());
 }

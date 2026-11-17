@@ -1,4 +1,4 @@
-//! Truck commands.
+//! Vehicle commands: wear, fuel, odometer, plate, and parts.
 
 use siir::{Document, Unit, Value};
 
@@ -18,14 +18,17 @@ const WEAR: [&str; 6] = [
     "transmission_wear_unfixable",
     "cabin_wear_unfixable",
 ];
+/// Wear a mod's vehicle may omit, so it is reset only when the game wrote it.
+const OPTIONAL_WEAR: [&str; 2] = [names::CHASSIS_WEAR, names::CHASSIS_WEAR_UNFIXABLE];
+const WHEELS: [&str; 2] = ["wheels_wear", "wheels_wear_unfixable"];
 
-pub(super) fn repair_truck(document: &mut Document<'_>, id: &str) -> Result<(), Error> {
-    repair(truck(document, id)?)
+pub(super) fn repair_vehicle(document: &mut Document<'_>, id: &str) -> Result<(), Error> {
+    repair(vehicle(document, id)?)
 }
 
-pub(super) fn repair_all_trucks(document: &mut Document<'_>) -> Result<(), Error> {
-    for id in owned_trucks(document)? {
-        if let Ok(unit) = truck(document, &id) {
+pub(super) fn repair_all_vehicles(document: &mut Document<'_>) -> Result<(), Error> {
+    for id in owned_vehicles(document)? {
+        if let Ok(unit) = vehicle(document, &id) {
             repair(unit)?;
         }
     }
@@ -36,13 +39,13 @@ pub(super) fn set_fuel(document: &mut Document<'_>, id: &str, level: f32) -> Res
     if !(0.0..=1.0).contains(&level) {
         return Err(Error::InvalidFuel { level });
     }
-    truck(document, id)?.set(FUEL, Value::Float(level))?;
+    vehicle(document, id)?.set(FUEL, Value::Float(level))?;
     Ok(())
 }
 
-pub(super) fn fill_all_trucks(document: &mut Document<'_>) -> Result<(), Error> {
-    for id in owned_trucks(document)? {
-        if let Ok(unit) = truck(document, &id) {
+pub(super) fn fill_all_vehicles(document: &mut Document<'_>) -> Result<(), Error> {
+    for id in owned_vehicles(document)? {
+        if let Ok(unit) = vehicle(document, &id) {
             fill(unit)?;
         }
     }
@@ -50,11 +53,11 @@ pub(super) fn fill_all_trucks(document: &mut Document<'_>) -> Result<(), Error> 
 }
 
 pub(super) fn set_infinite_fuel(document: &mut Document<'_>, id: &str) -> Result<(), Error> {
-    fill(truck(document, id)?)
+    fill(vehicle(document, id)?)
 }
 
 pub(super) fn set_odometer(document: &mut Document<'_>, id: &str, km: u64) -> Result<(), Error> {
-    let unit = truck(document, id)?;
+    let unit = vehicle(document, id)?;
     for name in ODOMETER {
         unit.set(name, Value::UInt(km))?;
     }
@@ -66,7 +69,7 @@ pub(super) fn set_license_plate(
     id: &str,
     plate: String,
 ) -> Result<(), Error> {
-    truck(document, id)?.set("license_plate", Value::String(plate))?;
+    vehicle(document, id)?.set("license_plate", Value::String(plate))?;
     Ok(())
 }
 
@@ -76,8 +79,24 @@ fn repair(unit: &mut Unit<'_>) -> Result<(), Error> {
             return Err(Error::missing(unit.class(), name));
         }
     }
+    let mut wheels = Vec::new();
+    for name in WHEELS {
+        if unit.get(name).is_some() {
+            wheels.push((name, length(unit, name)?));
+        }
+    }
     for name in WEAR {
         unit.set(name, Value::Int(0))?;
+    }
+    for name in OPTIONAL_WEAR {
+        if unit.get(name).is_some() {
+            unit.set(name, Value::Int(0))?;
+        }
+    }
+    for (name, total) in wheels {
+        for nth in 0..total {
+            unit.set(&indexed(name, nth), Value::Int(0))?;
+        }
     }
     Ok(())
 }
@@ -87,34 +106,34 @@ fn fill(unit: &mut Unit<'_>) -> Result<(), Error> {
     Ok(())
 }
 
-fn truck<'a, 'd>(document: &'a mut Document<'d>, id: &str) -> Result<&'a mut Unit<'d>, Error> {
+fn vehicle<'a, 'd>(document: &'a mut Document<'d>, id: &str) -> Result<&'a mut Unit<'d>, Error> {
     match document.get(id) {
         Some(unit) if unit.class() == names::VEHICLE => Ok(unit),
         _ => Err(Error::MissingUnit { id: id.to_owned() }),
     }
 }
 
-fn owned_trucks(document: &Document<'_>) -> Result<Vec<String>, Error> {
+fn owned_vehicles(document: &Document<'_>) -> Result<Vec<String>, Error> {
     let Some(player) = document.units_of_class(names::PLAYER).next() else {
         return Ok(Vec::new());
     };
-    let mut trucks = Vec::new();
+    let mut vehicles = Vec::new();
     if player.get(names::TRUCKS).is_some() {
         let count = length(player, names::TRUCKS)?;
         for nth in 0..count {
             if let Some(id) = player.get(&indexed(names::TRUCKS, nth)) {
-                trucks.push(id.to_owned());
+                vehicles.push(id.to_owned());
             }
         }
     }
     for slot in document.units_of_class(names::PLAYER_VEHICLES) {
         if let Some(vehicle) = reference(slot, names::VEHICLE) {
-            trucks.push(vehicle.to_owned());
+            vehicles.push(vehicle.to_owned());
         }
     }
-    trucks.sort();
-    trucks.dedup();
-    Ok(trucks)
+    vehicles.sort();
+    vehicles.dedup();
+    Ok(vehicles)
 }
 
 pub(super) fn remove_badge(document: &mut Document<'_>, id: &str) -> Result<(), Error> {
@@ -144,7 +163,7 @@ pub(super) fn remove_badge(document: &mut Document<'_>, id: &str) -> Result<(), 
         (total, kept)
     };
 
-    let unit = truck(document, id)?;
+    let unit = vehicle(document, id)?;
     write_accessories(unit, &kept, total)
 }
 
@@ -265,7 +284,7 @@ pub(super) fn remove_accessory(
         return Err(Error::CannotRemovePart { part: part.name() });
     }
 
-    let unit = truck(document, id)?;
+    let unit = vehicle(document, id)?;
     write_accessories(unit, &kept, total)
 }
 
@@ -303,7 +322,7 @@ fn set_part(document: &mut Document<'_>, id: &str, part: Part, path: &str) -> Re
     Ok(found)
 }
 
-pub(super) fn set_current_truck(document: &mut Document<'_>, id: &str) -> Result<(), Error> {
+pub(super) fn set_current_vehicle(document: &mut Document<'_>, id: &str) -> Result<(), Error> {
     if !document
         .units_of_class(names::VEHICLE)
         .any(|unit| unit.id() == id)
@@ -315,7 +334,7 @@ pub(super) fn set_current_truck(document: &mut Document<'_>, id: &str) -> Result
         .next()
         .and_then(|player| reference(player, names::ASSIGNED_VEHICLES))
         .map(str::to_owned)
-        .ok_or(Error::NoCurrentTruck)?;
+        .ok_or(Error::NoCurrentVehicle)?;
     let unit = document
         .get(&slot)
         .filter(|unit| unit.class() == names::PLAYER_VEHICLES)
@@ -324,7 +343,7 @@ pub(super) fn set_current_truck(document: &mut Document<'_>, id: &str) -> Result
     Ok(())
 }
 
-pub(super) fn set_hq_truck(document: &mut Document<'_>, id: &str) -> Result<(), Error> {
+pub(super) fn set_hq_vehicle(document: &mut Document<'_>, id: &str) -> Result<(), Error> {
     let city = document
         .units_of_class(names::GARAGE)
         .find_map(|garage| {
@@ -344,7 +363,7 @@ pub(super) fn set_hq_truck(document: &mut Document<'_>, id: &str) -> Result<(), 
         .units_of_class(names::PLAYER)
         .next()
         .map(|unit| unit.id().to_owned())
-        .ok_or(Error::NoCurrentTruck)?;
+        .ok_or(Error::NoCurrentVehicle)?;
     document
         .get(&player)
         .ok_or(Error::MissingUnit { id: player })?
@@ -358,7 +377,7 @@ mod tests {
     use crate::Game;
     use crate::command::{Command, apply};
 
-    const SOURCE: &str = include_str!("../../testdata/truck.sii");
+    const SOURCE: &str = include_str!("../../testdata/vehicle.sii");
 
     fn source() -> Document<'static> {
         Document::parse(SOURCE).unwrap()
@@ -369,23 +388,36 @@ mod tests {
     }
 
     #[test]
-    fn repairs_one_truck() {
+    fn repairs_one_vehicle() {
         let mut document = source();
         apply(
             &mut document,
             Game::Ets2,
-            Command::RepairTruck("vehicle.one".into()),
+            Command::RepairVehicle("vehicle.one".into()),
         )
         .unwrap();
         for name in WEAR {
             assert_eq!(value(&document, "vehicle.one", name), Some("0"), "{name}");
         }
+        for name in OPTIONAL_WEAR {
+            assert_eq!(value(&document, "vehicle.one", name), Some("0"), "{name}");
+        }
+        for name in WHEELS {
+            assert_eq!(value(&document, "vehicle.one", name), Some("2"), "{name}");
+            for nth in 0..2 {
+                assert_eq!(
+                    value(&document, "vehicle.one", &indexed(name, nth)),
+                    Some("0"),
+                    "{name}[{nth}]"
+                );
+            }
+        }
     }
 
     #[test]
-    fn repairs_owned_trucks() {
+    fn repairs_owned_vehicles() {
         let mut document = source();
-        apply(&mut document, Game::Ets2, Command::RepairAllTrucks).unwrap();
+        apply(&mut document, Game::Ets2, Command::RepairAllVehicles).unwrap();
         assert_eq!(value(&document, "vehicle.one", "engine_wear"), Some("0"));
         assert_eq!(
             value(&document, "vehicle.one", "engine_wear_unfixable"),
@@ -395,7 +427,7 @@ mod tests {
     }
 
     #[test]
-    fn fills_one_and_all_trucks() {
+    fn fills_one_and_all_vehicles() {
         let mut document = source();
         apply(
             &mut document,
@@ -416,7 +448,7 @@ mod tests {
         assert_eq!(value(&document, "vehicle.one", FUEL), Some("1.0"));
 
         let mut document = source();
-        apply(&mut document, Game::Ets2, Command::FillAllTrucks).unwrap();
+        apply(&mut document, Game::Ets2, Command::FillAllVehicles).unwrap();
         assert_eq!(value(&document, "vehicle.one", FUEL), Some("1.0"));
         assert_eq!(value(&document, "vehicle.two", FUEL), Some("1.0"));
     }
@@ -724,12 +756,12 @@ mod tests {
     }
 
     #[test]
-    fn sets_current_truck_and_hq() {
+    fn sets_current_vehicle_and_hq() {
         let mut document = source();
         apply(
             &mut document,
             Game::Ets2,
-            Command::SetCurrentTruck("vehicle.two".into()),
+            Command::SetCurrentVehicle("vehicle.two".into()),
         )
         .unwrap();
         assert_eq!(
@@ -740,7 +772,7 @@ mod tests {
         apply(
             &mut document,
             Game::Ets2,
-            Command::SetHqTruck("vehicle.one".into()),
+            Command::SetHqVehicle("vehicle.one".into()),
         )
         .unwrap();
         assert_eq!(
@@ -750,13 +782,13 @@ mod tests {
     }
 
     #[test]
-    fn repair_leaves_a_partial_truck_unchanged() {
+    fn repair_leaves_a_partial_vehicle_unchanged() {
         let source = "SiiNunit\n{\nvehicle : vehicle.one {\n    engine_wear: &3f800000\n    transmission_wear: &3f800000\n    cabin_wear: 0\n    engine_wear_unfixable: 1\n    transmission_wear_unfixable: 1\n}\n}\n";
         let mut document = Document::parse(source).unwrap();
         let error = apply(
             &mut document,
             Game::Ets2,
-            Command::RepairTruck("vehicle.one".into()),
+            Command::RepairVehicle("vehicle.one".into()),
         )
         .unwrap_err();
         assert_eq!(
@@ -789,7 +821,10 @@ mod tests {
     fn reports_command_errors() {
         let mut document = source();
         let cases = [
-            (Command::RepairTruck("nope".into()), "missing unit \"nope\""),
+            (
+                Command::RepairVehicle("nope".into()),
+                "missing unit \"nope\"",
+            ),
             (
                 Command::SetFuel {
                     id: "vehicle.one".into(),
@@ -798,7 +833,7 @@ mod tests {
                 "fuel level 2 is not between 0 and 1",
             ),
             (
-                Command::SetHqTruck("vehicle.two".into()),
+                Command::SetHqVehicle("vehicle.two".into()),
                 "no garage holds vehicle.two",
             ),
         ];

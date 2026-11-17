@@ -25,6 +25,14 @@ vehicle : vehicle.one {
     engine_wear_unfixable: &3f800000
     transmission_wear_unfixable: 0.5
     cabin_wear_unfixable: 0.25
+    chassis_wear: 0.5
+    chassis_wear_unfixable: 0.25
+    wheels_wear: 2
+    wheels_wear[0]: &3f800000
+    wheels_wear[1]: 0.5
+    wheels_wear_unfixable: 2
+    wheels_wear_unfixable[0]: &3f800000
+    wheels_wear_unfixable[1]: 0.5
     fuel_relative: 0.5
     odometer: 10
     integrity_odometer: 10

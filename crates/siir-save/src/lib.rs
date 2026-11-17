@@ -26,7 +26,7 @@ pub use command::{Command, apply};
 pub use error::Error;
 pub use model::{
     Accessory, Bank, Company, Driver, Game, Garage, Job, Offence, Offer, Player, Save, Skills,
-    Trailer, Truck, UsedAssortment, UsedTruck,
+    Trailer, UsedAssortment, UsedTruck, Vehicle,
 };
 pub use plate::LicensePlate;
 
@@ -81,12 +81,12 @@ pub fn read<'a>(document: &'a Document<'_>, game: Game) -> Result<Save<'a>, Erro
         None => None,
     };
 
-    let mut trucks = Vec::new();
+    let mut vehicles = Vec::new();
     for unit in document.units_of_class(names::VEHICLE) {
         let slot = slots.get(unit.id()).copied();
         let accessories = accessories(unit, &units)?;
         let parts = parts(&accessories);
-        trucks.push(Truck {
+        vehicles.push(Vehicle {
             id: unit.id(),
             slot: slot.map(|slot| slot.id()),
             trailer: slot.and_then(|slot| reference(slot, names::TRAILER)),
@@ -208,7 +208,7 @@ pub fn read<'a>(document: &'a Document<'_>, game: Game) -> Result<Save<'a>, Erro
         visited_cities,
         unlocked_dealers,
         player,
-        trucks,
+        vehicles,
         trailers,
         garages,
         drivers,
@@ -280,7 +280,7 @@ fn fines(unit: &Unit<'_>, name: &str) -> Result<Vec<i64>, Error> {
         .collect()
 }
 
-/// The truck's accessory units, in `accessories[]` order.
+/// The vehicle's accessory units, in `accessories[]` order.
 fn accessories<'d>(
     unit: &Unit<'d>,
     units: &HashMap<&str, &'d Unit<'d>>,
@@ -389,48 +389,48 @@ mod tests {
         assert_eq!(player.assigned_vehicles, Some("slot.one"));
         assert_eq!(player.current_job, Some("player_job.one"));
 
-        let truck = save.current_truck().unwrap();
-        assert_eq!(truck.id, "vehicle.one");
-        assert_eq!(truck.slot, Some("slot.one"));
-        assert_eq!(truck.trailer, Some("trailer.one"));
-        assert_eq!(truck.model, Some("test.model"));
+        let vehicle = save.current_vehicle().unwrap();
+        assert_eq!(vehicle.id, "vehicle.one");
+        assert_eq!(vehicle.slot, Some("slot.one"));
+        assert_eq!(vehicle.trailer, Some("trailer.one"));
+        assert_eq!(vehicle.model, Some("test.model"));
         assert_eq!(
-            truck.data_path,
+            vehicle.data_path,
             Some("/def/vehicle/truck/test.model/data.sii")
         );
         assert_eq!(
-            truck.engine,
+            vehicle.engine,
             Some("/def/vehicle/truck/test.model/engine/500.sii")
         );
         assert_eq!(
-            truck.transmission,
+            vehicle.transmission,
             Some("/def/vehicle/truck/test.model/transmission/12.sii")
         );
         assert_eq!(
-            truck.cabin,
+            vehicle.cabin,
             Some("/def/vehicle/truck/test.model/cabin/space.sii")
         );
         assert_eq!(
-            truck.chassis,
+            vehicle.chassis,
             Some("/def/vehicle/truck/test.model/chassis/4x2.sii")
         );
         assert_eq!(
-            truck.paint_job,
+            vehicle.paint_job,
             Some("/def/vehicle/truck/test.model/paint_job/color1.sii")
         );
-        let mirror = truck
+        let mirror = vehicle
             .accessories
             .iter()
             .find(|accessory| accessory.id == "accessory.mirror")
             .unwrap();
         assert_eq!(mirror.class, "vehicle_accessory");
         assert_eq!(mirror.slot, Some("mirror"));
-        assert_eq!(truck.engine_wear, 1.0);
-        assert_eq!(truck.transmission_wear, 0.5);
-        assert_eq!(truck.cabin_wear, 0.0);
-        assert_eq!(truck.fuel_relative, 1.0);
-        assert_eq!(truck.license_plate, "PL<offset>12|germany");
-        assert_eq!(truck.placement, Some("(1, 2, 3) (1; 0, 0, 0)"));
+        assert_eq!(vehicle.engine_wear, 1.0);
+        assert_eq!(vehicle.transmission_wear, 0.5);
+        assert_eq!(vehicle.cabin_wear, 0.0);
+        assert_eq!(vehicle.fuel_relative, 1.0);
+        assert_eq!(vehicle.license_plate, "PL<offset>12|germany");
+        assert_eq!(vehicle.placement, Some("(1, 2, 3) (1; 0, 0, 0)"));
 
         let trailer = save.current_trailer().unwrap();
         assert_eq!(trailer.id, "trailer.one");

@@ -24,7 +24,7 @@ pub(super) fn set_position(
         .next()
         .and_then(|player| reference(player, names::ASSIGNED_VEHICLES))
         .map(str::to_owned)
-        .ok_or(Error::NoCurrentTruck)?;
+        .ok_or(Error::NoCurrentVehicle)?;
     let unit = document
         .get(&slot)
         .filter(|unit| unit.class() == names::PLAYER_VEHICLES)
@@ -79,7 +79,7 @@ mod tests {
     use crate::Game;
     use crate::command::{Command, apply};
 
-    const SOURCE: &str = include_str!("../../testdata/truck.sii");
+    const SOURCE: &str = include_str!("../../testdata/vehicle.sii");
 
     fn value<'a>(document: &'a Document<'_>, id: &str, name: &str) -> Option<&'a str> {
         document.units().find(|unit| unit.id() == id)?.get(name)
