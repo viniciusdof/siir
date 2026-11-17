@@ -122,7 +122,7 @@ fn clones_and_renames_a_profile() {
 
     let bytes = fs::read(cloned.join("profile.sii")).unwrap();
     let file = siir::open(&bytes).unwrap();
-    let document = file.document().unwrap();
+    let document = file.document();
     let unit = document.units_of_class("user_profile").next().unwrap();
     assert_eq!(unit.get("profile_name"), Some("\"new\""));
 

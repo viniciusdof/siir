@@ -4,7 +4,7 @@ use std::io::Read;
 
 use aes::Aes256;
 use aes::cipher::block_padding::Pkcs7;
-use aes::cipher::{BlockDecryptMut, KeyIvInit};
+use aes::cipher::{BlockModeDecrypt, KeyIvInit};
 use cbc::Decryptor;
 
 use crate::error::Error;
@@ -94,7 +94,7 @@ fn unwrap_scsc(bytes: &[u8]) -> Result<Opened, Error> {
     let decryptor = Decryptor::<Aes256>::new_from_slices(&AES_KEY, iv)
         .map_err(|_| Error::decrypt(HEADER_LEN))?;
     let compressed = decryptor
-        .decrypt_padded_mut::<Pkcs7>(&mut buffer)
+        .decrypt_padded::<Pkcs7>(&mut buffer)
         .map_err(|_| Error::decrypt(HEADER_LEN))?;
 
     let mut payload = Vec::new();
@@ -123,7 +123,7 @@ fn unwrap_scsc(bytes: &[u8]) -> Result<Opened, Error> {
 mod tests {
     use std::io::Write;
 
-    use aes::cipher::{BlockEncryptMut, KeyIvInit};
+    use aes::cipher::{BlockModeEncrypt, KeyIvInit};
 
     use super::*;
 
@@ -143,7 +143,7 @@ mod tests {
         buffer.resize(message_len + AES_BLOCK_LEN, 0);
         let ciphertext = cbc::Encryptor::<Aes256>::new_from_slices(&AES_KEY, &iv)
             .unwrap()
-            .encrypt_padded_mut::<Pkcs7>(&mut buffer, message_len)
+            .encrypt_padded::<Pkcs7>(&mut buffer, message_len)
             .unwrap()
             .to_vec();
 

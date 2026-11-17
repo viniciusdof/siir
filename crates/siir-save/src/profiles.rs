@@ -168,7 +168,7 @@ pub fn saves(profile: &Path) -> Result<Vec<PathBuf>, Error> {
 pub fn info(save: &Path) -> Result<SaveInfo, Error> {
     let bytes = fs::read(save.join(names::INFO_FILE))?;
     let file = siir::open(&bytes)?;
-    let document = file.document()?;
+    let document = file.document();
     let unit = document
         .units_of_class("save_container")
         .next()
@@ -303,13 +303,11 @@ pub fn clone_profile(profile: &Path, name: &str, game: Game) -> Result<PathBuf, 
             }
         }
         let bytes = fs::read(destination.join(names::PROFILE_FILE))?;
-        let file = siir::open(&bytes)?;
-        let mut document = file.document()?;
-        apply(&mut document, game, Command::RenameProfile(name.to_owned()))?;
-        fs::write(
-            destination.join(names::PROFILE_FILE),
-            file.write(&document)?,
-        )?;
+        let mut file = siir::open(&bytes)?;
+        file.with_document_mut(|document| {
+            apply(document, game, Command::RenameProfile(name.to_owned()))
+        })?;
+        fs::write(destination.join(names::PROFILE_FILE), file.write())?;
         Ok(())
     })();
     if result.is_err() {
