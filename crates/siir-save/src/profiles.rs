@@ -263,6 +263,11 @@ pub fn saves(profile: &Path) -> Result<Vec<PathBuf>, Error> {
     Ok(saves)
 }
 
+/// The `game.sii` file inside a save directory.
+pub fn save_path(save: &Path) -> PathBuf {
+    save.join(names::GAME_FILE)
+}
+
 /// Reads one save's `info.sii`.
 pub fn info(save: &Path) -> Result<SaveInfo, Error> {
     let bytes = fs::read(save.join(names::INFO_FILE))?;
@@ -495,6 +500,14 @@ fn profile_dir_name(name: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn joins_the_game_file() {
+        assert_eq!(
+            save_path(Path::new("/saves/1")),
+            Path::new("/saves/1/game.sii")
+        );
+    }
 
     #[test]
     fn proton_dirs_find_the_prefix_documents_folder() {
