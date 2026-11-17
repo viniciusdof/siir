@@ -119,6 +119,28 @@ pub enum Error {
         /// Garage unit id.
         id: String,
     },
+    /// A driver is not in the pool or the dismissed list.
+    DriverNotAvailable {
+        /// Driver unit id.
+        id: String,
+    },
+    /// A driver is not in the player's roster.
+    DriverNotEmployed {
+        /// Driver unit id.
+        id: String,
+    },
+    /// A garage has no free driver slot.
+    NoDriverSlot {
+        /// Garage unit id.
+        id: String,
+    },
+    /// A driver and a truck are not paired in the same garage.
+    NoSharedGarage {
+        /// Driver unit id.
+        driver: String,
+        /// Vehicle unit id.
+        truck: String,
+    },
     /// The document rejected the edit.
     Document(siir::Error),
     /// A file operation failed.
@@ -209,6 +231,21 @@ impl fmt::Display for Error {
             }
             Self::GarageOccupied { id } => {
                 write!(f, "garage {id} still holds vehicles, drivers, or trailers")
+            }
+            Self::DriverNotAvailable { id } => {
+                write!(f, "driver {id:?} is not available to hire")
+            }
+            Self::DriverNotEmployed { id } => {
+                write!(f, "driver {id:?} is not in the player's roster")
+            }
+            Self::NoDriverSlot { id } => {
+                write!(f, "garage {id} has no free driver slot")
+            }
+            Self::NoSharedGarage { driver, truck } => {
+                write!(
+                    f,
+                    "driver {driver:?} and truck {truck:?} are not in the same garage"
+                )
             }
             Self::Document(error) => error.fmt(f),
             Self::Io(error) => error.fmt(f),

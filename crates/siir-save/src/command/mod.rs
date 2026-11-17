@@ -1,17 +1,19 @@
 //! Save commands that edit a document.
 
-use siir::{Document, Unit};
+use siir::{Document, Unit, Value};
 
 use crate::Game;
 use crate::Skills;
 use crate::error::Error;
 use crate::names;
+use crate::value::length;
 
 mod driver;
 mod economy;
 mod job;
 mod offence;
 mod offer;
+mod oversize;
 mod plate;
 mod player;
 mod profile;
@@ -238,6 +240,36 @@ pub enum Command {
     },
     /// Sets when the next used-truck listing generation is due.
     SetUsedAssortmentNextGeneration(u64),
+    /// Hires an unemployed AI driver into a garage slot.
+    HireDriver {
+        /// Driver unit id.
+        id: String,
+        /// Garage unit id with a free driver slot.
+        garage: String,
+    },
+    /// Fires a hired AI driver.
+    FireDriver(String),
+    /// Pairs a driver with a truck in the same garage.
+    SetDriverTruck {
+        /// Driver unit id.
+        id: String,
+        /// Vehicle unit id.
+        truck: String,
+    },
+    /// Sets one oversize offer's required truck.
+    SetOversizeTruck {
+        /// Offer unit id.
+        id: String,
+        /// Truck definition the offer requires.
+        truck: String,
+    },
+    /// Sets one oversize offer's expiration time.
+    SetOversizeExpiration {
+        /// Offer unit id.
+        id: String,
+        /// Game time the offer expires.
+        time: u64,
+    },
 }
 
 /// Applies one command to a save document.
@@ -304,6 +336,21 @@ pub fn apply(document: &mut Document<'_>, _game: Game, command: Command) -> Resu
         Command::SetUsedAssortmentNextGeneration(time) => {
             used::set_assortment_generation(document, time)
         }
+        Command::HireDriver { id, garage } => driver::hire(document, &id, &garage),
+        Command::FireDriver(id) => driver::fire(document, &id),
+        Command::SetDriverTruck { id, truck } => driver::set_truck(document, &id, &truck),
+        Command::SetOversizeTruck { id, truck } => oversize::set_truck(document, &id, &truck),
+        Command::SetOversizeExpiration { id, time } => {
+            oversize::set_expiration(document, &id, time)
+        }
+    }
+}
+
+/// Checks that a unit exists with the expected class.
+pub(super) fn check(document: &Document<'_>, id: &str, class: &str) -> Result<(), Error> {
+    match document.units().find(|unit| unit.id() == id) {
+        Some(unit) if unit.class() == class => Ok(()),
+        _ => Err(Error::MissingUnit { id: id.to_owned() }),
     }
 }
 
@@ -327,5 +374,34 @@ fn write_skills(unit: &mut Unit<'_>, skills: Skills) -> Result<(), Error> {
     unit.set(names::FRAGILE, siir::Value::UInt(skills.fragile))?;
     unit.set(names::URGENT, siir::Value::UInt(skills.urgent))?;
     unit.set(names::MECHANICAL, siir::Value::UInt(skills.mechanical))?;
+    Ok(())
+}
+
+/// Replaces an implicit array, adding, resizing, or removing its count.
+pub(super) fn rewrite(unit: &mut Unit<'_>, name: &str, values: Vec<Value>) -> Result<(), Error> {
+    let old = match unit.get(name) {
+        Some(_) => length(unit, name)?,
+        None => 0,
+    };
+    let len = values.len();
+    if unit.get(name).is_some() {
+        unit.set(name, Value::UInt(len as u64))?;
+    } else {
+        unit.insert_attr(name, Value::UInt(len as u64))?;
+    }
+    for (nth, value) in values.into_iter().enumerate() {
+        let attr = names::indexed(name, nth);
+        if unit.get(&attr).is_some() {
+            unit.set(&attr, value)?;
+        } else {
+            unit.insert_attr(&attr, value)?;
+        }
+    }
+    for nth in len..old {
+        let attr = names::indexed(name, nth);
+        if unit.get(&attr).is_some() {
+            unit.remove_attr(&attr)?;
+        }
+    }
     Ok(())
 }

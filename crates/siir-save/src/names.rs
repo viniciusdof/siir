@@ -16,6 +16,8 @@ pub(crate) const JOB_OFFER_DATA: &str = "job_offer_data";
 pub(crate) const USED_TRUCK_OFFER: &str = "used_truck_offer";
 pub(crate) const USED_VEHICLE_ASSORTMENT: &str = "used_vehicle_assortment";
 pub(crate) const POLICE_OFFENCE_LOG: &str = "police_offence_log";
+pub(crate) const OVERSIZE_OFFER: &str = "oversize_offer";
+pub(crate) const OVERSIZE_ROUTE_OFFERS: &str = "oversize_route_offers";
 
 // Attributes shared by the read model and the commands.
 pub(crate) const HQ_CITY: &str = "hq_city";
@@ -50,6 +52,18 @@ pub(crate) const HOMETOWN: &str = "hometown";
 pub(crate) const DRIVER_JOB: &str = "driver_job";
 pub(crate) const ASSIGNED_TRUCK: &str = "assigned_truck";
 pub(crate) const TRAINING_POLICY: &str = "training_policy";
+pub(crate) const DRIVER_POOL: &str = "driver_pool";
+pub(crate) const DRIVER_FLAGS: &str = "driver_flags";
+pub(crate) const DRIVER_READINESS_TIMER: &str = "driver_readiness_timer";
+pub(crate) const DRIVER_UNDRIVABLE_TRUCK_TIMERS: &str = "driver_undrivable_truck_timers";
+pub(crate) const DRIVER_QUIT_WARNED: &str = "driver_quit_warned";
+pub(crate) const DISMISSED_DRIVERS: &str = "dismissed_drivers";
+pub(crate) const STATE: &str = "state";
+pub(crate) const OFFER_DATA: &str = "offer_data";
+pub(crate) const TRUCK: &str = "truck";
+pub(crate) const EXPIRATION: &str = "expiration";
+pub(crate) const ROUTE: &str = "route";
+pub(crate) const OFFERS: &str = "offers";
 pub(crate) const OFFENCE_TOTAL_COUNTS: &str = "offence_total_counts";
 pub(crate) const OFFENCE_TOTAL_FINES: &str = "offence_total_fines";
 pub(crate) const DETAILED_HISTORY_ENTRIES: &str = "detailed_history_entries";

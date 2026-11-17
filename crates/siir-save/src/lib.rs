@@ -25,8 +25,8 @@ pub use color::Color;
 pub use command::{Command, apply};
 pub use error::Error;
 pub use model::{
-    Accessory, Bank, Company, Driver, Game, Garage, Job, Offence, Offer, Player, Save, Skills,
-    Trailer, UsedAssortment, UsedTruck, Vehicle,
+    Accessory, Bank, Company, Driver, Game, Garage, Job, Offence, Offer, OversizeOffer,
+    OversizeRoute, Player, Save, Skills, Trailer, UsedAssortment, UsedTruck, Vehicle,
 };
 pub use plate::LicensePlate;
 
@@ -200,6 +200,25 @@ pub fn read<'a>(document: &'a Document<'_>, game: Game) -> Result<Save<'a>, Erro
         None => None,
     };
 
+    let mut oversize_offers = Vec::new();
+    for unit in document.units_of_class(names::OVERSIZE_OFFER) {
+        oversize_offers.push(OversizeOffer {
+            id: unit.id(),
+            offer_data: text(unit, names::OFFER_DATA)?,
+            truck: string(unit, names::TRUCK)?,
+            expiration: count(unit, names::EXPIRATION)?,
+        });
+    }
+
+    let mut oversize_routes = Vec::new();
+    for unit in document.units_of_class(names::OVERSIZE_ROUTE_OFFERS) {
+        oversize_routes.push(OversizeRoute {
+            id: unit.id(),
+            route: text(unit, names::ROUTE)?,
+            offers: array(unit, names::OFFERS)?,
+        });
+    }
+
     Ok(Save {
         game,
         bank,
@@ -219,6 +238,8 @@ pub fn read<'a>(document: &'a Document<'_>, game: Game) -> Result<Save<'a>, Erro
         used_trucks,
         used_assortment,
         offence,
+        oversize_offers,
+        oversize_routes,
     })
 }
 
@@ -484,6 +505,15 @@ mod tests {
         assert_eq!(offence.counts, [4, 5]);
         assert_eq!(offence.fines, [600, 700]);
         assert_eq!(offence.history_entries, 3);
+        assert_eq!(save.oversize_offers[0].id, "oversize.one");
+        assert_eq!(save.oversize_offers[0].offer_data, "spec_offer.ovesize_3");
+        assert_eq!(
+            save.oversize_offers[0].truck,
+            "oversize/mercedes_actros_8x4"
+        );
+        assert_eq!(save.oversize_offers[0].expiration, 6121);
+        assert_eq!(save.oversize_routes[0].route, "route_data.koln_amster1");
+        assert_eq!(save.oversize_routes[0].offers, ["oversize.one"]);
     }
 
     #[test]

@@ -128,31 +128,7 @@ fn cities(document: &Document<'_>) -> Result<Vec<String>, Error> {
 }
 
 fn rewrite(unit: &mut Unit<'_>, name: &str, values: Vec<Value>) -> Result<(), Error> {
-    let old = match unit.get(name) {
-        Some(_) => length(unit, name)?,
-        None => 0,
-    };
-    let len = values.len();
-    if unit.get(name).is_some() {
-        unit.set(name, Value::UInt(len as u64))?;
-    } else {
-        unit.insert_attr(name, Value::UInt(len as u64))?;
-    }
-    for (nth, value) in values.into_iter().enumerate() {
-        let attr = indexed(name, nth);
-        if unit.get(&attr).is_some() {
-            unit.set(&attr, value)?;
-        } else {
-            unit.insert_attr(&attr, value)?;
-        }
-    }
-    for nth in len..old {
-        let attr = indexed(name, nth);
-        if unit.get(&attr).is_some() {
-            unit.remove_attr(&attr)?;
-        }
-    }
-    Ok(())
+    super::rewrite(unit, name, values)
 }
 
 #[cfg(test)]

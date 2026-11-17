@@ -56,4 +56,26 @@ fn reads_trucks_parts_and_transmissions() {
         truck.paint_jobs[0].path,
         "/def/vehicle/truck/test.model/paint_job/color1.sii"
     );
+
+    let cargo = &catalog.cargo()[0];
+    assert_eq!(cargo.id, "cargo.stones");
+    assert_eq!(cargo.name, "@@cn_stones@@");
+    assert_eq!(cargo.mass, 2100.0);
+    assert_eq!(cargo.volume, 1.0);
+    assert_eq!(cargo.reward_per_km, 0.75);
+    assert_eq!(cargo.body_types, ["dumper", "flatbed"]);
+
+    let company = &catalog.companies()[0];
+    assert_eq!(company.id, "company.permanent.testco");
+    assert_eq!(company.name, "Test Co");
+
+    let trailer = &catalog.trailers()[0];
+    assert_eq!(trailer.id, "trailer_def.test.single_3");
+    assert_eq!(trailer.body_type, "curtainside");
+    assert_eq!(trailer.chain_type, "single");
+    assert_eq!(trailer.volume, 87.0);
+    assert_eq!(trailer.gross_weight_limit, 35_000);
+    assert_eq!(trailer.chassis_mass, 6460);
+    assert_eq!(trailer.axles, 3);
+    assert!((trailer.length - 13.7).abs() < 0.001);
 }

@@ -1,0 +1,16 @@
+SiiNunit
+{
+trailer_def : trailer_def.test.single_3
+{
+	gross_trailer_weight_limit: 35000
+	chassis_mass: 6460
+	body_mass: 0
+	axles: 3
+	volume: 87
+	body_type: curtainside
+	chain_type: single
+	country_validity[]: germany
+	mass_ratio[]: 1
+	length: &415b3333
+}
+}

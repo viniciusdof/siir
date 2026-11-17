@@ -47,6 +47,10 @@ pub struct Save<'a> {
     pub used_assortment: Option<UsedAssortment<'a>>,
     /// The profile's police offence log, when the save has one.
     pub offence: Option<Offence<'a>>,
+    /// Every oversize market offer.
+    pub oversize_offers: Vec<OversizeOffer<'a>>,
+    /// Every oversize route and the offers it holds.
+    pub oversize_routes: Vec<OversizeRoute<'a>>,
 }
 
 impl<'a> Save<'a> {
@@ -250,6 +254,28 @@ pub struct Offence<'a> {
     pub fines: Vec<i64>,
     /// Number of detailed history entries.
     pub history_entries: u64,
+}
+
+/// One oversize market offer.
+pub struct OversizeOffer<'a> {
+    /// Unit id.
+    pub id: &'a str,
+    /// The `oversize_offer_data` definition the offer uses.
+    pub offer_data: &'a str,
+    /// Truck definition the offer requires.
+    pub truck: &'a str,
+    /// Game time the offer expires.
+    pub expiration: u64,
+}
+
+/// One oversize route and the offers along it.
+pub struct OversizeRoute<'a> {
+    /// Unit id.
+    pub id: &'a str,
+    /// Route definition the offers follow.
+    pub route: &'a str,
+    /// Offer unit ids on this route.
+    pub offers: Vec<&'a str>,
 }
 
 /// The profile's bank.

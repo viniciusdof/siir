@@ -1,0 +1,92 @@
+SiiNunit
+{
+economy : economy.one {
+    driver_pool: 2
+    driver_pool[0]: driver.one
+    driver_pool[1]: driver.two
+}
+player : player.one {
+    hq_city: prague
+    drivers: 1
+    drivers[0]: driver_player.one
+    driver_flags: 1
+    driver_flags[0]: 0
+    driver_readiness_timer: 1
+    driver_readiness_timer[0]: 0
+    driver_undrivable_truck_timers: 1
+    driver_undrivable_truck_timers[0]: 0
+    driver_quit_warned: 1
+    driver_quit_warned[0]: false
+    dismissed_drivers: 0
+}
+garage : garage.prague {
+    vehicles: 2
+    vehicles[0]: vehicle.one
+    vehicles[1]: vehicle.two
+    drivers: 2
+    drivers[0]: driver_player.one
+    drivers[1]: null
+    status: 2
+}
+garage : garage.other {
+    vehicles: 1
+    vehicles[0]: vehicle.three
+    drivers: 0
+    status: 2
+}
+driver_player : driver_player.one {
+    profit_log: _nameless.one
+}
+driver_ai : driver.one {
+    state: 1
+    hometown: ""
+    current_city: ""
+    on_duty_timer: 0
+    extra_maintenance: 0
+    training_policy: 0
+    driver_job: job.idle
+    adopted_truck: null
+    assigned_truck: null
+    assigned_truck_efficiency: 1
+    assigned_truck_axle_count: 2
+    assigned_truck_mass: 10000
+    slot_truck_efficiency: 1
+    slot_truck_axle_count: 2
+    slot_truck_mass: 10000
+    adopted_trailer: null
+    assigned_trailer: null
+    old_hometown: ""
+}
+driver_ai : driver.two {
+    state: 1
+    hometown: ""
+    current_city: ""
+    on_duty_timer: 0
+    extra_maintenance: 0
+    training_policy: 0
+    driver_job: job.active
+    adopted_truck: null
+    assigned_truck: null
+    assigned_truck_efficiency: 1
+    assigned_truck_axle_count: 2
+    assigned_truck_mass: 10000
+    slot_truck_efficiency: 1
+    slot_truck_axle_count: 2
+    slot_truck_mass: 10000
+    adopted_trailer: null
+    assigned_trailer: null
+    old_hometown: ""
+}
+job_info : job.idle {
+    cargo: null
+}
+job_info : job.active {
+    cargo: cargo.stone
+}
+vehicle : vehicle.one {
+}
+vehicle : vehicle.two {
+}
+vehicle : vehicle.three {
+}
+}

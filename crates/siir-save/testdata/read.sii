@@ -146,6 +146,22 @@ police_offence_log : offences {
     offence_total_fines[0]: 600
     offence_total_fines[1]: 700
 }
+oversize_offer : oversize.one {
+    offer_data: spec_offer.ovesize_3
+    truck: "oversize/mercedes_actros_8x4"
+    expiration: 6121
+    intro_cutscene: ""
+    outro_cutscene: ""
+}
+oversize_route_offers : route.one {
+    offers: 1
+    offers[0]: oversize.one
+    route: route_data.koln_amster1
+}
+oversize_offer_ctrl : oversize_ctrl.one {
+    route_offers: 1
+    route_offers[0]: route.one
+}
 mystery : unknown.one {
     whatever: 1
 }
