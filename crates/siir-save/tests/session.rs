@@ -4,6 +4,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use siir::container::Origin;
+use siir_save::profiles::{RootKind, profiles};
 use siir_save::{Command, Game, Session};
 
 fn fixture(path: &str) -> PathBuf {
@@ -156,4 +157,60 @@ fn session_is_send_and_static() {
     fn assert_static<T: 'static>() {}
     assert_send::<Session>();
     assert_static::<Session>();
+}
+
+/// The flow a GUI drives: discover, open, read, edit, save, reopen.
+#[test]
+fn contract_flow_discover_open_edit_save_reopen() {
+    let dir = temp("contract");
+    let game = dir.join("game");
+    let profile = game.join("profiles/abcdef");
+    let save_dir = profile.join("saves/1");
+    fs::create_dir_all(&save_dir).unwrap();
+    fs::copy(fixture("ets2/profile.sii"), profile.join("profile.sii")).unwrap();
+    fs::copy(fixture("ets2/saves/1/info.sii"), save_dir.join("info.sii")).unwrap();
+    fs::copy(fixture("ets2/saves/1/game.sii"), save_dir.join("game.sii")).unwrap();
+
+    let found: Vec<_> = profiles(Game::Ets2, std::slice::from_ref(&game))
+        .into_iter()
+        .filter(|profile| profile.path.starts_with(&game))
+        .collect();
+    assert_eq!(found.len(), 1);
+    assert_eq!(found[0].name, "sirr-no-cloud");
+    assert_eq!(found[0].saves, 1);
+    assert_eq!(found[0].kind, RootKind::Custom);
+
+    let save = save_dir.join("game.sii");
+    let original = fs::read(&save).unwrap();
+    let mut session = Session::open(Game::Ets2, &save).unwrap();
+    assert_eq!(session.origin(), Origin::EncryptedBinary);
+    assert!(!session.edited());
+    assert_eq!(
+        session.read().unwrap().bank.as_ref().unwrap().money_account,
+        2000
+    );
+
+    session.apply(Command::SetMoney(12_345)).unwrap();
+    assert!(session.edited());
+    session.save(&save).unwrap();
+    assert!(!session.edited());
+
+    let mut backup = save.clone().into_os_string();
+    backup.push(".bak");
+    assert_eq!(fs::read(PathBuf::from(backup)).unwrap(), original);
+
+    let reopened = Session::open(Game::Ets2, &save).unwrap();
+    assert_eq!(reopened.origin(), Origin::Plain);
+    assert_eq!(
+        reopened
+            .read()
+            .unwrap()
+            .bank
+            .as_ref()
+            .unwrap()
+            .money_account,
+        12_345
+    );
+
+    let _ = fs::remove_dir_all(&dir);
 }
