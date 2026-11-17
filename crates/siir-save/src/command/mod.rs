@@ -6,8 +6,10 @@ use crate::Game;
 use crate::Skills;
 use crate::error::Error;
 use crate::names;
-use crate::value::length;
+use crate::value::{length, optional_array};
 
+mod bus;
+mod car;
 mod driver;
 mod economy;
 mod job;
@@ -270,6 +272,14 @@ pub enum Command {
         /// Game time the offer expires.
         time: u64,
     },
+    /// Marks every bus stop discovered.
+    DiscoverBusStops,
+    /// Selects one bus line offer for the player.
+    SetBusLineOffer(String),
+    /// Adds one vehicle to the player's owned buses.
+    SetOwnedBus(String),
+    /// Adds one vehicle to the player's owned cars.
+    SetOwnedCar(String),
 }
 
 /// Applies one command to a save document.
@@ -343,6 +353,10 @@ pub fn apply(document: &mut Document<'_>, _game: Game, command: Command) -> Resu
         Command::SetOversizeExpiration { id, time } => {
             oversize::set_expiration(document, &id, time)
         }
+        Command::DiscoverBusStops => bus::discover(document),
+        Command::SetBusLineOffer(id) => bus::set_offer(document, &id),
+        Command::SetOwnedBus(id) => bus::set_owned(document, &id),
+        Command::SetOwnedCar(id) => car::set_owned(document, &id),
     }
 }
 
@@ -352,6 +366,62 @@ pub(super) fn check(document: &Document<'_>, id: &str, class: &str) -> Result<()
         Some(unit) if unit.class() == class => Ok(()),
         _ => Err(Error::MissingUnit { id: id.to_owned() }),
     }
+}
+
+/// Points one player attribute at a unit of the expected class.
+pub(super) fn set_player_ref(
+    document: &mut Document<'_>,
+    name: &str,
+    id: &str,
+    class: &str,
+) -> Result<(), Error> {
+    check(document, id, class)?;
+    let player = player_id(document)?;
+    edit(document, &player, names::PLAYER)?.set(name, Value::token(id))?;
+    Ok(())
+}
+
+/// The first unit id of a class.
+pub(super) fn first_id(document: &Document<'_>, class: &str) -> Result<String, Error> {
+    document
+        .units_of_class(class)
+        .next()
+        .map(|unit| unit.id().to_owned())
+        .ok_or_else(|| Error::MissingUnit {
+            id: class.to_owned(),
+        })
+}
+
+/// The player unit id.
+pub(super) fn player_id(document: &Document<'_>) -> Result<String, Error> {
+    first_id(document, names::PLAYER)
+}
+
+/// Adds one vehicle to an owned list after checking its plate type.
+pub(super) fn add_owned(
+    document: &mut Document<'_>,
+    name: &str,
+    id: &str,
+    kind: &'static str,
+) -> Result<(), Error> {
+    {
+        let unit = document
+            .units()
+            .find(|unit| unit.id() == id && unit.class() == names::VEHICLE)
+            .ok_or_else(|| Error::MissingUnit { id: id.to_owned() })?;
+        if unit.get("license_plate_type") != Some(kind) {
+            return Err(Error::InvalidVehicleType {
+                id: id.to_owned(),
+                expected: kind,
+            });
+        }
+    }
+    let player = player_id(document)?;
+    let unit = edit(document, &player, names::PLAYER)?;
+    if values(unit, name)?.iter().any(|item| item == id) {
+        return Ok(());
+    }
+    push(unit, name, id)
 }
 
 /// Finds one editable unit by id and class.
@@ -404,4 +474,23 @@ pub(super) fn rewrite(unit: &mut Unit<'_>, name: &str, values: Vec<Value>) -> Re
         }
     }
     Ok(())
+}
+
+/// An implicit array as owned strings, empty when the attribute is absent.
+pub(super) fn values(unit: &Unit<'_>, name: &str) -> Result<Vec<String>, Error> {
+    Ok(optional_array(unit, name)?
+        .into_iter()
+        .map(str::to_owned)
+        .collect())
+}
+
+pub(super) fn tokens(values: Vec<String>) -> Vec<Value> {
+    values.into_iter().map(Value::Token).collect()
+}
+
+/// Appends one value to an implicit array.
+pub(super) fn push(unit: &mut Unit<'_>, name: &str, value: &str) -> Result<(), Error> {
+    let mut list = values(unit, name)?;
+    list.push(value.to_owned());
+    rewrite(unit, name, tokens(list))
 }

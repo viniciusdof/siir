@@ -1,0 +1,14 @@
+SiiNunit
+{
+player : player.one {
+}
+vehicle : bus.one {
+    license_plate_type: bus
+}
+vehicle : car.one {
+    license_plate_type: car
+}
+vehicle : truck.one {
+    license_plate_type: truck
+}
+}

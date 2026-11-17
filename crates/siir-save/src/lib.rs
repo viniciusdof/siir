@@ -25,12 +25,16 @@ pub use color::Color;
 pub use command::{Command, apply};
 pub use error::Error;
 pub use model::{
-    Accessory, Bank, Company, Driver, Game, Garage, Job, Offence, Offer, OversizeOffer,
-    OversizeRoute, Player, Save, Skills, Trailer, UsedAssortment, UsedTruck, Vehicle,
+    Accessory, Bank, BusJob, BusJobStage, BusLineOffer, BusStop, CarJob, CarOffer, Company, Driver,
+    Game, Garage, Job, JobLog, Offence, Offer, OversizeOffer, OversizeRoute, Player, Save, Skills,
+    Trailer, UsedAssortment, UsedTruck, Vehicle,
 };
 pub use plate::LicensePlate;
 
-use value::{array, count, float, integer, optional_count, reference, string, text, unquote};
+use value::{
+    array, boolean, count, float, integer, optional_array, optional_count, reference, string, text,
+    unquote,
+};
 
 /// Reads the typed view of a save document.
 pub fn read<'a>(document: &'a Document<'_>, game: Game) -> Result<Save<'a>, Error> {
@@ -75,8 +79,13 @@ pub fn read<'a>(document: &'a Document<'_>, game: Game) -> Result<Save<'a>, Erro
             my_vehicles: array(unit, names::MY_VEHICLES)?,
             trucks: array(unit, names::TRUCKS)?,
             trailers: array(unit, names::TRAILERS)?,
+            buses: optional_array(unit, names::BUSES)?,
+            cars: optional_array(unit, names::CARS)?,
             assigned_vehicles: reference(unit, names::ASSIGNED_VEHICLES),
             current_job: reference(unit, "current_job"),
+            current_bus_job: reference(unit, names::CURRENT_BUS_JOB),
+            selected_bus_offer: reference(unit, names::SELECTED_BUS_OFFER),
+            current_car_job: reference(unit, names::CURRENT_CAR_JOB),
         }),
         None => None,
     };
@@ -219,6 +228,103 @@ pub fn read<'a>(document: &'a Document<'_>, game: Game) -> Result<Save<'a>, Erro
         });
     }
 
+    // shortcut: bus, car, and log units are parsed strictly, so one malformed
+    // unit fails the whole read; skip malformed units when older or modded
+    // saves are supported.
+    let mut bus_stops = Vec::new();
+    for unit in document.units_of_class(names::BUS_STOP) {
+        let city = unit
+            .id()
+            .strip_prefix("bus_stop.city.")
+            .unwrap_or_else(|| unit.id());
+        bus_stops.push(BusStop {
+            id: unit.id(),
+            city,
+            discovered: boolean(unit, names::DISCOVERED)?,
+            offers: array(unit, names::LINES_OFFER)?,
+        });
+    }
+
+    let mut bus_offers = Vec::new();
+    for unit in document.units_of_class(names::LINE_OFFER_DATA) {
+        bus_offers.push(BusLineOffer {
+            id: unit.id(),
+            kind: text(unit, "type")?,
+            source: text(unit, "source")?,
+            targets: array(unit, names::SAVED_TARGETS)?
+                .into_iter()
+                .map(unquote)
+                .collect(),
+            distances: numbers(unit, names::TARGETS_DISTANCES)?,
+            times: numbers(unit, names::TARGETS_TIMES)?,
+            departure_time_of_day: count(unit, names::DEPARTURE_TIME_OF_DAY)?,
+            bus: text(unit, names::BUS_NAME)?,
+            expiration_time: count(unit, names::EXPIRATION_TIME)?,
+        });
+    }
+
+    let bus_job = match first(document, names::BUS_JOB) {
+        Some(unit) => Some(BusJob {
+            id: unit.id(),
+            kind: text(unit, "job_type")?,
+            company_bus: reference(unit, "company_bus"),
+            stages: array(unit, "stages")?
+                .into_iter()
+                .map(|id| {
+                    let stage = units
+                        .get(id)
+                        .copied()
+                        .ok_or_else(|| Error::MissingUnit { id: id.to_owned() })?;
+                    bus_stage(stage)
+                })
+                .collect::<Result<_, _>>()?,
+            stage_index: count(unit, "stage_idx")?,
+            passengers: count(unit, "passengers")?,
+        }),
+        None => None,
+    };
+
+    let car_job = match first(document, names::CAR_JOB) {
+        Some(unit) => Some(CarJob {
+            id: unit.id(),
+            job_type: text(unit, "job_type")?,
+            source_company: text(unit, "source_company")?,
+            target_company: text(unit, "target_company")?,
+            planned_distance_km: count(unit, "planned_distance")?,
+            urgency: count(unit, names::URGENCY)?,
+            time_lower_limit: count(unit, "time_lower_limit")?,
+            time_upper_limit: count(unit, "time_upper_limit")?,
+            cargo: reference(unit, "cargo"),
+            units_count: count(unit, names::UNITS_COUNT)?,
+            travelled_distance: count(unit, "travelled_distance")?,
+        }),
+        None => None,
+    };
+
+    let mut car_offers = Vec::new();
+    for unit in document.units_of_class(names::CAR_OFFER) {
+        car_offers.push(CarOffer {
+            id: unit.id(),
+            source: string(unit, "source")?,
+            target: string(unit, "target")?,
+            expiration_time: optional_count(unit, names::EXPIRATION_TIME)?,
+            urgency: optional_count(unit, names::URGENCY)?,
+            job_type: text(unit, "job_type")?,
+            shortest_distance_km: count(unit, "shortest_distance_km")?,
+            job: reference(unit, "job"),
+            cargo: reference(unit, "cargo"),
+            company_car: string(unit, "company_car")?,
+            units_count: count(unit, names::UNITS_COUNT)?,
+        });
+    }
+
+    let bus_job_log = first(document, names::BUS_JOB_LOG)
+        .map(job_log)
+        .transpose()?;
+    let car_job_log = first(document, names::CAR_JOB_LOG)
+        .map(job_log)
+        .transpose()?;
+
     Ok(Save {
         game,
         bank,
@@ -240,6 +346,13 @@ pub fn read<'a>(document: &'a Document<'_>, game: Game) -> Result<Save<'a>, Erro
         offence,
         oversize_offers,
         oversize_routes,
+        bus_stops,
+        bus_offers,
+        bus_job,
+        car_job,
+        car_offers,
+        bus_job_log,
+        car_job_log,
     })
 }
 
@@ -276,6 +389,33 @@ fn job<'a>(unit: &'a Unit<'_>) -> Result<Job<'a>, Error> {
         urgency: optional_count(unit, names::URGENCY)?,
         units_count: count(unit, names::UNITS_COUNT)?,
         fill_ratio: float(unit, names::FILL_RATIO)?,
+    })
+}
+
+fn bus_stage<'a>(unit: &'a Unit<'_>) -> Result<BusJobStage<'a>, Error> {
+    Ok(BusJobStage {
+        id: unit.id(),
+        source: text(unit, "source_bus_stop")?,
+        target: text(unit, "target_bus_stop")?,
+        planned_distance: count(unit, "planned_distance")?,
+        planned_departure_time: optional_count(unit, "planned_departure_time")?,
+        planned_arrival_time: optional_count(unit, "planned_arrival_time")?,
+        planned_stage_time: count(unit, "planned_stage_time")?,
+        planned_ferry_time: count(unit, "planned_ferry_time")?,
+        planned_entering_passengers: count(unit, "planned_entering_passenger_count")?,
+        planned_leaving_passengers: count(unit, "planned_leaving_passenger_count")?,
+        departure_time: optional_count(unit, "departure_time")?,
+        arrival_time: optional_count(unit, "arrival_time")?,
+        travelled_distance: count(unit, "travelled_distance")?,
+        satisfaction: float(unit, "satisfaction")?,
+    })
+}
+
+fn job_log(unit: &Unit<'_>) -> Result<JobLog, Error> {
+    Ok(JobLog {
+        version: count(unit, "version")?,
+        entries: count(unit, "entries")?,
+        cached_jobs: optional_count(unit, "cached_jobs_count")?,
     })
 }
 
@@ -409,6 +549,11 @@ mod tests {
         assert_eq!(player.trailers, ["trailer.one"]);
         assert_eq!(player.assigned_vehicles, Some("slot.one"));
         assert_eq!(player.current_job, Some("player_job.one"));
+        assert!(player.buses.is_empty());
+        assert!(player.cars.is_empty());
+        assert_eq!(player.current_bus_job, None);
+        assert_eq!(player.selected_bus_offer, None);
+        assert_eq!(player.current_car_job, None);
 
         let vehicle = save.current_vehicle().unwrap();
         assert_eq!(vehicle.id, "vehicle.one");

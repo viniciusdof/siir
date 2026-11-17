@@ -174,6 +174,11 @@ fn assert_case(case: &Case) {
     assert_eq!(save.used_trucks.len(), case.used, "{name}");
     assert_eq!(save.used_trucks[0].price, case.price, "{name}");
     assert!(save.offence.is_some(), "{name}");
+    assert!(save.bus_job.is_none(), "{name}");
+    assert!(save.car_job.is_none(), "{name}");
+    assert!(save.car_offers.is_empty(), "{name}");
+    assert_eq!(save.bus_job_log.as_ref().unwrap().entries, 0, "{name}");
+    assert_eq!(save.car_job_log.as_ref().unwrap().entries, 0, "{name}");
 
     let truck = save.current_vehicle().unwrap();
     assert_eq!(truck.id, case.truck_id, "{name}");
@@ -1200,4 +1205,225 @@ fn ets2_driver_skills_survive_reopen() {
             .skills,
         skills
     );
+}
+
+#[test]
+fn reads_bus_stops_and_line_offers() {
+    let bytes = fixture("ets2/saves/1/game.sii");
+    let file = siir::open(&bytes).unwrap();
+    let document = file.document().unwrap();
+    let save = read(&document, Game::Ets2).unwrap();
+
+    assert_eq!(save.bus_stops.len(), 322);
+    let stop = &save.bus_stops[0];
+    assert_eq!(stop.id, "bus_stop.city.tekirdag");
+    assert_eq!(stop.city, "tekirdag");
+    assert!(!stop.discovered);
+    assert_eq!(stop.offers.len(), 8);
+
+    assert_eq!(save.bus_offers.len(), 2326);
+    let offer = &save.bus_offers[0];
+    assert_eq!(offer.kind, "regular");
+    assert_eq!(offer.source, "bus_stop.city.tekirdag");
+    assert_eq!(offer.targets, ["city.thessaloniki", "city.larissa"]);
+    assert_eq!(offer.distances, [490, 135]);
+    assert_eq!(offer.times, [485, 145]);
+    assert_eq!(offer.departure_time_of_day, 250);
+    assert_eq!(offer.bus, "scania_touring_23_129h4_450_2");
+    assert_eq!(offer.expiration_time, 910);
+
+    let player = save.player.as_ref().unwrap();
+    assert!(player.buses.is_empty());
+    assert!(player.cars.is_empty());
+    assert_eq!(player.current_bus_job, None);
+    assert_eq!(player.selected_bus_offer, None);
+    assert_eq!(player.current_car_job, None);
+}
+
+#[test]
+fn ats_has_no_bus_data() {
+    let bytes = fixture("ats/saves/1/game.sii");
+    let file = siir::open(&bytes).unwrap();
+    let document = file.document().unwrap();
+    let save = read(&document, Game::Ats).unwrap();
+    assert!(save.bus_stops.is_empty());
+    assert!(save.bus_offers.is_empty());
+}
+
+#[test]
+fn discover_bus_stops_changes_only_the_stops() {
+    let bytes = fixture("ets2/saves/1/game.sii");
+    let file = siir::open(&bytes).unwrap();
+    let mut document = file.document().unwrap();
+    let missing = read(&document, Game::Ets2)
+        .unwrap()
+        .bus_stops
+        .iter()
+        .filter(|stop| !stop.discovered)
+        .count();
+
+    let old = written(&file, &document);
+    apply(&mut document, Game::Ets2, Command::DiscoverBusStops).unwrap();
+    let new = written(&file, &document);
+    let changed = changed_lines(&old, &new);
+    assert_eq!(changed.len(), missing);
+    for (old, new) in changed {
+        assert!(old.trim_start().starts_with("discovered: false"));
+        assert!(new.trim_start().starts_with("discovered: true"));
+    }
+
+    apply(&mut document, Game::Ets2, Command::DiscoverBusStops).unwrap();
+    assert_eq!(written(&file, &document), new);
+
+    let reopened = siir::open(new.as_bytes()).unwrap();
+    let reopened = reopened.document().unwrap();
+    let save = read(&reopened, Game::Ets2).unwrap();
+    assert_eq!(save.bus_stops.len(), 322);
+    assert!(save.bus_stops.iter().all(|stop| stop.discovered));
+}
+
+#[test]
+fn reads_a_bus_job() {
+    let bytes = fixture("ets2/saves/bus/game.sii");
+    let file = siir::open(&bytes).unwrap();
+    let document = file.document().unwrap();
+    let save = read(&document, Game::Ets2).unwrap();
+
+    let job = save.bus_job.as_ref().unwrap();
+    assert_eq!(job.kind, "regular");
+    assert_eq!(job.company_bus, None);
+    assert_eq!(job.stage_index, 0);
+    assert_eq!(job.passengers, 32);
+    assert_eq!(job.stages.len(), 2);
+    let stage = &job.stages[0];
+    assert_eq!(stage.source, "bus_stop.city.prague");
+    assert_eq!(stage.target, "bus_stop.city.nurnberg");
+    assert_eq!(stage.planned_distance, 256);
+    assert_eq!(stage.planned_departure_time, Some(2655));
+    assert_eq!(stage.planned_arrival_time, None);
+    assert_eq!(stage.planned_stage_time, 225);
+    assert_eq!(stage.planned_ferry_time, 0);
+    assert_eq!(stage.planned_entering_passengers, 32);
+    assert_eq!(stage.planned_leaving_passengers, 18);
+    assert_eq!(stage.departure_time, Some(2655));
+    assert_eq!(stage.arrival_time, None);
+    assert_eq!(stage.travelled_distance, 0);
+    assert_eq!(stage.satisfaction, -1.0);
+
+    let player = save.player.as_ref().unwrap();
+    assert_eq!(player.buses.len(), 2);
+    assert_eq!(player.current_bus_job, Some(job.id));
+    assert_eq!(save.bus_job_log.as_ref().unwrap().version, 0);
+    assert_eq!(save.bus_job_log.as_ref().unwrap().cached_jobs, None);
+}
+
+#[test]
+fn reads_car_offers_and_a_car_job() {
+    let bytes = fixture("ats/saves/car/game.sii");
+    let file = siir::open(&bytes).unwrap();
+    let document = file.document().unwrap();
+    let save = read(&document, Game::Ats).unwrap();
+
+    assert_eq!(save.car_offers.len(), 1000);
+    let empty = &save.car_offers[0];
+    assert_eq!(empty.source, "");
+    assert_eq!(empty.job, None);
+    assert_eq!(empty.cargo, None);
+    assert_eq!(empty.expiration_time, None);
+    assert_eq!(empty.urgency, None);
+
+    let offer = save
+        .car_offers
+        .iter()
+        .find(|offer| offer.job == Some("car_job.psmpl_0"))
+        .unwrap();
+    assert_eq!(offer.source, "cm_min_plnt.seattle");
+    assert_eq!(offer.target, "pt_trk_dlr.tacoma");
+    assert_eq!(offer.expiration_time, Some(1498));
+    assert_eq!(offer.urgency, Some(0));
+    assert_eq!(offer.job_type, "delivery");
+    assert_eq!(offer.shortest_distance_km, 50);
+    assert_eq!(offer.cargo, Some("car_cargo.prod_smpl"));
+    assert_eq!(offer.company_car, "ford_victoria_06_black");
+    assert_eq!(offer.units_count, 1);
+
+    let job = save.car_job.as_ref().unwrap();
+    assert_eq!(job.job_type, "delivery");
+    assert_eq!(job.source_company, "company.volatile.cm_min_plnt.seattle");
+    assert_eq!(
+        job.target_company,
+        "company.volatile.ftf_food_pln.bellingham"
+    );
+    assert_eq!(job.planned_distance_km, 181);
+    assert_eq!(job.urgency, 0);
+    assert_eq!(job.time_lower_limit, 700);
+    assert_eq!(job.time_upper_limit, 1100);
+    assert_eq!(job.cargo, Some("car_cargo.pdoc"));
+    assert_eq!(job.units_count, 1);
+    assert_eq!(job.travelled_distance, 0);
+
+    let player = save.player.as_ref().unwrap();
+    assert_eq!(player.cars.len(), 3);
+    assert_eq!(player.current_car_job, Some(job.id));
+    assert_eq!(save.car_job_log.as_ref().unwrap().version, 1);
+    assert_eq!(save.car_job_log.as_ref().unwrap().cached_jobs, Some(0));
+}
+
+#[test]
+fn sets_the_selected_bus_offer() {
+    let bytes = fixture("ets2/saves/bus/game.sii");
+    let file = siir::open(&bytes).unwrap();
+    let mut document = file.document().unwrap();
+    let offer = {
+        let save = read(&document, Game::Ets2).unwrap();
+        save.bus_offers[0].id.to_owned()
+    };
+
+    let old = written(&file, &document);
+    apply(
+        &mut document,
+        Game::Ets2,
+        Command::SetBusLineOffer(offer.clone()),
+    )
+    .unwrap();
+    let new = written(&file, &document);
+    let changed = changed_lines(&old, &new);
+    assert_eq!(changed.len(), 1);
+    assert!(
+        changed[0]
+            .0
+            .trim_start()
+            .starts_with("selected_bus_offer: null")
+    );
+    assert_eq!(
+        changed[0].1.trim_start(),
+        format!("selected_bus_offer: {offer}\n")
+    );
+
+    let reopened = siir::open(new.as_bytes()).unwrap();
+    let reopened = reopened.document().unwrap();
+    let save = read(&reopened, Game::Ets2).unwrap();
+    assert_eq!(
+        save.player.as_ref().unwrap().selected_bus_offer,
+        Some(offer.as_str())
+    );
+}
+
+#[test]
+fn truck_saves_have_owned_vehicles_and_no_side_job() {
+    let bytes = fixture("ets2/saves/truck/game.sii");
+    let file = siir::open(&bytes).unwrap();
+    let document = file.document().unwrap();
+    let save = read(&document, Game::Ets2).unwrap();
+    assert!(save.bus_job.is_none());
+    assert_eq!(save.player.as_ref().unwrap().buses.len(), 2);
+    assert_eq!(save.bus_stops.len(), 322);
+
+    let bytes = fixture("ats/saves/truck/game.sii");
+    let file = siir::open(&bytes).unwrap();
+    let document = file.document().unwrap();
+    let save = read(&document, Game::Ats).unwrap();
+    assert!(save.car_job.is_none());
+    assert_eq!(save.player.as_ref().unwrap().cars.len(), 3);
+    assert_eq!(save.car_offers.len(), 1000);
 }

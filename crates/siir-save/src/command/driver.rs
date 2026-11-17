@@ -2,10 +2,10 @@
 
 use siir::{Document, Unit, Value};
 
+use super::{first_id, push, tokens, values};
 use crate::Skills;
 use crate::error::Error;
 use crate::names;
-use crate::value::array;
 
 pub(super) fn set_skills(
     document: &mut Document<'_>,
@@ -34,8 +34,8 @@ pub(super) fn hire(document: &mut Document<'_>, id: &str, garage: &str) -> Resul
             })?
     };
 
-    let economy = id_of(document, names::ECONOMY)?;
-    let player = id_of(document, names::PLAYER)?;
+    let economy = first_id(document, names::ECONOMY)?;
+    let player = first_id(document, names::PLAYER)?;
     let pool = values(unit_of(document, &economy)?, names::DRIVER_POOL)?;
     let dismissed = values(unit_of(document, &player)?, names::DISMISSED_DRIVERS)?;
     let in_pool = pool.iter().any(|value| value == id);
@@ -83,7 +83,7 @@ pub(super) fn hire(document: &mut Document<'_>, id: &str, garage: &str) -> Resul
 
 pub(super) fn fire(document: &mut Document<'_>, id: &str) -> Result<(), Error> {
     super::check(document, id, names::DRIVER_AI)?;
-    let player = id_of(document, names::PLAYER)?;
+    let player = first_id(document, names::PLAYER)?;
     let index = {
         let unit = unit_of(document, &player)?;
         let drivers = values(unit, names::DRIVERS)?;
@@ -132,7 +132,7 @@ pub(super) fn fire(document: &mut Document<'_>, id: &str) -> Result<(), Error> {
         }
     }
 
-    let economy = id_of(document, names::ECONOMY)?;
+    let economy = first_id(document, names::ECONOMY)?;
     let mut pool = values(unit_of(document, &economy)?, names::DRIVER_POOL)?;
     pool.push(id.to_owned());
     rewrite(document, &economy, names::ECONOMY, names::DRIVER_POOL, pool)?;
@@ -143,7 +143,7 @@ pub(super) fn fire(document: &mut Document<'_>, id: &str) -> Result<(), Error> {
 pub(super) fn set_truck(document: &mut Document<'_>, id: &str, truck: &str) -> Result<(), Error> {
     super::check(document, id, names::DRIVER_AI)?;
     super::check(document, truck, names::VEHICLE)?;
-    let player = id_of(document, names::PLAYER)?;
+    let player = first_id(document, names::PLAYER)?;
     if !values(unit_of(document, &player)?, names::DRIVERS)?
         .iter()
         .any(|value| value == id)
@@ -183,23 +183,6 @@ pub(super) fn set_truck(document: &mut Document<'_>, id: &str, truck: &str) -> R
     Ok(())
 }
 
-fn values(unit: &Unit<'_>, name: &str) -> Result<Vec<String>, Error> {
-    match unit.get(name) {
-        None => Ok(Vec::new()),
-        Some(_) => Ok(array(unit, name)?.into_iter().map(str::to_owned).collect()),
-    }
-}
-
-fn tokens(values: Vec<String>) -> Vec<Value> {
-    values.into_iter().map(Value::Token).collect()
-}
-
-fn push(unit: &mut Unit<'_>, name: &str, value: &str) -> Result<(), Error> {
-    let mut list = values(unit, name)?;
-    list.push(value.to_owned());
-    super::rewrite(unit, name, tokens(list))
-}
-
 fn rewrite(
     document: &mut Document<'_>,
     id: &str,
@@ -208,16 +191,6 @@ fn rewrite(
     values: Vec<String>,
 ) -> Result<(), Error> {
     super::rewrite(super::edit(document, id, class)?, name, tokens(values))
-}
-
-fn id_of(document: &Document<'_>, class: &str) -> Result<String, Error> {
-    document
-        .units_of_class(class)
-        .next()
-        .map(|unit| unit.id().to_owned())
-        .ok_or_else(|| Error::MissingUnit {
-            id: class.to_owned(),
-        })
 }
 
 fn unit_of<'a, 'd>(document: &'a Document<'d>, id: &str) -> Result<&'a Unit<'d>, Error> {

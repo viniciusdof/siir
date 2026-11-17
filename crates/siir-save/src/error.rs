@@ -141,6 +141,13 @@ pub enum Error {
         /// Vehicle unit id.
         truck: String,
     },
+    /// A vehicle does not carry the plate type the command needs.
+    InvalidVehicleType {
+        /// Vehicle unit id.
+        id: String,
+        /// Expected `license_plate_type`.
+        expected: &'static str,
+    },
     /// The document rejected the edit.
     Document(siir::Error),
     /// A file operation failed.
@@ -246,6 +253,9 @@ impl fmt::Display for Error {
                     f,
                     "driver {driver:?} and truck {truck:?} are not in the same garage"
                 )
+            }
+            Self::InvalidVehicleType { id, expected } => {
+                write!(f, "vehicle {id:?} is not a {expected}")
             }
             Self::Document(error) => error.fmt(f),
             Self::Io(error) => error.fmt(f),

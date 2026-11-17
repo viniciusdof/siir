@@ -51,6 +51,20 @@ pub struct Save<'a> {
     pub oversize_offers: Vec<OversizeOffer<'a>>,
     /// Every oversize route and the offers it holds.
     pub oversize_routes: Vec<OversizeRoute<'a>>,
+    /// Every bus stop.
+    pub bus_stops: Vec<BusStop<'a>>,
+    /// Every bus line offer.
+    pub bus_offers: Vec<BusLineOffer<'a>>,
+    /// The player's current bus job, when there is one.
+    pub bus_job: Option<BusJob<'a>>,
+    /// The player's current car job, when there is one.
+    pub car_job: Option<CarJob<'a>>,
+    /// Every car market offer.
+    pub car_offers: Vec<CarOffer<'a>>,
+    /// The bus job log, when the save has one.
+    pub bus_job_log: Option<JobLog>,
+    /// The car job log, when the save has one.
+    pub car_job_log: Option<JobLog>,
 }
 
 impl<'a> Save<'a> {
@@ -278,6 +292,150 @@ pub struct OversizeRoute<'a> {
     pub offers: Vec<&'a str>,
 }
 
+/// One bus stop.
+pub struct BusStop<'a> {
+    /// Unit id, `bus_stop.city.<city>`.
+    pub id: &'a str,
+    /// City the stop sits in.
+    pub city: &'a str,
+    /// Whether the player has discovered the stop.
+    pub discovered: bool,
+    /// Line offer unit ids at this stop.
+    pub offers: Vec<&'a str>,
+}
+
+/// One bus line offer.
+pub struct BusLineOffer<'a> {
+    /// Unit id.
+    pub id: &'a str,
+    /// Line type the game stores, for example `regular`.
+    pub kind: &'a str,
+    /// Source bus stop unit id.
+    pub source: &'a str,
+    /// Target city names, unquoted.
+    pub targets: Vec<&'a str>,
+    /// Distance to each target in kilometers.
+    pub distances: Vec<u64>,
+    /// Planned time to each target in game minutes.
+    pub times: Vec<u64>,
+    /// Departure time of day in game minutes.
+    pub departure_time_of_day: u64,
+    /// Bus model token the offer requires.
+    pub bus: &'a str,
+    /// Game time the offer expires.
+    pub expiration_time: u64,
+}
+
+/// The player's current bus job.
+pub struct BusJob<'a> {
+    /// Unit id.
+    pub id: &'a str,
+    /// Job type the game stores, for example `regular`.
+    pub kind: &'a str,
+    /// Bus company, absent for a public line.
+    pub company_bus: Option<&'a str>,
+    /// Stages in order.
+    pub stages: Vec<BusJobStage<'a>>,
+    /// Index of the current stage.
+    pub stage_index: u64,
+    /// Number of passengers aboard.
+    pub passengers: u64,
+}
+
+/// One stage of a bus job.
+pub struct BusJobStage<'a> {
+    /// Unit id.
+    pub id: &'a str,
+    /// Source bus stop unit id.
+    pub source: &'a str,
+    /// Target bus stop unit id.
+    pub target: &'a str,
+    /// Planned road distance in kilometers.
+    pub planned_distance: u64,
+    /// Planned departure time, absent before the stage starts.
+    pub planned_departure_time: Option<u64>,
+    /// Planned arrival time, absent before it is known.
+    pub planned_arrival_time: Option<u64>,
+    /// Planned stage time in game minutes.
+    pub planned_stage_time: u64,
+    /// Planned ferry time in game minutes.
+    pub planned_ferry_time: u64,
+    /// Passengers expected to board.
+    pub planned_entering_passengers: u64,
+    /// Passengers expected to leave.
+    pub planned_leaving_passengers: u64,
+    /// Actual departure time, absent before the stage starts.
+    pub departure_time: Option<u64>,
+    /// Actual arrival time, absent before the stage ends.
+    pub arrival_time: Option<u64>,
+    /// Distance travelled so far in kilometers.
+    pub travelled_distance: u64,
+    /// Satisfaction the game stores, `-1` while pending.
+    pub satisfaction: f32,
+}
+
+/// One car market offer.
+pub struct CarOffer<'a> {
+    /// Unit id.
+    pub id: &'a str,
+    /// Source company token.
+    pub source: &'a str,
+    /// Target company token.
+    pub target: &'a str,
+    /// Game time the offer expires, absent for an empty slot.
+    pub expiration_time: Option<u64>,
+    /// Urgency class, absent for an empty slot.
+    pub urgency: Option<u64>,
+    /// Job type the game stores, for example `delivery`.
+    pub job_type: &'a str,
+    /// Shortest road distance in kilometers.
+    pub shortest_distance_km: u64,
+    /// Car job definition, absent for an empty slot.
+    pub job: Option<&'a str>,
+    /// Cargo definition, absent for an empty slot.
+    pub cargo: Option<&'a str>,
+    /// Car model token the offer requires.
+    pub company_car: &'a str,
+    /// Number of cars offered.
+    pub units_count: u64,
+}
+
+/// The player's current car job.
+pub struct CarJob<'a> {
+    /// Unit id.
+    pub id: &'a str,
+    /// Job type the game stores.
+    pub job_type: &'a str,
+    /// Source company unit id.
+    pub source_company: &'a str,
+    /// Target company unit id.
+    pub target_company: &'a str,
+    /// Planned road distance in kilometers.
+    pub planned_distance_km: u64,
+    /// Urgency class the game stores.
+    pub urgency: u64,
+    /// Earliest delivery time.
+    pub time_lower_limit: u64,
+    /// Latest delivery time.
+    pub time_upper_limit: u64,
+    /// Cargo definition.
+    pub cargo: Option<&'a str>,
+    /// Number of cars hauled.
+    pub units_count: u64,
+    /// Distance travelled so far in kilometers.
+    pub travelled_distance: u64,
+}
+
+/// A bus or car job log.
+pub struct JobLog {
+    /// Log structure version.
+    pub version: u64,
+    /// Number of entries kept.
+    pub entries: u64,
+    /// Cached jobs the game keeps for the car log.
+    pub cached_jobs: Option<u64>,
+}
+
 /// The profile's bank.
 pub struct Bank {
     /// Current account balance.
@@ -311,8 +469,18 @@ pub struct Player<'a> {
     pub trucks: Vec<&'a str>,
     /// Owned trailer unit ids.
     pub trailers: Vec<&'a str>,
+    /// Owned bus unit ids.
+    pub buses: Vec<&'a str>,
+    /// Owned car unit ids.
+    pub cars: Vec<&'a str>,
     /// Assigned `player_vehicles` slot id, when there is one.
     pub assigned_vehicles: Option<&'a str>,
     /// The player's current `player_job` unit id, when there is one.
     pub current_job: Option<&'a str>,
+    /// The player's current `player_bus_job` unit id, when there is one.
+    pub current_bus_job: Option<&'a str>,
+    /// The selected bus line offer unit id, when there is one.
+    pub selected_bus_offer: Option<&'a str>,
+    /// The player's current `player_car_job` unit id, when there is one.
+    pub current_car_job: Option<&'a str>,
 }

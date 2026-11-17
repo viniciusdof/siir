@@ -45,6 +45,15 @@ pub(crate) fn optional_count(unit: &Unit<'_>, name: &str) -> Result<Option<u64>,
     }
 }
 
+pub(crate) fn boolean(unit: &Unit<'_>, name: &str) -> Result<bool, Error> {
+    let value = text(unit, name)?;
+    match value {
+        "true" => Ok(true),
+        "false" => Ok(false),
+        _ => Err(Error::invalid(unit.class(), name, value)),
+    }
+}
+
 /// An implicit-array length the unit can actually hold.
 pub(crate) fn length(unit: &Unit<'_>, name: &str) -> Result<usize, Error> {
     let count = count(unit, name)? as usize;
@@ -76,6 +85,14 @@ pub(crate) fn array<'a>(unit: &'a Unit<'_>, name: &str) -> Result<Vec<&'a str>, 
         values.push(value);
     }
     Ok(values)
+}
+
+/// An implicit array, empty when the save has no such attribute.
+pub(crate) fn optional_array<'a>(unit: &'a Unit<'_>, name: &str) -> Result<Vec<&'a str>, Error> {
+    match unit.get(name) {
+        None => Ok(Vec::new()),
+        Some(_) => array(unit, name),
+    }
 }
 
 pub(crate) fn unquote(value: &str) -> &str {

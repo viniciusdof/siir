@@ -55,7 +55,7 @@ fn finds_profiles_saves_and_info() {
     assert_eq!(profiles, vec![fixtures().join("ets2")]);
 
     let saves = saves(&fixtures().join("ets2")).unwrap();
-    assert_eq!(saves.len(), 3);
+    assert_eq!(saves.len(), 5);
     assert!(saves.contains(&fixtures().join("ets2/saves/1")));
 
     let info = info(&fixtures().join("ets2/saves/1")).unwrap();
