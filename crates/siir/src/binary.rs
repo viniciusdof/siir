@@ -47,7 +47,7 @@ const T_ID2: u32 = 59;
 const T_ARR_IDC: u32 = 60;
 const T_ID3: u32 = 61;
 const T_ARR_IDE: u32 = 62;
-const T_ARR_VEC2I: u32 = 65;
+const T_VEC2I: u32 = 65;
 
 const CHAR_TABLE: &[u8] = b"0123456789abcdefghijklmnopqrstuvwxyz_";
 
@@ -290,7 +290,7 @@ fn decode_field(
         T_ARR_BOOL => array(cursor, |c| Ok(c.boolean()?.to_string()))?,
         T_ID | T_ID2 | T_ID3 => vec![read_id(cursor)?],
         T_ARR_IDA | T_ARR_IDC | T_ARR_IDE => array(cursor, read_id)?,
-        T_ARR_VEC2I => array(cursor, vec2i)?,
+        T_VEC2I => vec![vec2i(cursor)?],
         _ => return Err(Error::unknown_type(kind, cursor.pos)),
     };
     Ok(values)
@@ -355,7 +355,6 @@ fn is_array(kind: u32) -> bool {
             | T_ARR_IDA
             | T_ARR_IDC
             | T_ARR_IDE
-            | T_ARR_VEC2I
     )
 }
 
@@ -753,7 +752,7 @@ mod tests {
     }
 
     #[test]
-    fn int_pair_array_is_indexed() {
+    fn int_pair_is_written_as_a_vector() {
         let mut data = Vec::new();
         data.extend_from_slice(b"BSII");
         push_u32(&mut data, 3);
@@ -761,24 +760,18 @@ mod tests {
         data.push(1);
         push_u32(&mut data, 1);
         push_str(&mut data, "u");
-        push_u32(&mut data, T_ARR_VEC2I);
-        push_str(&mut data, "pairs");
+        push_u32(&mut data, T_VEC2I);
+        push_str(&mut data, "size");
         push_u32(&mut data, 0);
         push_u32(&mut data, 1);
         data.push(0);
-        push_u32(&mut data, 2);
-        push_u32(&mut data, 1);
-        data.extend_from_slice(&2i32.to_le_bytes());
-        push_u32(&mut data, 3);
-        data.extend_from_slice(&4i32.to_le_bytes());
+        data.extend_from_slice(&1024i32.to_le_bytes());
+        data.extend_from_slice(&1024i32.to_le_bytes());
         push_u32(&mut data, 0);
         data.push(0);
 
         let text = decode(&data).unwrap();
-        assert!(
-            text.contains(" pairs: 2\n pairs[0]: (1, 2)\n pairs[1]: (3, 4)\n"),
-            "{text}"
-        );
+        assert!(text.contains(" size: (1024, 1024)\n"), "{text}");
     }
 
     #[test]

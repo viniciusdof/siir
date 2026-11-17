@@ -1,0 +1,6 @@
+SiiNunit
+{
+ui::text_template : example.a5c.sub {
+ text: "%0"
+}
+}

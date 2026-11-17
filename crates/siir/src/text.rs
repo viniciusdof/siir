@@ -100,6 +100,19 @@ impl<'a> Parser<'a> {
         Ok(&self.source[start..self.pos])
     }
 
+    fn class(&mut self) -> Result<&'a str, Error> {
+        let start = self.pos;
+        loop {
+            self.word("unit class")?;
+            if self.source[self.pos..].starts_with("::") {
+                self.pos += 2;
+            } else {
+                break;
+            }
+        }
+        Ok(&self.source[start..self.pos])
+    }
+
     fn token(&mut self) -> Result<&'a str, Error> {
         let start = self.pos;
         while self
@@ -116,7 +129,7 @@ impl<'a> Parser<'a> {
 
     fn unit(&mut self) -> Result<Unit<'a>, Error> {
         let start = self.pos;
-        let class = self.word("unit class")?;
+        let class = self.class()?;
         self.skip_trivia()?;
         self.expect(b':', "`:`")?;
         self.skip_trivia()?;
@@ -300,6 +313,14 @@ mod tests {
             parsed += 1;
         }
         assert!(parsed > 0);
+    }
+
+    #[test]
+    fn namespaced_class_round_trips() {
+        let source = include_str!("../testdata/namespaced.sii");
+        let document = parse(source).unwrap();
+        assert_eq!(document.units[0].class(), "ui::text_template");
+        assert_eq!(document.to_text(), source);
     }
 
     #[test]
