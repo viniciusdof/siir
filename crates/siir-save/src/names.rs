@@ -125,6 +125,7 @@ pub(crate) const BADGE: &str = "badge";
 pub(crate) const BADGE_SUFFIX: &str = "_badge";
 
 // Profile files and directories.
+pub(crate) const PROFILES_PREFIX: &str = "profiles";
 pub(crate) const PROFILE_FILE: &str = "profile.sii";
 pub(crate) const INFO_FILE: &str = "info.sii";
 pub(crate) const GAME_FILE: &str = "game.sii";

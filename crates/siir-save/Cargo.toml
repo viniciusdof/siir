@@ -8,7 +8,9 @@ repository = "https://codeberg.org/viniciusdof/siir"
 publish = false
 
 [dependencies]
+dirs = "7.0.0"
 siir = { path = "../siir", version = "0.1.0" }
+steamlocate = "2.1.1"
 zip = { version = "9.6.0", default-features = false, features = ["deflate-flate2"] }
 
 [dev-dependencies]

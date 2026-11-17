@@ -58,6 +58,92 @@ pub fn find_profiles(root: &Path) -> Result<Vec<PathBuf>, Error> {
     Ok(profiles)
 }
 
+/// Existing game folders with profiles, from the OS, Steam Cloud, and Proton.
+pub fn game_dirs(game: Game) -> Vec<PathBuf> {
+    let mut dirs = Vec::new();
+    if let Some(local) = local_game_dir(game) {
+        dirs.push(local);
+    }
+    for steam in steamlocate::locate_all().unwrap_or_default() {
+        if let Ok(users) = fs::read_dir(steam.path().join("userdata")) {
+            for user in users.flatten() {
+                dirs.push(user.path().join(app_id(game)).join("remote"));
+            }
+        }
+        if let Ok(libraries) = steam.library_paths() {
+            for library in libraries {
+                dirs.extend(proton_dirs(&library, game));
+            }
+        }
+    }
+    dirs.retain(|dir| dir.is_dir());
+    dirs.sort();
+    dirs.dedup();
+    dirs
+}
+
+/// Profiles under [`game_dirs`] and each game folder in `extra`, sorted and unique.
+pub fn find_all(game: Game, extra: &[PathBuf]) -> Vec<PathBuf> {
+    let mut profiles = Vec::new();
+    for root in game_dirs(game).iter().chain(extra) {
+        let Ok(entries) = fs::read_dir(root) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir()
+                && entry
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with(names::PROFILES_PREFIX)
+                && let Ok(mut found) = find_profiles(&path)
+            {
+                profiles.append(&mut found);
+            }
+        }
+    }
+    profiles.sort();
+    profiles.dedup();
+    profiles
+}
+
+fn local_game_dir(game: Game) -> Option<PathBuf> {
+    #[cfg(windows)]
+    let base = dirs::document_dir();
+    #[cfg(not(windows))]
+    let base = dirs::data_dir();
+    base.map(|base| base.join(folder(game)))
+}
+
+fn proton_dirs(library: &Path, game: Game) -> Vec<PathBuf> {
+    let users = library
+        .join("steamapps/compatdata")
+        .join(app_id(game))
+        .join("pfx/drive_c/users");
+    let Ok(entries) = fs::read_dir(users) else {
+        return Vec::new();
+    };
+    entries
+        .flatten()
+        .map(|user| user.path().join("Documents").join(folder(game)))
+        .filter(|dir| dir.is_dir())
+        .collect()
+}
+
+fn folder(game: Game) -> &'static str {
+    match game {
+        Game::Ets2 => "Euro Truck Simulator 2",
+        Game::Ats => "American Truck Simulator",
+    }
+}
+
+fn app_id(game: Game) -> &'static str {
+    match game {
+        Game::Ets2 => "227300",
+        Game::Ats => "270880",
+    }
+}
+
 /// Saves inside one profile.
 pub fn saves(profile: &Path) -> Result<Vec<PathBuf>, Error> {
     let mut saves = Vec::new();
@@ -307,4 +393,21 @@ fn walk(root: &Path) -> Result<Vec<Entry>, Error> {
 
 fn profile_dir_name(name: &str) -> String {
     name.bytes().map(|byte| format!("{byte:02X}")).collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn proton_dirs_find_the_prefix_documents_folder() {
+        let root = std::env::temp_dir().join(format!("siir-proton-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        let documents = root.join(
+            "steamapps/compatdata/227300/pfx/drive_c/users/steamuser/Documents/Euro Truck Simulator 2",
+        );
+        fs::create_dir_all(&documents).unwrap();
+        assert_eq!(proton_dirs(&root, Game::Ets2), vec![documents]);
+        fs::remove_dir_all(&root).unwrap();
+    }
 }

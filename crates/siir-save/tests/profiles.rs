@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 
 use siir_save::Game;
 use siir_save::profiles::{
-    backup, clone_profile, copy_settings, find_profiles, info, restore, saves,
+    backup, clone_profile, copy_settings, find_all, find_profiles, game_dirs, info, restore, saves,
 };
 use zip::write::SimpleFileOptions;
 
@@ -63,6 +63,34 @@ fn finds_profiles_saves_and_info() {
     assert_eq!(info.version, 105);
     assert_eq!(info.info_version, 1);
     assert_eq!(info.dependencies.len(), 106);
+}
+
+#[test]
+fn find_all_scans_every_profiles_folder_of_a_game_folder() {
+    let temp = temp("find-all");
+    let game = temp.join("game");
+    let profile = fs::read(fixtures().join("ets2/profile.sii")).unwrap();
+    for name in ["profiles", "profiles.bak", "other"] {
+        fs::create_dir_all(game.join(name).join("abc")).unwrap();
+        fs::write(game.join(name).join("abc/profile.sii"), &profile).unwrap();
+    }
+
+    let found = find_all(Game::Ets2, std::slice::from_ref(&game));
+    assert!(found.contains(&game.join("profiles/abc")));
+    assert!(found.contains(&game.join("profiles.bak/abc")));
+    assert!(!found.contains(&game.join("other/abc")));
+
+    let _ = fs::remove_dir_all(&temp);
+}
+
+#[test]
+fn game_dirs_are_existing_sorted_and_unique() {
+    let dirs = game_dirs(Game::Ets2);
+    assert!(dirs.iter().all(|dir| dir.is_dir()));
+    let mut sorted = dirs.clone();
+    sorted.sort();
+    sorted.dedup();
+    assert_eq!(dirs, sorted);
 }
 
 #[test]
