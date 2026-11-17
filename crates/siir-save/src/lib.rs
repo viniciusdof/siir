@@ -1,6 +1,7 @@
 //! Typed read model and edits for SCS save documents.
 //!
-//! [`read`] borrows the document and [`apply`] edits it in place.
+//! [`read`] borrows the document, [`apply`] edits it in place, and [`Session`]
+//! owns one file for a front end.
 
 use std::collections::HashMap;
 
@@ -18,6 +19,7 @@ mod model;
 mod names;
 mod plate;
 pub mod profiles;
+mod session;
 mod value;
 
 pub use accessory::{export_accessories, import_accessories};
@@ -30,6 +32,7 @@ pub use model::{
     Trailer, UsedAssortment, UsedTruck, Vehicle,
 };
 pub use plate::LicensePlate;
+pub use session::Session;
 
 use value::{
     array, boolean, count, float, integer, optional_array, optional_count, reference, string, text,
