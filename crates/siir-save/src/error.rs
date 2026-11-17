@@ -172,6 +172,8 @@ pub enum Error {
     },
     /// `cams.txt` has no parseable placement.
     InvalidCamera,
+    /// The committed catalog snapshot is invalid.
+    Catalog(String),
 }
 
 impl Error {
@@ -268,6 +270,7 @@ impl fmt::Display for Error {
             }
             Self::MissingConfig { key } => write!(f, "config setting {key:?} is missing"),
             Self::InvalidCamera => write!(f, "cams.txt has no parseable placement"),
+            Self::Catalog(reason) => write!(f, "invalid catalog snapshot: {reason}"),
         }
     }
 }

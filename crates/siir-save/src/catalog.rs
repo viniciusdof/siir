@@ -10,6 +10,8 @@ use crate::Game;
 use crate::error::Error;
 use crate::value::unquote;
 
+const SNAPSHOT_FORMAT: u32 = 1;
+
 /// Truck models, cargoes, companies, and trailer definitions read from `def/`.
 #[derive(Debug)]
 pub struct Catalog {
@@ -20,6 +22,15 @@ pub struct Catalog {
 }
 
 impl Catalog {
+    /// Loads the committed snapshot for `game`.
+    pub fn load(game: Game) -> Result<Self, Error> {
+        let source = match game {
+            Game::Ets2 => include_str!("../data/ets2.json"),
+            Game::Ats => include_str!("../data/ats.json"),
+        };
+        parse(source, game)
+    }
+
     /// Reads every truck under `def_dir/vehicle/truck`, every cargo under
     /// `def_dir/cargo`, every company under `def_dir/company`, and every trailer
     /// definition under `def_dir/vehicle/trailer_defs`, skipping files that do
@@ -92,6 +103,25 @@ impl Catalog {
     pub fn trailers(&self) -> &[TrailerDefinition] {
         &self.trailers
     }
+}
+
+fn parse(source: &str, game: Game) -> Result<Catalog, Error> {
+    let name = match game {
+        Game::Ets2 => "ets2",
+        Game::Ats => "ats",
+    };
+    let snapshot: Snapshot =
+        serde_json::from_str(source).map_err(|error| Error::Catalog(error.to_string()))?;
+    if snapshot.format != SNAPSHOT_FORMAT {
+        return Err(Error::Catalog(format!(
+            "unsupported format {}",
+            snapshot.format
+        )));
+    }
+    if snapshot.game != name {
+        return Err(Error::Catalog(format!("snapshot is for {}", snapshot.game)));
+    }
+    Ok(snapshot.into())
 }
 
 /// One `def/vehicle/truck/<brand>.<model>` folder.
@@ -193,6 +223,178 @@ pub struct TrailerDefinition {
     pub axles: u64,
     /// Trailer length in metres.
     pub length: f32,
+}
+
+#[derive(serde::Deserialize)]
+struct Snapshot {
+    format: u32,
+    game: String,
+    trucks: Vec<TruckData>,
+    cargo: Vec<CargoData>,
+    companies: Vec<CompanyData>,
+    trailers: Vec<TrailerData>,
+}
+
+#[derive(serde::Deserialize)]
+struct TruckData {
+    brand: String,
+    model: String,
+    engines: Vec<EngineData>,
+    transmissions: Vec<TransmissionData>,
+    cabins: Vec<PartData>,
+    chassis: Vec<PartData>,
+    paint_jobs: Vec<PartData>,
+}
+
+#[derive(serde::Deserialize)]
+struct EngineData {
+    name: String,
+    power_hp: u32,
+    torque_nm: u32,
+    path: String,
+}
+
+#[derive(serde::Deserialize)]
+struct TransmissionData {
+    name: String,
+    ratios: Vec<f32>,
+    retarder: bool,
+    path: String,
+}
+
+#[derive(serde::Deserialize)]
+struct PartData {
+    name: String,
+    path: String,
+}
+
+#[derive(serde::Deserialize)]
+struct CargoData {
+    id: String,
+    name: String,
+    mass: f32,
+    volume: f32,
+    reward_per_km: f32,
+    body_types: Vec<String>,
+}
+
+#[derive(serde::Deserialize)]
+struct CompanyData {
+    id: String,
+    name: String,
+}
+
+#[derive(serde::Deserialize)]
+struct TrailerData {
+    id: String,
+    body_type: String,
+    chain_type: String,
+    volume: f32,
+    gross_weight_limit: u64,
+    chassis_mass: u64,
+    axles: u64,
+    length: f32,
+}
+
+impl From<Snapshot> for Catalog {
+    fn from(snapshot: Snapshot) -> Self {
+        Self {
+            trucks: snapshot.trucks.into_iter().map(TruckModel::from).collect(),
+            cargo: snapshot.cargo.into_iter().map(Cargo::from).collect(),
+            companies: snapshot.companies.into_iter().map(Company::from).collect(),
+            trailers: snapshot
+                .trailers
+                .into_iter()
+                .map(TrailerDefinition::from)
+                .collect(),
+        }
+    }
+}
+
+impl From<TruckData> for TruckModel {
+    fn from(truck: TruckData) -> Self {
+        Self {
+            brand: truck.brand,
+            model: truck.model,
+            engines: truck.engines.into_iter().map(Engine::from).collect(),
+            transmissions: truck
+                .transmissions
+                .into_iter()
+                .map(Transmission::from)
+                .collect(),
+            cabins: truck.cabins.into_iter().map(Part::from).collect(),
+            chassis: truck.chassis.into_iter().map(Part::from).collect(),
+            paint_jobs: truck.paint_jobs.into_iter().map(Part::from).collect(),
+        }
+    }
+}
+
+impl From<EngineData> for Engine {
+    fn from(engine: EngineData) -> Self {
+        Self {
+            name: engine.name,
+            power_hp: engine.power_hp,
+            torque_nm: engine.torque_nm,
+            path: engine.path,
+        }
+    }
+}
+
+impl From<TransmissionData> for Transmission {
+    fn from(transmission: TransmissionData) -> Self {
+        Self {
+            name: transmission.name,
+            ratios: transmission.ratios,
+            retarder: transmission.retarder,
+            path: transmission.path,
+        }
+    }
+}
+
+impl From<PartData> for Part {
+    fn from(part: PartData) -> Self {
+        Self {
+            name: part.name,
+            path: part.path,
+        }
+    }
+}
+
+impl From<CargoData> for Cargo {
+    fn from(cargo: CargoData) -> Self {
+        Self {
+            id: cargo.id,
+            name: cargo.name,
+            mass: cargo.mass,
+            volume: cargo.volume,
+            reward_per_km: cargo.reward_per_km,
+            body_types: cargo.body_types,
+        }
+    }
+}
+
+impl From<CompanyData> for Company {
+    fn from(company: CompanyData) -> Self {
+        Self {
+            id: company.id,
+            name: company.name,
+        }
+    }
+}
+
+impl From<TrailerData> for TrailerDefinition {
+    fn from(trailer: TrailerData) -> Self {
+        Self {
+            id: trailer.id,
+            body_type: trailer.body_type,
+            chain_type: trailer.chain_type,
+            volume: trailer.volume,
+            gross_weight_limit: trailer.gross_weight_limit,
+            chassis_mass: trailer.chassis_mass,
+            axles: trailer.axles,
+            length: trailer.length,
+        }
+    }
 }
 
 fn directories(root: &Path) -> Result<Vec<PathBuf>, Error> {
@@ -340,7 +542,7 @@ fn trailer_definition(unit: &Unit<'_>, _: &str) -> Option<TrailerDefinition> {
         gross_weight_limit: unquote(unit.get("gross_trailer_weight_limit")?)
             .parse()
             .ok()?,
-        chassis_mass: unquote(unit.get("chassis_mass")?).parse().ok()?,
+        chassis_mass: number(unit, "chassis_mass")?.round() as u64,
         axles: unquote(unit.get("axles")?).parse().ok()?,
         length: number(unit, "length")?,
     })
@@ -360,4 +562,27 @@ fn strings(unit: &Unit<'_>, name: &str) -> Vec<String> {
         .filter(|(attribute, index, _)| *attribute == name && *index == Index::Unspecified)
         .map(|(_, _, value)| unquote(value).to_owned())
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn snapshot(format: u32, game: &str) -> String {
+        format!(
+            r#"{{"format":{format},"game":"{game}","trucks":[],"cargo":[],"companies":[],"trailers":[]}}"#
+        )
+    }
+
+    #[test]
+    fn rejects_another_format() {
+        let error = parse(&snapshot(9, "ets2"), Game::Ets2).unwrap_err();
+        assert!(error.to_string().contains("unsupported format 9"));
+    }
+
+    #[test]
+    fn rejects_another_game() {
+        let error = parse(&snapshot(1, "ats"), Game::Ets2).unwrap_err();
+        assert!(error.to_string().contains("snapshot is for ats"));
+    }
 }

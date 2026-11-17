@@ -75,7 +75,7 @@ fn reads_trucks_parts_and_transmissions() {
     assert_eq!(trailer.chain_type, "single");
     assert_eq!(trailer.volume, 87.0);
     assert_eq!(trailer.gross_weight_limit, 35_000);
-    assert_eq!(trailer.chassis_mass, 6460);
+    assert_eq!(trailer.chassis_mass, 6461);
     assert_eq!(trailer.axles, 3);
     assert!((trailer.length - 13.7).abs() < 0.001);
 }

@@ -4,6 +4,8 @@ use std::fs;
 use std::path::Path;
 
 use serde_json::Value;
+use siir_save::Game;
+use siir_save::catalog::Catalog;
 
 fn snapshot(game: &str) -> Value {
     let path = Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -19,10 +21,13 @@ fn assert_snapshot(game: &str, name: &str) {
     let data = snapshot(game);
     assert_eq!(data["format"], 1, "{name}");
     assert_eq!(data["game"], game, "{name}");
-    let trucks = data["trucks"].as_array().unwrap_or_else(|| {
-        panic!("{name}: trucks is not an array");
-    });
-    assert!(!trucks.is_empty(), "{name}: no trucks");
+    for section in ["trucks", "cargo", "companies", "trailers"] {
+        let items = data[section].as_array().unwrap_or_else(|| {
+            panic!("{name}: {section} is not an array");
+        });
+        assert!(!items.is_empty(), "{name}: no {section}");
+    }
+    let trucks = data["trucks"].as_array().unwrap();
     assert!(
         trucks.iter().any(|truck| {
             truck["engines"]
@@ -47,6 +52,104 @@ fn assert_snapshot(game: &str, name: &str) {
     }
 }
 
+fn assert_load(game: Game, name: &str) {
+    let data = snapshot(name);
+    let catalog = Catalog::load(game).unwrap_or_else(|error| panic!("{name}: {error}"));
+    for (section, len) in [
+        ("trucks", catalog.trucks().len()),
+        ("cargo", catalog.cargo().len()),
+        ("companies", catalog.companies().len()),
+        ("trailers", catalog.trailers().len()),
+    ] {
+        assert!(len > 0, "{name}: no {section}");
+        assert_eq!(
+            len,
+            data[section].as_array().unwrap().len(),
+            "{name}: {section}"
+        );
+    }
+
+    let truck = &catalog.trucks()[0];
+    let json = &data["trucks"][0];
+    assert_eq!(truck.brand, json["brand"].as_str().unwrap(), "{name}");
+    assert_eq!(truck.model, json["model"].as_str().unwrap(), "{name}");
+    let engine = &truck.engines[0];
+    let json = &json["engines"][0];
+    assert_eq!(engine.name, json["name"].as_str().unwrap(), "{name}");
+    assert_eq!(
+        engine.power_hp as u64,
+        json["power_hp"].as_u64().unwrap(),
+        "{name}"
+    );
+    assert_eq!(
+        engine.torque_nm as u64,
+        json["torque_nm"].as_u64().unwrap(),
+        "{name}"
+    );
+    assert_eq!(engine.path, json["path"].as_str().unwrap(), "{name}");
+
+    let cargo = &catalog.cargo()[0];
+    let json = &data["cargo"][0];
+    assert_eq!(cargo.id, json["id"].as_str().unwrap(), "{name}");
+    assert_eq!(cargo.name, json["name"].as_str().unwrap(), "{name}");
+    assert_eq!(cargo.mass, json["mass"].as_f64().unwrap() as f32, "{name}");
+    assert_eq!(
+        cargo.volume,
+        json["volume"].as_f64().unwrap() as f32,
+        "{name}"
+    );
+    assert_eq!(
+        cargo.reward_per_km,
+        json["reward_per_km"].as_f64().unwrap() as f32,
+        "{name}"
+    );
+    assert_eq!(
+        cargo.body_types.len(),
+        json["body_types"].as_array().unwrap().len(),
+        "{name}"
+    );
+
+    let company = &catalog.companies()[0];
+    let json = &data["companies"][0];
+    assert_eq!(company.id, json["id"].as_str().unwrap(), "{name}");
+    assert_eq!(company.name, json["name"].as_str().unwrap(), "{name}");
+
+    let trailer = &catalog.trailers()[0];
+    let json = &data["trailers"][0];
+    assert_eq!(trailer.id, json["id"].as_str().unwrap(), "{name}");
+    assert_eq!(
+        trailer.body_type,
+        json["body_type"].as_str().unwrap(),
+        "{name}"
+    );
+    assert_eq!(
+        trailer.chain_type,
+        json["chain_type"].as_str().unwrap(),
+        "{name}"
+    );
+    assert_eq!(
+        trailer.volume,
+        json["volume"].as_f64().unwrap() as f32,
+        "{name}"
+    );
+    assert_eq!(
+        trailer.gross_weight_limit,
+        json["gross_weight_limit"].as_u64().unwrap(),
+        "{name}"
+    );
+    assert_eq!(
+        trailer.chassis_mass,
+        json["chassis_mass"].as_u64().unwrap(),
+        "{name}"
+    );
+    assert_eq!(trailer.axles, json["axles"].as_u64().unwrap(), "{name}");
+    assert_eq!(
+        trailer.length,
+        json["length"].as_f64().unwrap() as f32,
+        "{name}"
+    );
+}
+
 #[test]
 fn ets2_snapshot_parses() {
     assert_snapshot("ets2", "ets2");
@@ -55,4 +158,14 @@ fn ets2_snapshot_parses() {
 #[test]
 fn ats_snapshot_parses() {
     assert_snapshot("ats", "ats");
+}
+
+#[test]
+fn ets2_snapshot_loads() {
+    assert_load(Game::Ets2, "ets2");
+}
+
+#[test]
+fn ats_snapshot_loads() {
+    assert_load(Game::Ats, "ats");
 }

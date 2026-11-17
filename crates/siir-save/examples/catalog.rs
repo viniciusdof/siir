@@ -7,7 +7,9 @@ use std::path::PathBuf;
 
 use serde::Serialize;
 use siir_save::Game;
-use siir_save::catalog::{Catalog, Engine, Part, Transmission, TruckModel};
+use siir_save::catalog::{
+    Cargo, Catalog, Company, Engine, Part, TrailerDefinition, Transmission, TruckModel,
+};
 
 const USAGE: &str = "usage: catalog <def-dir> <out.json> <ets2|ats>";
 
@@ -16,6 +18,9 @@ struct Snapshot<'a> {
     format: u32,
     game: &'a str,
     trucks: Vec<TruckData<'a>>,
+    cargo: Vec<CargoData<'a>>,
+    companies: Vec<CompanyData<'a>>,
+    trailers: Vec<TrailerData<'a>>,
 }
 
 #[derive(Serialize)]
@@ -49,6 +54,34 @@ struct TransmissionData<'a> {
 struct PartData<'a> {
     name: &'a str,
     path: &'a str,
+}
+
+#[derive(Serialize)]
+struct CargoData<'a> {
+    id: &'a str,
+    name: &'a str,
+    mass: f32,
+    volume: f32,
+    reward_per_km: f32,
+    body_types: &'a [String],
+}
+
+#[derive(Serialize)]
+struct CompanyData<'a> {
+    id: &'a str,
+    name: &'a str,
+}
+
+#[derive(Serialize)]
+struct TrailerData<'a> {
+    id: &'a str,
+    body_type: &'a str,
+    chain_type: &'a str,
+    volume: f32,
+    gross_weight_limit: u64,
+    chassis_mass: u64,
+    axles: u64,
+    length: f32,
 }
 
 impl<'a> From<&'a TruckModel> for TruckData<'a> {
@@ -100,6 +133,43 @@ impl<'a> From<&'a Part> for PartData<'a> {
     }
 }
 
+impl<'a> From<&'a Cargo> for CargoData<'a> {
+    fn from(cargo: &'a Cargo) -> Self {
+        Self {
+            id: &cargo.id,
+            name: &cargo.name,
+            mass: cargo.mass,
+            volume: cargo.volume,
+            reward_per_km: cargo.reward_per_km,
+            body_types: &cargo.body_types,
+        }
+    }
+}
+
+impl<'a> From<&'a Company> for CompanyData<'a> {
+    fn from(company: &'a Company) -> Self {
+        Self {
+            id: &company.id,
+            name: &company.name,
+        }
+    }
+}
+
+impl<'a> From<&'a TrailerDefinition> for TrailerData<'a> {
+    fn from(trailer: &'a TrailerDefinition) -> Self {
+        Self {
+            id: &trailer.id,
+            body_type: &trailer.body_type,
+            chain_type: &trailer.chain_type,
+            volume: trailer.volume,
+            gross_weight_limit: trailer.gross_weight_limit,
+            chassis_mass: trailer.chassis_mass,
+            axles: trailer.axles,
+            length: trailer.length,
+        }
+    }
+}
+
 fn main() -> Result<(), Box<dyn Error>> {
     let mut args = std::env::args().skip(1);
     let def = PathBuf::from(args.next().ok_or(USAGE)?);
@@ -115,6 +185,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         format: 1,
         game: name,
         trucks: catalog.trucks().iter().map(TruckData::from).collect(),
+        cargo: catalog.cargo().iter().map(CargoData::from).collect(),
+        companies: catalog.companies().iter().map(CompanyData::from).collect(),
+        trailers: catalog.trailers().iter().map(TrailerData::from).collect(),
     };
 
     if let Some(parent) = output.parent() {
@@ -124,8 +197,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     serde_json::to_writer_pretty(&mut file, &snapshot)?;
     writeln!(&mut file)?;
     println!(
-        "wrote {} trucks to {}",
+        "wrote {} trucks, {} cargoes, {} companies, and {} trailers to {}",
         snapshot.trucks.len(),
+        snapshot.cargo.len(),
+        snapshot.companies.len(),
+        snapshot.trailers.len(),
         output.display()
     );
     Ok(())

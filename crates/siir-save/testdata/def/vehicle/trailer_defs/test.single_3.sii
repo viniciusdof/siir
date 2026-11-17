@@ -3,7 +3,7 @@ SiiNunit
 trailer_def : trailer_def.test.single_3
 {
 	gross_trailer_weight_limit: 35000
-	chassis_mass: 6460
+	chassis_mass: 6460.5
 	body_mass: 0
 	axles: 3
 	volume: 87
