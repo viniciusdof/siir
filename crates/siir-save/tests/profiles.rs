@@ -6,7 +6,8 @@ use std::path::{Path, PathBuf};
 
 use siir_save::Game;
 use siir_save::profiles::{
-    backup, clone_profile, copy_settings, find_all, find_profiles, game_dirs, info, restore, saves,
+    RootKind, backup, clone_profile, copy_settings, find_profiles, game_dirs, info, profiles,
+    restore, saves,
 };
 use zip::write::SimpleFileOptions;
 
@@ -66,19 +67,43 @@ fn finds_profiles_saves_and_info() {
 }
 
 #[test]
-fn find_all_scans_every_profiles_folder_of_a_game_folder() {
-    let temp = temp("find-all");
+fn profiles_scan_every_profiles_folder_of_a_custom_game_folder() {
+    let temp = temp("profiles");
     let game = temp.join("game");
-    let profile = fs::read(fixtures().join("ets2/profile.sii")).unwrap();
+    let profile = include_str!("../testdata/profile.sii");
     for name in ["profiles", "profiles.bak", "other"] {
-        fs::create_dir_all(game.join(name).join("abc")).unwrap();
-        fs::write(game.join(name).join("abc/profile.sii"), &profile).unwrap();
+        let dir = game.join(name).join("abc");
+        fs::create_dir_all(dir.join("saves/1")).unwrap();
+        fs::write(dir.join("profile.sii"), profile).unwrap();
+        fs::copy(
+            fixtures().join("ets2/saves/1/info.sii"),
+            dir.join("saves/1/info.sii"),
+        )
+        .unwrap();
     }
 
-    let found = find_all(Game::Ets2, std::slice::from_ref(&game));
-    assert!(found.contains(&game.join("profiles/abc")));
-    assert!(found.contains(&game.join("profiles.bak/abc")));
-    assert!(!found.contains(&game.join("other/abc")));
+    let found = profiles(Game::Ets2, std::slice::from_ref(&game));
+    let found: Vec<_> = found
+        .into_iter()
+        .filter(|profile| profile.path.starts_with(&game))
+        .collect();
+    assert_eq!(found.len(), 2);
+    assert!(
+        found
+            .iter()
+            .any(|profile| profile.path == game.join("profiles/abc"))
+    );
+    assert!(
+        found
+            .iter()
+            .any(|profile| profile.path == game.join("profiles.bak/abc"))
+    );
+    for profile in &found {
+        assert_eq!(profile.name, "old");
+        assert_eq!(profile.saves, 1);
+        assert!(profile.last_time > 0);
+        assert_eq!(profile.kind, RootKind::Custom);
+    }
 
     let _ = fs::remove_dir_all(&temp);
 }
@@ -86,10 +111,10 @@ fn find_all_scans_every_profiles_folder_of_a_game_folder() {
 #[test]
 fn game_dirs_are_existing_sorted_and_unique() {
     let dirs = game_dirs(Game::Ets2);
-    assert!(dirs.iter().all(|dir| dir.is_dir()));
+    assert!(dirs.iter().all(|dir| dir.path.is_dir()));
     let mut sorted = dirs.clone();
-    sorted.sort();
-    sorted.dedup();
+    sorted.sort_by(|left, right| left.path.cmp(&right.path));
+    sorted.dedup_by(|left, right| left.path == right.path);
     assert_eq!(dirs, sorted);
 }
 

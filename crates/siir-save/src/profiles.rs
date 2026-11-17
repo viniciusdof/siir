@@ -45,6 +45,43 @@ pub struct SaveInfo {
     pub dependencies: Vec<String>,
 }
 
+/// Where a game folder came from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RootKind {
+    /// The OS documents folder.
+    Local,
+    /// A Steam Cloud `userdata` folder.
+    Steam,
+    /// A Proton prefix documents folder.
+    Proton,
+    /// A caller-supplied folder.
+    Custom,
+}
+
+/// One folder that can hold game profiles.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GameDir {
+    /// Game folder itself.
+    pub path: PathBuf,
+    /// Where the folder came from.
+    pub kind: RootKind,
+}
+
+/// A profile found under a game folder.
+#[derive(Debug)]
+pub struct Profile {
+    /// `profiles*` folder holding the profile.
+    pub path: PathBuf,
+    /// `profile_name` from `profile.sii`.
+    pub name: String,
+    /// Newest `file_time` across the profile's saves.
+    pub last_time: u64,
+    /// Number of saves under the profile.
+    pub saves: usize,
+    /// Where the profile came from.
+    pub kind: RootKind,
+}
+
 /// Profiles under a game's `profiles` directory.
 pub fn find_profiles(root: &Path) -> Result<Vec<PathBuf>, Error> {
     let mut profiles = Vec::new();
@@ -59,52 +96,98 @@ pub fn find_profiles(root: &Path) -> Result<Vec<PathBuf>, Error> {
 }
 
 /// Existing game folders with profiles, from the OS, Steam Cloud, and Proton.
-pub fn game_dirs(game: Game) -> Vec<PathBuf> {
+pub fn game_dirs(game: Game) -> Vec<GameDir> {
     let mut dirs = Vec::new();
-    if let Some(local) = local_game_dir(game) {
-        dirs.push(local);
+    if let Some(path) = local_game_dir(game) {
+        dirs.push(GameDir {
+            path,
+            kind: RootKind::Local,
+        });
     }
     for steam in steamlocate::locate_all().unwrap_or_default() {
-        if let Ok(users) = fs::read_dir(steam.path().join("userdata")) {
-            for user in users.flatten() {
-                dirs.push(user.path().join(app_id(game)).join("remote"));
-            }
-        }
+        dirs.extend(userdata_dirs(steam.path(), game));
         if let Ok(libraries) = steam.library_paths() {
             for library in libraries {
                 dirs.extend(proton_dirs(&library, game));
             }
         }
     }
-    dirs.retain(|dir| dir.is_dir());
-    dirs.sort();
-    dirs.dedup();
+    dirs.retain(|dir| dir.path.is_dir());
+    dirs.sort_by(|left, right| left.path.cmp(&right.path));
+    dirs.dedup_by(|left, right| left.path == right.path);
     dirs
 }
 
-/// Profiles under [`game_dirs`] and each game folder in `extra`, sorted and unique.
-pub fn find_all(game: Game, extra: &[PathBuf]) -> Vec<PathBuf> {
-    let mut profiles = Vec::new();
-    for root in game_dirs(game).iter().chain(extra) {
-        let Ok(entries) = fs::read_dir(root) else {
+/// Profiles under [`game_dirs`] and `extra`, sorted by path.
+pub fn profiles(game: Game, extra: &[PathBuf]) -> Vec<Profile> {
+    let mut roots = game_dirs(game);
+    roots.extend(extra.iter().cloned().map(|path| GameDir {
+        path,
+        kind: RootKind::Custom,
+    }));
+    scan(&roots)
+}
+
+fn scan(roots: &[GameDir]) -> Vec<Profile> {
+    let mut found = Vec::new();
+    for root in roots {
+        let Ok(entries) = fs::read_dir(&root.path) else {
             continue;
         };
         for entry in entries.flatten() {
             let path = entry.path();
-            if path.is_dir()
-                && entry
+            if !path.is_dir()
+                || !entry
                     .file_name()
                     .to_string_lossy()
                     .starts_with(names::PROFILES_PREFIX)
-                && let Ok(mut found) = find_profiles(&path)
             {
-                profiles.append(&mut found);
+                continue;
+            }
+            let Ok(profiles) = find_profiles(&path) else {
+                continue;
+            };
+            for profile in profiles {
+                if let Some(profile) = describe(profile, root.kind) {
+                    found.push(profile);
+                }
             }
         }
     }
-    profiles.sort();
-    profiles.dedup();
-    profiles
+    found.sort_by(|left, right| left.path.cmp(&right.path));
+    found.dedup_by(|left, right| left.path == right.path);
+    found
+}
+
+fn describe(path: PathBuf, kind: RootKind) -> Option<Profile> {
+    let name = profile_name(&path).ok()?;
+    let saves = saves(&path).unwrap_or_default();
+    let last_time = saves
+        .iter()
+        .filter_map(|save| info(save).ok())
+        .map(|info| info.file_time)
+        .max()
+        .unwrap_or_default();
+    Some(Profile {
+        path,
+        name,
+        last_time,
+        saves: saves.len(),
+        kind,
+    })
+}
+
+fn profile_name(profile: &Path) -> Result<String, Error> {
+    let bytes = fs::read(profile.join(names::PROFILE_FILE))?;
+    let file = siir::open(&bytes)?;
+    let unit = file
+        .document()
+        .units_of_class(names::USER_PROFILE)
+        .next()
+        .ok_or_else(|| Error::MissingUnit {
+            id: names::USER_PROFILE.to_owned(),
+        })?;
+    Ok(string(unit, names::PROFILE_NAME)?.to_owned())
 }
 
 fn local_game_dir(game: Game) -> Option<PathBuf> {
@@ -115,7 +198,20 @@ fn local_game_dir(game: Game) -> Option<PathBuf> {
     base.map(|base| base.join(folder(game)))
 }
 
-fn proton_dirs(library: &Path, game: Game) -> Vec<PathBuf> {
+fn userdata_dirs(steam: &Path, game: Game) -> Vec<GameDir> {
+    let Ok(users) = fs::read_dir(steam.join("userdata")) else {
+        return Vec::new();
+    };
+    users
+        .flatten()
+        .map(|user| GameDir {
+            path: user.path().join(app_id(game)).join("remote"),
+            kind: RootKind::Steam,
+        })
+        .collect()
+}
+
+fn proton_dirs(library: &Path, game: Game) -> Vec<GameDir> {
     let users = library
         .join("steamapps/compatdata")
         .join(app_id(game))
@@ -125,8 +221,11 @@ fn proton_dirs(library: &Path, game: Game) -> Vec<PathBuf> {
     };
     entries
         .flatten()
-        .map(|user| user.path().join("Documents").join(folder(game)))
-        .filter(|dir| dir.is_dir())
+        .map(|user| GameDir {
+            path: user.path().join("Documents").join(folder(game)),
+            kind: RootKind::Proton,
+        })
+        .filter(|dir| dir.path.is_dir())
         .collect()
 }
 
@@ -405,7 +504,70 @@ mod tests {
             "steamapps/compatdata/227300/pfx/drive_c/users/steamuser/Documents/Euro Truck Simulator 2",
         );
         fs::create_dir_all(&documents).unwrap();
-        assert_eq!(proton_dirs(&root, Game::Ets2), vec![documents]);
+        assert_eq!(
+            proton_dirs(&root, Game::Ets2),
+            vec![GameDir {
+                path: documents,
+                kind: RootKind::Proton,
+            }]
+        );
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn userdata_dirs_find_the_steam_cloud_folder() {
+        let root = std::env::temp_dir().join(format!("siir-userdata-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        let remote = root.join("userdata/123/227300/remote");
+        fs::create_dir_all(&remote).unwrap();
+        assert_eq!(
+            userdata_dirs(&root, Game::Ets2),
+            vec![GameDir {
+                path: remote,
+                kind: RootKind::Steam,
+            }]
+        );
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn scan_keeps_the_root_kind() {
+        let root = std::env::temp_dir().join(format!("siir-scan-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        let profile = include_str!("../testdata/profile.sii");
+        for name in ["local", "custom"] {
+            let dir = root.join(name).join("profiles/abc");
+            fs::create_dir_all(&dir).unwrap();
+            fs::write(dir.join("profile.sii"), profile).unwrap();
+        }
+
+        let roots = [
+            GameDir {
+                path: root.join("local"),
+                kind: RootKind::Local,
+            },
+            GameDir {
+                path: root.join("custom"),
+                kind: RootKind::Custom,
+            },
+        ];
+        let found = scan(&roots);
+        assert_eq!(found.len(), 2);
+        for profile in &found {
+            assert_eq!(profile.name, "old");
+            assert_eq!(profile.saves, 0);
+            assert_eq!(profile.last_time, 0);
+        }
+        let local = found
+            .iter()
+            .find(|profile| profile.kind == RootKind::Local)
+            .unwrap();
+        assert_eq!(local.path, root.join("local/profiles/abc"));
+        let custom = found
+            .iter()
+            .find(|profile| profile.kind == RootKind::Custom)
+            .unwrap();
+        assert_eq!(custom.path, root.join("custom/profiles/abc"));
         fs::remove_dir_all(&root).unwrap();
     }
 }
