@@ -5,7 +5,7 @@ use siir::{Document, Unit, Value};
 use crate::Skills;
 use crate::error::Error;
 use crate::names::{self, indexed};
-use crate::value::count;
+use crate::value::length;
 
 pub(super) fn set_money(document: &mut Document<'_>, money: i64) -> Result<(), Error> {
     first(document, names::BANK)?.set("money_account", Value::Int(money))?;
@@ -75,11 +75,12 @@ pub(super) fn set_garage_status(
         Some(unit) if unit.class() == names::GARAGE => unit,
         _ => return Err(Error::MissingUnit { id: id.to_owned() }),
     };
-    for name in [names::VEHICLES, names::DRIVERS] {
-        let current = unit
-            .get(name)
-            .and_then(|value| value.parse::<usize>().ok())
-            .unwrap_or(0);
+    for name in [names::VEHICLES, names::DRIVERS, names::TRAILERS] {
+        let current = if unit.get(name).is_some() {
+            length(unit, name)?
+        } else {
+            0
+        };
         for nth in 0..current {
             if let Some(value) = unit.get(&indexed(name, nth))
                 && value != "null"
@@ -90,7 +91,7 @@ pub(super) fn set_garage_status(
         }
     }
     if let Some(slots) = slots {
-        for name in [names::VEHICLES, names::DRIVERS] {
+        for name in [names::VEHICLES, names::DRIVERS, names::TRAILERS] {
             rewrite(unit, name, vec![Value::token("null"); slots])?;
         }
     }
@@ -119,7 +120,7 @@ fn cities(document: &Document<'_>) -> Result<Vec<String>, Error> {
         .ok_or_else(|| Error::MissingUnit {
             id: names::ECONOMY.to_owned(),
         })?;
-    let total = count(economy, names::COMPANIES)? as usize;
+    let total = length(economy, names::COMPANIES)?;
     let mut cities = Vec::new();
     for nth in 0..total {
         if let Some(id) = economy.get(&indexed(names::COMPANIES, nth))
@@ -134,10 +135,10 @@ fn cities(document: &Document<'_>) -> Result<Vec<String>, Error> {
 }
 
 fn rewrite(unit: &mut Unit<'_>, name: &str, values: Vec<Value>) -> Result<(), Error> {
-    let old = unit
-        .get(name)
-        .and_then(|value| value.parse::<usize>().ok())
-        .unwrap_or(0);
+    let old = match unit.get(name) {
+        Some(_) => length(unit, name)?,
+        None => 0,
+    };
     let len = values.len();
     if unit.get(name).is_some() {
         unit.set(name, Value::UInt(len as u64))?;
@@ -272,6 +273,8 @@ mod tests {
         assert_eq!(value(&document, "garage.one", names::VEHICLES), Some("3"));
         assert_eq!(value(&document, "garage.one", "vehicles[2]"), Some("null"));
         assert_eq!(value(&document, "garage.one", names::DRIVERS), Some("3"));
+        assert_eq!(value(&document, "garage.one", names::TRAILERS), Some("3"));
+        assert_eq!(value(&document, "garage.one", "trailers[2]"), Some("null"));
 
         apply(
             &mut document,
@@ -311,7 +314,7 @@ mod tests {
         .unwrap_err();
         assert_eq!(
             error.to_string(),
-            "garage garage.three still holds vehicles or drivers"
+            "garage garage.three still holds vehicles, drivers, or trailers"
         );
 
         let error = apply(
@@ -325,7 +328,21 @@ mod tests {
         .unwrap_err();
         assert_eq!(
             error.to_string(),
-            "garage garage.three still holds vehicles or drivers"
+            "garage garage.three still holds vehicles, drivers, or trailers"
+        );
+
+        let error = apply(
+            &mut document,
+            Game::Ets2,
+            Command::SetGarageStatus {
+                id: "garage.four".into(),
+                status: 1,
+            },
+        )
+        .unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "garage garage.four still holds vehicles, drivers, or trailers"
         );
     }
 }

@@ -1,6 +1,6 @@
 //! Read model and commands over the real ETS2 and ATS fixtures.
 
-use siir::Document;
+use siir::{Document, Value};
 use siir_save::{Command, Game, Skills, apply, export_accessories, import_accessories, read};
 
 fn fixture(path: &str) -> Vec<u8> {
@@ -308,6 +308,95 @@ fn ets2_commands_change_only_expected_lines() {
 
     let reopened = siir::open(new.as_bytes()).unwrap();
     assert_eq!(reopened.document().unwrap().to_text(), new);
+}
+
+#[test]
+fn bulk_commands_reach_the_assigned_truck_and_trailer() {
+    for (path, game) in [
+        ("ets2/saves/1/game.sii", Game::Ets2),
+        ("ats/saves/1/game.sii", Game::Ats),
+    ] {
+        let bytes = fixture(path);
+        let file = siir::open(&bytes).unwrap();
+        let mut document = file.document().unwrap();
+        let (truck, trailer) = {
+            let save = read(&document, game).unwrap();
+            (
+                save.current_truck().unwrap().id.to_owned(),
+                save.current_trailer().unwrap().id.to_owned(),
+            )
+        };
+
+        apply(
+            &mut document,
+            game,
+            Command::SetFuel {
+                id: truck.clone(),
+                level: 0.25,
+            },
+        )
+        .unwrap();
+        let old = written(&file, &document);
+        apply(&mut document, game, Command::FillAllTrucks).unwrap();
+        let new = written(&file, &document);
+        let changed = changed_lines(&old, &new);
+        assert_eq!(changed.len(), 1, "{path}");
+        assert_eq!(changed[0].1.trim_start(), "fuel_relative: 1.0\n", "{path}");
+
+        document
+            .get(&trailer)
+            .unwrap()
+            .set("trailer_body_wear", Value::Int(1))
+            .unwrap();
+        apply(&mut document, game, Command::RepairAllTrailers).unwrap();
+        assert_eq!(
+            document.get(&trailer).unwrap().get("trailer_body_wear"),
+            Some("0"),
+            "{path}"
+        );
+
+        document
+            .get(&truck)
+            .unwrap()
+            .set("engine_wear", Value::Int(1))
+            .unwrap();
+        apply(&mut document, game, Command::RepairAllTrucks).unwrap();
+        assert_eq!(
+            document.get(&truck).unwrap().get("engine_wear"),
+            Some("0"),
+            "{path}"
+        );
+    }
+}
+
+#[test]
+fn visited_cities_and_dealers_handle_a_real_save() {
+    let bytes = fixture("ets2/saves/1/game.sii");
+    let file = siir::open(&bytes).unwrap();
+    let mut document = file.document().unwrap();
+
+    apply(&mut document, Game::Ets2, Command::SetVisitedCities(true)).unwrap();
+    apply(
+        &mut document,
+        Game::Ets2,
+        Command::SetDealershipsDiscovered(true),
+    )
+    .unwrap();
+    let text = written(&file, &document);
+    assert!(text.contains("visited_cities: 388\n"));
+    assert!(text.contains("unlocked_dealers: 388\n"));
+
+    apply(&mut document, Game::Ets2, Command::SetVisitedCities(false)).unwrap();
+    apply(
+        &mut document,
+        Game::Ets2,
+        Command::SetDealershipsDiscovered(false),
+    )
+    .unwrap();
+    let text = written(&file, &document);
+    assert!(text.contains("visited_cities: 0\n"));
+    assert!(text.contains("unlocked_dealers: 0\n"));
+    assert!(siir::open(text.as_bytes()).unwrap().document().is_ok());
 }
 
 #[test]

@@ -185,20 +185,6 @@ fn remove_drops_the_unit() {
 }
 
 #[test]
-fn dangling_lists_cited_ids_without_a_unit() {
-    let source = include_str!("../testdata/dangling.sii");
-    let document = Document::parse(source).unwrap();
-    assert_eq!(document.dangling(), vec!["vehicle.volvo"]);
-}
-
-#[test]
-fn dangling_ignores_numbers_and_strings() {
-    let source = include_str!("../testdata/dangling_numbers.sii");
-    let document = Document::parse(source).unwrap();
-    assert!(document.dangling().is_empty());
-}
-
-#[test]
 fn set_rejects_an_invalid_string() {
     let mut document = Document::parse(SOURCE).unwrap();
     let error = document
@@ -256,27 +242,6 @@ fn inserted_attribute_name_is_validated() {
     assert_eq!(
         unit.set("gears[x]", Value::Int(1)).unwrap_err().to_string(),
         "invalid name: attribute name"
-    );
-}
-
-#[test]
-fn dangling_sees_edits_and_inserted_units() {
-    let mut document = Document::parse(SOURCE).unwrap();
-    document
-        .get("economy")
-        .unwrap()
-        .set("other", Value::token("vehicle.missing"))
-        .unwrap();
-    assert_eq!(document.dangling(), vec!["vehicle.missing"]);
-
-    let mut trailer = Unit::new("trailer", "trailer.one");
-    trailer
-        .set("link", Value::token("trailer.missing"))
-        .unwrap();
-    document.insert(trailer).unwrap();
-    assert_eq!(
-        document.dangling(),
-        vec!["vehicle.missing", "trailer.missing"]
     );
 }
 
@@ -361,6 +326,27 @@ fn remove_attr_handles_arrays_and_inserted_units() {
     unit.remove_attr("a").unwrap();
     assert_eq!(unit.get("a"), None);
     assert_eq!(unit.attrs().count(), 0);
+}
+
+#[test]
+fn remove_attr_keeps_neighbours_on_the_same_line() {
+    let source = "SiiNunit\n{\nu : u.one {\n    a: 1 b: 2\n}\n}\n";
+    let mut document = Document::parse(source).unwrap();
+    document.get("u").unwrap().remove_attr("a").unwrap();
+    let text = document.to_text();
+    assert!(text.contains("b: 2"), "{text}");
+    assert!(!text.contains("a: 1"), "{text}");
+    assert!(Document::parse(&text).is_ok());
+}
+
+#[test]
+fn remove_attr_does_not_consume_the_closing_brace() {
+    let source = "SiiNunit\n{\nu : u.one {\n    a: 1 }\n}\n";
+    let mut document = Document::parse(source).unwrap();
+    document.get("u").unwrap().remove_attr("a").unwrap();
+    let text = document.to_text();
+    assert!(Document::parse(&text).is_ok(), "{text}");
+    assert!(!text.contains("a: 1"), "{text}");
 }
 
 #[test]

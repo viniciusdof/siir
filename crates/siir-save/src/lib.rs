@@ -6,6 +6,8 @@ use std::collections::HashMap;
 
 use siir::{Document, Unit};
 
+use accessory::{Part, classify};
+
 pub mod accessory;
 pub mod catalog;
 mod color;
@@ -260,18 +262,14 @@ fn parts<'a>(accessories: &[Accessory<'a>]) -> Parts<'a> {
         let Some(path) = accessory.path else {
             continue;
         };
-        if path.ends_with(names::DATA_SUFFIX) {
-            data_path = Some(path);
-        } else if path.contains(names::ENGINE_DIR) {
-            engine = Some(path);
-        } else if path.contains(names::TRANSMISSION_DIR) {
-            transmission = Some(path);
-        } else if path.contains(names::CABIN_DIR) {
-            cabin = Some(path);
-        } else if path.contains(names::CHASSIS_DIR) {
-            chassis = Some(path);
-        } else if path.contains(names::PAINT_JOB_DIR) {
-            paint_job = Some(path);
+        match classify(path) {
+            Some(Part::Data) => data_path = Some(path),
+            Some(Part::Engine) => engine = Some(path),
+            Some(Part::Transmission) => transmission = Some(path),
+            Some(Part::Cabin) => cabin = Some(path),
+            Some(Part::Chassis) => chassis = Some(path),
+            Some(Part::Paint) => paint_job = Some(path),
+            None => {}
         }
     }
     let model = data_path.and_then(|path| {

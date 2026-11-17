@@ -55,12 +55,14 @@ struct Structure {
     id: u32,
     name: String,
     fields: Vec<Field>,
+    /// First ordinal table, kept for experimental type 0x38.
     ordinals: Option<HashMap<u32, String>>,
 }
 
 struct Field {
     name: String,
     kind: u32,
+    ordinals: Option<HashMap<u32, String>>,
 }
 
 /// Decodes a `BSII` payload into `SiiNunit` text.
@@ -108,13 +110,14 @@ pub(crate) fn decode(data: &[u8]) -> Result<String, Error> {
         out.push_str(&id);
         out.push_str(" {\n");
         for field in &structure.fields {
-            let values = decode_field(
-                &mut cursor,
-                field.kind,
-                version,
-                structure.ordinals.as_ref(),
-                &field.name,
-            )?;
+            // shortcut: 0x38 has no documented table; reuse the structure's
+            // first ordinal table until a real file shows otherwise.
+            let ordinals = if field.kind == T_ARR_ORDINAL {
+                structure.ordinals.as_ref()
+            } else {
+                field.ordinals.as_ref()
+            };
+            let values = decode_field(&mut cursor, field.kind, version, ordinals)?;
             write_field(&mut out, &field.name, field.kind, &values);
         }
         out.push_str("}\n\n");
@@ -130,26 +133,33 @@ fn read_structure(cursor: &mut Cursor<'_>) -> Result<Option<Structure>, Error> {
     let id = cursor.u32()?;
     let name = cursor.string()?;
     let mut fields = Vec::new();
-    let mut ordinals = None;
+    let mut first_ordinals = None;
     loop {
         let kind = cursor.u32()?;
         if kind == T_END {
             break;
         }
         let name = cursor.string()?;
-        if kind == T_ORDINAL {
+        let ordinals = if kind == T_ORDINAL {
             let table = read_ordinals(cursor)?;
-            if ordinals.is_none() {
-                ordinals = Some(table);
+            if first_ordinals.is_none() {
+                first_ordinals = Some(table.clone());
             }
-        }
-        fields.push(Field { name, kind });
+            Some(table)
+        } else {
+            None
+        };
+        fields.push(Field {
+            name,
+            kind,
+            ordinals,
+        });
     }
     Ok(Some(Structure {
         id,
         name,
         fields,
-        ordinals,
+        ordinals: first_ordinals,
     }))
 }
 
@@ -225,33 +235,30 @@ fn decode_field(
     kind: u32,
     version: u32,
     ordinals: Option<&HashMap<u32, String>>,
-    field_name: &str,
 ) -> Result<Vec<String>, Error> {
     let values = match kind {
         T_UTF8 => vec![utf8_scalar(cursor.string()?)],
         T_ARR_UTF8 => array(cursor, |c| Ok(utf8_array_elem(c.string()?)))?,
-        T_ENCODED => vec![ordinal_scalar(field_name, encoded(cursor.u64()?))],
+        T_ENCODED => vec![ordinal_value(encoded(cursor.u64()?))],
         T_ORDINAL => {
             let index = cursor.u32()?;
-            let value = if field_name == "lashing_method" || field_name == "lashing_gear_type" {
-                "none".to_owned()
-            } else {
-                ordinal_table(ordinals, cursor.pos)?
-                    .get(&index)
-                    .cloned()
-                    .unwrap_or_default()
-            };
-            vec![ordinal_scalar(field_name, value)]
+            let table = ordinal_table(ordinals, cursor.pos)?;
+            let value = table.get(&index).cloned().ok_or_else(|| {
+                Error::invalid_value("ordinal value is not in the table", cursor.pos)
+            })?;
+            vec![ordinal_value(value)]
         }
-        T_ARR_ENCODED => array(cursor, |c| Ok(encoded(c.u64()?)))?,
+        T_ARR_ENCODED => array(cursor, |c| Ok(ordinal_value(encoded(c.u64()?))))?,
         T_ARR_ORDINAL => {
             let table = ordinal_table(ordinals, cursor.pos)?;
             let count = cursor.u32()?;
             let mut values = Vec::new();
             for _ in 0..count {
                 let index = cursor.u32()?;
-                let value = table.get(&index).cloned().unwrap_or_default();
-                values.push(ordinal_array_value(value));
+                let value = table.get(&index).cloned().ok_or_else(|| {
+                    Error::invalid_value("ordinal value is not in the table", cursor.pos)
+                })?;
+                values.push(ordinal_value(value));
             }
             values
         }
@@ -283,7 +290,7 @@ fn decode_field(
         T_ARR_BOOL => array(cursor, |c| Ok(c.boolean()?.to_string()))?,
         T_ID | T_ID2 | T_ID3 => vec![read_id(cursor)?],
         T_ARR_IDA | T_ARR_IDC | T_ARR_IDE => array(cursor, read_id)?,
-        T_ARR_VEC2I => vec![vec2i(cursor)?],
+        T_ARR_VEC2I => array(cursor, vec2i)?,
         _ => return Err(Error::unknown_type(kind, cursor.pos)),
     };
     Ok(values)
@@ -348,6 +355,7 @@ fn is_array(kind: u32) -> bool {
             | T_ARR_IDA
             | T_ARR_IDC
             | T_ARR_IDE
+            | T_ARR_VEC2I
     )
 }
 
@@ -504,34 +512,12 @@ fn ordinal_table(
     ordinals.ok_or_else(|| Error::missing_ordinals(offset))
 }
 
-fn ordinal_array_value(value: String) -> String {
+fn ordinal_value(value: String) -> String {
     if limited(&value) && !value.is_empty() {
         value
     } else {
         format!("\"{value}\"")
     }
-}
-
-fn ordinal_scalar(field: &str, value: String) -> String {
-    let override_value = match (field, value.as_str()) {
-        ("part_type", "vehicle") => Some("unknown"),
-        ("type", "parking") => Some("spot"),
-        ("setup", "low_beam") => Some("candela_hue_saturation"),
-        ("setup", "parking") => Some("lumen_hue_saturation"),
-        ("dir_type", "parking") => Some("wide"),
-        ("dir_type", "low_beam") => Some("narrow"),
-        _ => None,
-    };
-    if let Some(value) = override_value {
-        return value.to_owned();
-    }
-    if field == "cut_direction" && value.is_empty() {
-        return "forward".to_owned();
-    }
-    if value.is_empty() {
-        return "\"\"".to_owned();
-    }
-    value
 }
 
 struct Cursor<'a> {
@@ -608,6 +594,15 @@ impl<'a> Cursor<'a> {
 mod tests {
     use super::*;
 
+    fn push_u32(data: &mut Vec<u8>, value: u32) {
+        data.extend_from_slice(&value.to_le_bytes());
+    }
+
+    fn push_str(data: &mut Vec<u8>, value: &str) {
+        push_u32(data, value.len() as u32);
+        data.extend_from_slice(value.as_bytes());
+    }
+
     #[test]
     fn encoded_string_ignores_bit_63() {
         assert_eq!(encoded(1 << 63), "");
@@ -658,8 +653,25 @@ mod tests {
         };
         let mut ordinals = HashMap::new();
         ordinals.insert(1, "spot".to_owned());
-        let values = decode_field(&mut cursor, T_ARR_ORDINAL, 3, Some(&ordinals), "x").unwrap();
-        assert_eq!(values, vec!["spot", "\"\""]);
+        ordinals.insert(9, "not set".to_owned());
+        let values = decode_field(&mut cursor, T_ARR_ORDINAL, 3, Some(&ordinals)).unwrap();
+        assert_eq!(values, vec!["spot", "\"not set\""]);
+    }
+
+    #[test]
+    fn ordinal_array_rejects_a_missing_index() {
+        let mut cursor = Cursor {
+            data: &[2, 0, 0, 0, 1, 0, 0, 0, 9, 0, 0, 0],
+            pos: 0,
+        };
+        let mut ordinals = HashMap::new();
+        ordinals.insert(1, "spot".to_owned());
+        let error = decode_field(&mut cursor, T_ARR_ORDINAL, 3, Some(&ordinals)).unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("ordinal value is not in the table")
+        );
     }
 
     #[test]
@@ -668,21 +680,13 @@ mod tests {
             data: &[2, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0],
             pos: 0,
         };
-        let error = decode_field(&mut cursor, T_ARR_ORDINAL, 3, None, "x").unwrap_err();
+        let error = decode_field(&mut cursor, T_ARR_ORDINAL, 3, None).unwrap_err();
         assert_eq!(error.offset(), 0);
         assert_eq!(error.to_string(), "missing ordinal table at offset 0");
     }
 
     #[test]
     fn ordinal_array_serializes_indexed() {
-        fn push_u32(data: &mut Vec<u8>, value: u32) {
-            data.extend_from_slice(&value.to_le_bytes());
-        }
-        fn push_str(data: &mut Vec<u8>, value: &str) {
-            push_u32(data, value.len() as u32);
-            data.extend_from_slice(value.as_bytes());
-        }
-
         let mut data = Vec::new();
         data.extend_from_slice(b"BSII");
         push_u32(&mut data, 3);
@@ -711,6 +715,70 @@ mod tests {
 
         let text = decode(&data).unwrap();
         assert!(text.contains(" kind: spot\n kinds: 2\n kinds[0]: spot\n kinds[1]: none\n"));
+    }
+
+    #[test]
+    fn ordinal_tables_are_per_field() {
+        let mut data = Vec::new();
+        data.extend_from_slice(b"BSII");
+        push_u32(&mut data, 3);
+        push_u32(&mut data, 0);
+        data.push(1);
+        push_u32(&mut data, 1);
+        push_str(&mut data, "u");
+        push_u32(&mut data, T_ORDINAL);
+        push_str(&mut data, "first");
+        push_u32(&mut data, 2);
+        push_u32(&mut data, 0);
+        push_str(&mut data, "a");
+        push_u32(&mut data, 1);
+        push_str(&mut data, "b");
+        push_u32(&mut data, T_ORDINAL);
+        push_str(&mut data, "second");
+        push_u32(&mut data, 2);
+        push_u32(&mut data, 0);
+        push_str(&mut data, "x");
+        push_u32(&mut data, 1);
+        push_str(&mut data, "y");
+        push_u32(&mut data, 0);
+        push_u32(&mut data, 1);
+        data.push(0);
+        push_u32(&mut data, 1);
+        push_u32(&mut data, 1);
+        push_u32(&mut data, 0);
+        data.push(0);
+
+        let text = decode(&data).unwrap();
+        assert!(text.contains(" first: b\n second: y\n"), "{text}");
+    }
+
+    #[test]
+    fn int_pair_array_is_indexed() {
+        let mut data = Vec::new();
+        data.extend_from_slice(b"BSII");
+        push_u32(&mut data, 3);
+        push_u32(&mut data, 0);
+        data.push(1);
+        push_u32(&mut data, 1);
+        push_str(&mut data, "u");
+        push_u32(&mut data, T_ARR_VEC2I);
+        push_str(&mut data, "pairs");
+        push_u32(&mut data, 0);
+        push_u32(&mut data, 1);
+        data.push(0);
+        push_u32(&mut data, 2);
+        push_u32(&mut data, 1);
+        data.extend_from_slice(&2i32.to_le_bytes());
+        push_u32(&mut data, 3);
+        data.extend_from_slice(&4i32.to_le_bytes());
+        push_u32(&mut data, 0);
+        data.push(0);
+
+        let text = decode(&data).unwrap();
+        assert!(
+            text.contains(" pairs: 2\n pairs[0]: (1, 2)\n pairs[1]: (3, 4)\n"),
+            "{text}"
+        );
     }
 
     #[test]

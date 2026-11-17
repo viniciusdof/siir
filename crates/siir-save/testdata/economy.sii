@@ -40,4 +40,11 @@ garage : garage.three {
     drivers: 0
     status: 0
 }
+garage : garage.four {
+    vehicles: 0
+    drivers: 0
+    trailers: 1
+    trailers[0]: trailer.one
+    status: 2
+}
 }

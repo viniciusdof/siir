@@ -455,6 +455,7 @@ checksum = "80cc68510ea7553c30a69c732de5278e94183f68765af6c642dbccefd6ec777e"
 dependencies = [
  "constant_time_eq",
  "crc32fast",
+ "flate2",
  "getrandom",
  "indexmap",
  "libc",

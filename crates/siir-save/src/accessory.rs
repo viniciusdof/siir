@@ -15,6 +15,34 @@ const PARTS: [&str; 6] = [
     "paint",
 ];
 
+/// One of the six parts a truck accessory set must contain.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Part {
+    Data,
+    Engine,
+    Transmission,
+    Cabin,
+    Chassis,
+    Paint,
+}
+
+impl Part {
+    pub(crate) fn index(self) -> usize {
+        match self {
+            Self::Data => 0,
+            Self::Engine => 1,
+            Self::Transmission => 2,
+            Self::Cabin => 3,
+            Self::Chassis => 4,
+            Self::Paint => 5,
+        }
+    }
+
+    pub(crate) fn name(self) -> &'static str {
+        PARTS[self.index()]
+    }
+}
+
 /// Exports one truck's accessory units as a `SiiNunit` text block.
 pub fn export_accessories(document: &Document<'_>, id: &str) -> Result<String, Error> {
     let accessories = array(truck(document, id)?, names::ACCESSORIES)?;
@@ -55,9 +83,9 @@ pub fn import_accessories(document: &mut Document<'_>, id: &str, block: &str) ->
             new_unit.insert_attr(&indexed_name(name, index), Value::parse(value)?)?;
         }
         if let Some(path) = new_unit.get(names::DATA_PATH)
-            && let Some(nth) = part_index(unquote(path))
+            && let Some(part) = classify(unquote(path))
         {
-            parts[nth] = true;
+            parts[part.index()] = true;
         }
         units.push(new_unit);
     }
@@ -102,19 +130,19 @@ fn remove_orphans(document: &mut Document<'_>, target: &str, old: &[String]) {
     }
 }
 
-fn part_index(path: &str) -> Option<usize> {
+pub(crate) fn classify(path: &str) -> Option<Part> {
     if path.ends_with(names::DATA_SUFFIX) {
-        Some(0)
+        Some(Part::Data)
     } else if path.contains(names::ENGINE_DIR) {
-        Some(1)
+        Some(Part::Engine)
     } else if path.contains(names::TRANSMISSION_DIR) {
-        Some(2)
+        Some(Part::Transmission)
     } else if path.contains(names::CABIN_DIR) {
-        Some(3)
+        Some(Part::Cabin)
     } else if path.contains(names::CHASSIS_DIR) {
-        Some(4)
+        Some(Part::Chassis)
     } else if path.contains(names::PAINT_JOB_DIR) {
-        Some(5)
+        Some(Part::Paint)
     } else {
         None
     }
@@ -276,5 +304,23 @@ mod tests {
             .find(|unit| unit.id() == "vehicle.two")
             .unwrap();
         assert_eq!(target.get(names::ACCESSORIES), Some("0"));
+    }
+
+    #[test]
+    fn classifies_each_part_path() {
+        for (path, part) in [
+            ("/def/vehicle/truck/x/data.sii", Part::Data),
+            ("/def/vehicle/truck/x/engine/e.sii", Part::Engine),
+            (
+                "/def/vehicle/truck/x/transmission/t.sii",
+                Part::Transmission,
+            ),
+            ("/def/vehicle/truck/x/cabin/c.sii", Part::Cabin),
+            ("/def/vehicle/truck/x/chassis/c.sii", Part::Chassis),
+            ("/def/vehicle/truck/x/paint_job/p.sii", Part::Paint),
+        ] {
+            assert_eq!(classify(path), Some(part), "{path}");
+        }
+        assert_eq!(classify("/def/vehicle/truck/x/accessory/a.sii"), None);
     }
 }

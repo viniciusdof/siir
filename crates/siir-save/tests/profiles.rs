@@ -1,12 +1,14 @@
 //! Profile discovery, info, backup, restore, and clone.
 
 use std::fs;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use siir_save::Game;
 use siir_save::profiles::{
     backup, clone_profile, copy_settings, find_profiles, info, restore, saves,
 };
+use zip::write::SimpleFileOptions;
 
 #[cfg(unix)]
 use std::os::unix::fs::symlink;
@@ -156,6 +158,60 @@ fn info_unquotes_a_name_with_spaces() {
     )
     .unwrap();
     assert_eq!(info(&save).unwrap().name, "My Save");
+
+    let _ = fs::remove_dir_all(&temp);
+}
+
+#[test]
+fn restores_a_deflated_archive() {
+    let temp = temp("deflated");
+    fs::create_dir_all(&temp).unwrap();
+    let archive = temp.join("profile.zip");
+    {
+        let file = fs::File::create(&archive).unwrap();
+        let mut zip = zip::ZipWriter::new(file);
+        let options =
+            SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
+        zip.start_file("profile.sii", options).unwrap();
+        zip.write_all(b"SiiNunit\n{\nuser_profile : x {\n    profile_name: \"a\"\n}\n}\n")
+            .unwrap();
+        zip.finish().unwrap();
+    }
+
+    let restored = temp.join("restored");
+    restore(&archive, &restored).unwrap();
+    assert!(restored.join("profile.sii").is_file());
+
+    let _ = fs::remove_dir_all(&temp);
+}
+
+#[test]
+fn backup_does_not_include_itself() {
+    let temp = temp("self");
+    fs::create_dir_all(&temp).unwrap();
+    let profile = temp.join("profile");
+    fs::create_dir_all(&profile).unwrap();
+    fs::write(profile.join("profile.sii"), b"SiiNunit\n{\n}\n").unwrap();
+    let archive = profile.join("backup.zip");
+
+    backup(&profile, &archive).unwrap();
+    backup(&profile, &archive).unwrap();
+
+    let mut zip = zip::ZipArchive::new(fs::File::open(&archive).unwrap()).unwrap();
+    assert!(zip.by_name("backup.zip").is_err());
+    assert!(zip.by_name("profile.sii").is_ok());
+
+    let _ = fs::remove_dir_all(&temp);
+}
+
+#[test]
+fn saves_returns_empty_without_a_saves_directory() {
+    let temp = temp("no-saves");
+    let profile = temp.join("profile");
+    fs::create_dir_all(&profile).unwrap();
+    fs::write(profile.join("profile.sii"), b"SiiNunit\n{\n}\n").unwrap();
+
+    assert!(saves(&profile).unwrap().is_empty());
 
     let _ = fs::remove_dir_all(&temp);
 }

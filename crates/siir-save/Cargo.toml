@@ -9,7 +9,7 @@ publish = false
 
 [dependencies]
 siir = { path = "../siir", version = "0.1.0" }
-zip = { version = "9.6.0", default-features = false }
+zip = { version = "9.6.0", default-features = false, features = ["deflate-flate2"] }
 
 [dev-dependencies]
 serde = { version = "1.0.229", features = ["derive"] }

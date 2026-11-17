@@ -2,10 +2,10 @@
 
 use siir::{Document, Unit, Value};
 
-use crate::accessory::write_accessories;
+use crate::accessory::{Part, classify, write_accessories};
 use crate::error::Error;
 use crate::names::{self, indexed};
-use crate::value::{count, reference, unquote};
+use crate::value::{length, reference, unquote};
 
 const FUEL: &str = "fuel_relative";
 const ODOMETER: [&str; 3] = ["odometer", "integrity_odometer", "trip_distance_km"];
@@ -24,7 +24,7 @@ pub(super) fn repair_truck(document: &mut Document<'_>, id: &str) -> Result<(), 
 }
 
 pub(super) fn repair_all_trucks(document: &mut Document<'_>) -> Result<(), Error> {
-    for id in owned_trucks(document) {
+    for id in owned_trucks(document)? {
         if let Ok(unit) = truck(document, &id) {
             repair(unit)?;
         }
@@ -41,7 +41,7 @@ pub(super) fn set_fuel(document: &mut Document<'_>, id: &str, level: f32) -> Res
 }
 
 pub(super) fn fill_all_trucks(document: &mut Document<'_>) -> Result<(), Error> {
-    for id in owned_trucks(document) {
+    for id in owned_trucks(document)? {
         if let Ok(unit) = truck(document, &id) {
             fill(unit)?;
         }
@@ -72,6 +72,11 @@ pub(super) fn set_license_plate(
 
 fn repair(unit: &mut Unit<'_>) -> Result<(), Error> {
     for name in WEAR {
+        if unit.get(name).is_none() {
+            return Err(Error::missing(unit.class(), name));
+        }
+    }
+    for name in WEAR {
         unit.set(name, Value::Int(0))?;
     }
     Ok(())
@@ -89,43 +94,27 @@ fn truck<'a, 'd>(document: &'a mut Document<'d>, id: &str) -> Result<&'a mut Uni
     }
 }
 
-fn owned_trucks(document: &Document<'_>) -> Vec<String> {
+fn owned_trucks(document: &Document<'_>) -> Result<Vec<String>, Error> {
     let Some(player) = document.units_of_class(names::PLAYER).next() else {
-        return Vec::new();
+        return Ok(Vec::new());
     };
     let mut trucks = Vec::new();
-    if let Some(count) = player
-        .get(names::TRUCKS)
-        .and_then(|value| value.parse::<usize>().ok())
-    {
+    if player.get(names::TRUCKS).is_some() {
+        let count = length(player, names::TRUCKS)?;
         for nth in 0..count {
             if let Some(id) = player.get(&indexed(names::TRUCKS, nth)) {
                 trucks.push(id.to_owned());
             }
         }
     }
-    if let Some(count) = player
-        .get(names::MY_VEHICLES)
-        .and_then(|value| value.parse::<usize>().ok())
-    {
-        for nth in 0..count {
-            let Some(slot_id) = player.get(&indexed(names::MY_VEHICLES, nth)) else {
-                continue;
-            };
-            let Some(slot) = document
-                .units_of_class(names::PLAYER_VEHICLES)
-                .find(|unit| unit.id() == slot_id)
-            else {
-                continue;
-            };
-            if let Some(vehicle) = reference(slot, names::VEHICLE) {
-                trucks.push(vehicle.to_owned());
-            }
+    for slot in document.units_of_class(names::PLAYER_VEHICLES) {
+        if let Some(vehicle) = reference(slot, names::VEHICLE) {
+            trucks.push(vehicle.to_owned());
         }
     }
     trucks.sort();
     trucks.dedup();
-    trucks
+    Ok(trucks)
 }
 
 pub(super) fn remove_badge(document: &mut Document<'_>, id: &str) -> Result<(), Error> {
@@ -134,7 +123,7 @@ pub(super) fn remove_badge(document: &mut Document<'_>, id: &str) -> Result<(), 
             .units_of_class(names::VEHICLE)
             .find(|unit| unit.id() == id)
             .ok_or_else(|| Error::MissingUnit { id: id.to_owned() })?;
-        let total = count(unit, names::ACCESSORIES)? as usize;
+        let total = length(unit, names::ACCESSORIES)?;
         let mut kept = Vec::with_capacity(total);
         for nth in 0..total {
             let accessory = unit
@@ -165,7 +154,7 @@ fn is_badge(path: &str) -> bool {
 }
 
 pub(super) fn set_engine(document: &mut Document<'_>, id: &str, path: &str) -> Result<(), Error> {
-    if set_part(document, id, names::ENGINE_DIR, path)? {
+    if set_part(document, id, Part::Engine, path)? {
         Ok(())
     } else {
         Err(Error::NoEngine { id: id.to_owned() })
@@ -177,7 +166,7 @@ pub(super) fn set_transmission(
     id: &str,
     path: &str,
 ) -> Result<(), Error> {
-    if set_part(document, id, names::TRANSMISSION_DIR, path)? {
+    if set_part(document, id, Part::Transmission, path)? {
         Ok(())
     } else {
         Err(Error::NoTransmission { id: id.to_owned() })
@@ -185,7 +174,7 @@ pub(super) fn set_transmission(
 }
 
 pub(super) fn set_cabin(document: &mut Document<'_>, id: &str, path: &str) -> Result<(), Error> {
-    if set_part(document, id, names::CABIN_DIR, path)? {
+    if set_part(document, id, Part::Cabin, path)? {
         Ok(())
     } else {
         Err(Error::NoCabin { id: id.to_owned() })
@@ -193,7 +182,7 @@ pub(super) fn set_cabin(document: &mut Document<'_>, id: &str, path: &str) -> Re
 }
 
 pub(super) fn set_chassis(document: &mut Document<'_>, id: &str, path: &str) -> Result<(), Error> {
-    if set_part(document, id, names::CHASSIS_DIR, path)? {
+    if set_part(document, id, Part::Chassis, path)? {
         Ok(())
     } else {
         Err(Error::NoChassis { id: id.to_owned() })
@@ -201,7 +190,7 @@ pub(super) fn set_chassis(document: &mut Document<'_>, id: &str, path: &str) -> 
 }
 
 pub(super) fn set_paint(document: &mut Document<'_>, id: &str, path: &str) -> Result<(), Error> {
-    if set_part(document, id, names::PAINT_JOB_DIR, path)? {
+    if set_part(document, id, Part::Paint, path)? {
         Ok(())
     } else {
         Err(Error::NoPaint { id: id.to_owned() })
@@ -219,7 +208,7 @@ pub(super) fn set_accessory(
             .units_of_class(names::VEHICLE)
             .find(|unit| unit.id() == id)
             .ok_or_else(|| Error::MissingUnit { id: id.to_owned() })?;
-        let total = count(unit, names::ACCESSORIES)? as usize;
+        let total = length(unit, names::ACCESSORIES)?;
         (0..total).any(|nth| unit.get(&indexed(names::ACCESSORIES, nth)) == Some(accessory))
     };
     if !listed {
@@ -245,7 +234,7 @@ pub(super) fn remove_accessory(
             .units_of_class(names::VEHICLE)
             .find(|unit| unit.id() == id)
             .ok_or_else(|| Error::MissingUnit { id: id.to_owned() })?;
-        let total = count(unit, names::ACCESSORIES)? as usize;
+        let total = length(unit, names::ACCESSORIES)?;
         let mut kept = Vec::with_capacity(total);
         let mut removed = false;
         for nth in 0..total {
@@ -267,22 +256,26 @@ pub(super) fn remove_accessory(
         (total, kept)
     };
 
+    if let Some(part) = document
+        .get(accessory)
+        .and_then(|unit| unit.get(names::DATA_PATH))
+        .map(unquote)
+        .and_then(classify)
+    {
+        return Err(Error::CannotRemovePart { part: part.name() });
+    }
+
     let unit = truck(document, id)?;
     write_accessories(unit, &kept, total)
 }
 
-fn set_part(
-    document: &mut Document<'_>,
-    id: &str,
-    marker: &str,
-    path: &str,
-) -> Result<bool, Error> {
+fn set_part(document: &mut Document<'_>, id: &str, part: Part, path: &str) -> Result<bool, Error> {
     let accessories = {
         let unit = document
             .units_of_class(names::VEHICLE)
             .find(|unit| unit.id() == id)
             .ok_or_else(|| Error::MissingUnit { id: id.to_owned() })?;
-        let total = count(unit, names::ACCESSORIES)? as usize;
+        let total = length(unit, names::ACCESSORIES)?;
         let mut ids = Vec::with_capacity(total);
         for nth in 0..total {
             ids.push(
@@ -301,7 +294,7 @@ fn set_part(
         };
         if unit
             .get(names::DATA_PATH)
-            .is_some_and(|value| unquote(value).contains(marker))
+            .is_some_and(|value| classify(unquote(value)) == Some(part))
         {
             unit.set(names::DATA_PATH, Value::String(path.to_owned()))?;
             found = true;
@@ -753,6 +746,42 @@ mod tests {
         assert_eq!(
             value(&document, "player.one", names::HQ_CITY),
             Some("prague")
+        );
+    }
+
+    #[test]
+    fn repair_leaves_a_partial_truck_unchanged() {
+        let source = "SiiNunit\n{\nvehicle : vehicle.one {\n    engine_wear: &3f800000\n    transmission_wear: &3f800000\n    cabin_wear: 0\n    engine_wear_unfixable: 1\n    transmission_wear_unfixable: 1\n}\n}\n";
+        let mut document = Document::parse(source).unwrap();
+        let error = apply(
+            &mut document,
+            Game::Ets2,
+            Command::RepairTruck("vehicle.one".into()),
+        )
+        .unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "missing attribute \"cabin_wear_unfixable\" on vehicle"
+        );
+        assert_eq!(document.to_text(), source);
+    }
+
+    #[test]
+    fn rejects_removing_a_required_part() {
+        let mut document = source();
+        let error = apply(
+            &mut document,
+            Game::Ets2,
+            Command::RemoveAccessory {
+                id: "vehicle.one".into(),
+                accessory: "accessory.engine".into(),
+            },
+        )
+        .unwrap_err();
+        assert_eq!(error.to_string(), "cannot remove the engine");
+        assert_eq!(
+            value(&document, "vehicle.one", names::ACCESSORIES),
+            Some("9")
         );
     }
 

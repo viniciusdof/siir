@@ -63,6 +63,11 @@ pub enum Error {
         /// Accessory unit id.
         accessory: String,
     },
+    /// A required truck part cannot be removed.
+    CannotRemovePart {
+        /// Part name, for example `engine`.
+        part: &'static str,
+    },
     /// A used-truck price is negative.
     InvalidPrice {
         /// Requested price.
@@ -110,6 +115,8 @@ pub enum Error {
     Zip(zip::result::ZipError),
     /// The archive contains a path that escapes the destination.
     InvalidArchive,
+    /// An archive entry or the whole archive is too large to extract.
+    ArchiveTooLarge,
     /// A profile directory with the requested name already exists.
     ProfileExists(String),
     /// A profile symlink points outside the profile directory.
@@ -162,6 +169,7 @@ impl fmt::Display for Error {
             Self::NoAccessory { id, accessory } => {
                 write!(f, "no accessory {accessory} on {id}")
             }
+            Self::CannotRemovePart { part } => write!(f, "cannot remove the {part}"),
             Self::InvalidPrice { price } => {
                 write!(f, "used truck price {price} is negative")
             }
@@ -180,11 +188,14 @@ impl fmt::Display for Error {
             Self::InvalidGarageStatus { status } => {
                 write!(f, "garage status {status} is not 1, 2, 3, or 6")
             }
-            Self::GarageOccupied { id } => write!(f, "garage {id} still holds vehicles or drivers"),
+            Self::GarageOccupied { id } => {
+                write!(f, "garage {id} still holds vehicles, drivers, or trailers")
+            }
             Self::Document(error) => error.fmt(f),
             Self::Io(error) => error.fmt(f),
             Self::Zip(error) => error.fmt(f),
             Self::InvalidArchive => write!(f, "archive path escapes the destination"),
+            Self::ArchiveTooLarge => write!(f, "archive entry is too large"),
             Self::ProfileExists(name) => write!(f, "profile {name:?} already exists"),
             Self::ExternalLink { path } => {
                 write!(f, "profile link {path:?} points outside the profile")

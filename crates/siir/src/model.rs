@@ -1,7 +1,6 @@
 //! Parsed document shared by the text and binary codecs.
 
 use std::borrow::Cow;
-use std::collections::HashSet;
 use std::ops::Range;
 
 use crate::error::Error;
@@ -46,7 +45,6 @@ pub enum Index {
 
 pub(crate) struct Rendered {
     pub(crate) text: String,
-    pub(crate) id: bool,
 }
 
 /// A value written into the document.
@@ -175,8 +173,7 @@ impl Value {
             Self::Nil => "nil".to_owned(),
             Self::Hex(bits) => format!("&{bits:08x}"),
         };
-        let id = matches!(self, Self::Token(value) if is_id(value));
-        Ok(Rendered { text, id })
+        Ok(Rendered { text })
     }
 }
 
@@ -270,39 +267,6 @@ impl<'a> Document<'a> {
             }
             None => Err(Error::missing_unit(id)),
         }
-    }
-
-    /// Cited ids that have no unit in this document, without duplicates.
-    pub fn dangling(&self) -> Vec<&str> {
-        let ids: HashSet<&str> = self
-            .units
-            .iter()
-            .filter(|unit| !unit.removed)
-            .map(|unit| unit.id.as_ref())
-            .collect();
-        let mut seen = HashSet::new();
-        let mut missing = Vec::new();
-        for unit in self.units.iter().filter(|unit| !unit.removed) {
-            for attr in unit.attrs.iter().filter(|attr| !attr.removed) {
-                let candidate = match &attr.replacement {
-                    Some(rendered) => rendered.id.then_some(rendered.text.as_str()),
-                    None => (is_id(attr.value) && !is_number(attr.value)).then_some(attr.value),
-                };
-                if let Some(id) = candidate
-                    && !ids.contains(id)
-                    && seen.insert(id)
-                {
-                    missing.push(id);
-                }
-            }
-            for (_, rendered) in &unit.added {
-                let id = rendered.text.as_str();
-                if rendered.id && !ids.contains(id) && seen.insert(id) {
-                    missing.push(id);
-                }
-            }
-        }
-        missing
     }
 }
 
@@ -513,7 +477,7 @@ impl<'a> Unit<'a> {
         let mut last = self.span.start;
         for attr in &self.attrs {
             if attr.removed {
-                let (start, end) = removal(source, attr.span.clone());
+                let (start, end) = removal(source, attr.span.clone(), self.span.end);
                 let start = start.max(last);
                 out.push_str(&source[last..start]);
                 last = end;
@@ -547,18 +511,20 @@ impl<'a> Unit<'a> {
     }
 }
 
-fn removal(source: &str, span: Range<usize>) -> (usize, usize) {
+fn removal(source: &str, span: Range<usize>, unit_end: usize) -> (usize, usize) {
     let line_start = source[..span.start]
         .rfind('\n')
         .map_or(0, |newline| newline + 1);
-    if source[line_start..span.start]
+    let starts_line = source[line_start..span.start]
         .bytes()
-        .all(|byte| byte == b' ' || byte == b'\t')
-    {
-        let end = source[span.end..]
-            .find('\n')
-            .map_or(span.end, |newline| span.end + newline + 1);
-        (line_start, end)
+        .all(|byte| byte == b' ' || byte == b'\t');
+    let line_end = source[span.end..]
+        .find('\n')
+        .map_or(source.len(), |newline| span.end + newline + 1);
+    let rest = source[span.end..line_end].trim_start();
+    let only_comment = rest.is_empty() || rest.starts_with("//") || rest.starts_with('#');
+    if starts_line && only_comment && line_end < unit_end {
+        (line_start, line_end)
     } else {
         (span.start, span.end)
     }
@@ -640,27 +606,4 @@ fn is_vector(text: &str) -> bool {
         }
     }
     depth == 0 && groups > 0
-}
-
-fn is_number(text: &str) -> bool {
-    text.parse::<i64>().is_ok() || text.parse::<u64>().is_ok() || text.parse::<f32>().is_ok()
-}
-
-fn is_id(token: &str) -> bool {
-    if token.starts_with("_nameless.") {
-        return true;
-    }
-    let mut parts = 0;
-    for part in token.split('.') {
-        if part.is_empty()
-            || part.len() > 12
-            || !part
-                .bytes()
-                .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_')
-        {
-            return false;
-        }
-        parts += 1;
-    }
-    parts >= 2
 }

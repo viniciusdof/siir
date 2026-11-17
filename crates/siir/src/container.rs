@@ -18,6 +18,9 @@ const IV_START: usize = SIGNATURE_LEN + HMAC_LEN;
 const IV_END: usize = IV_START + IV_LEN;
 const HEADER_LEN: usize = IV_END + SIZE_LEN;
 
+/// Largest payload a wrapped file may declare.
+const MAX_PAYLOAD: usize = 256 * 1024 * 1024;
+
 /// Fixed AES-256 key for `ScsC`.
 const AES_KEY: [u8; 32] = [
     0x2a, 0x5f, 0xcb, 0x17, 0x91, 0xd2, 0x2f, 0xb6, 0x02, 0x45, 0xb3, 0xd8, 0x36, 0x9e, 0xd0, 0xb2,
@@ -76,6 +79,10 @@ fn unwrap_scsc(bytes: &[u8]) -> Result<Opened, Error> {
             .try_into()
             .map_err(|_| Error::truncated(SIZE_LEN, bytes.len(), IV_END))?,
     ) as usize;
+
+    if size > MAX_PAYLOAD {
+        return Err(Error::too_large(size, MAX_PAYLOAD));
+    }
 
     let iv = &bytes[IV_START..IV_END];
     let ciphertext = &bytes[HEADER_LEN..];
@@ -207,6 +214,13 @@ mod tests {
             error.to_string(),
             format!("zlib decompression failed at offset {HEADER_LEN}")
         );
+    }
+
+    #[test]
+    fn oversized_declared_payload_fails() {
+        let bytes = scsc_from_compressed(b"", u32::MAX as usize);
+        let error = open(&bytes).unwrap_err();
+        assert!(error.to_string().contains("exceeds the"));
     }
 
     #[test]

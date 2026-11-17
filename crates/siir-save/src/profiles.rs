@@ -2,6 +2,7 @@
 
 use std::collections::HashSet;
 use std::fs;
+use std::io::Read;
 use std::path::{Path, PathBuf};
 
 use zip::write::SimpleFileOptions;
@@ -12,6 +13,20 @@ use crate::command::{Command, apply};
 use crate::error::Error;
 use crate::names;
 use crate::value::{array, count, string, unquote};
+
+/// Largest single entry a restored archive may contain.
+const MAX_ENTRY: u64 = 512 * 1024 * 1024;
+/// Largest total a restored archive may extract.
+const MAX_TOTAL: u64 = 2 * 1024 * 1024 * 1024;
+
+/// Replaces `dest` with `tmp`, keeping the old file until the new one is complete.
+pub(crate) fn replace_file(tmp: &Path, dest: &Path) -> std::io::Result<()> {
+    #[cfg(windows)]
+    if dest.exists() {
+        std::fs::remove_file(dest)?;
+    }
+    std::fs::rename(tmp, dest)
+}
 
 /// Metadata from a save's `info.sii`.
 #[derive(Debug)]
@@ -46,7 +61,12 @@ pub fn find_profiles(root: &Path) -> Result<Vec<PathBuf>, Error> {
 /// Saves inside one profile.
 pub fn saves(profile: &Path) -> Result<Vec<PathBuf>, Error> {
     let mut saves = Vec::new();
-    for entry in fs::read_dir(profile.join(names::SAVES_DIR))? {
+    let entries = match fs::read_dir(profile.join(names::SAVES_DIR)) {
+        Ok(entries) => entries,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(saves),
+        Err(error) => return Err(error.into()),
+    };
+    for entry in entries {
         let path = entry?.path();
         if path.is_dir()
             && (path.join(names::INFO_FILE).is_file() || path.join(names::GAME_FILE).is_file())
@@ -84,24 +104,41 @@ pub fn info(save: &Path) -> Result<SaveInfo, Error> {
 
 /// Writes a profile directory to a zip archive.
 pub fn backup(profile: &Path, archive: &Path) -> Result<(), Error> {
+    let name = archive
+        .file_name()
+        .map(|name| name.to_string_lossy().to_string())
+        .unwrap_or_else(|| "profile.zip".to_owned());
+    let tmp = archive.with_file_name(format!("{name}.{}.tmp", std::process::id()));
+    let _ = fs::remove_file(&tmp);
     let entries = walk(profile)?;
+    let exclude = fs::canonicalize(archive).ok();
     // shortcut: archives are stored without compression; enable zip deflate
     // and allow the zlib license when backup size matters.
-    let file = fs::File::create(archive)?;
-    let mut zip = ZipWriter::new(file);
-    let options = SimpleFileOptions::default().compression_method(CompressionMethod::Stored);
-    for entry in entries {
-        let name = entry.relative.to_string_lossy().replace('\\', "/");
-        if entry.dir {
-            zip.add_directory(format!("{name}/"), options)?;
-        } else {
-            zip.start_file(name, options)?;
-            let mut source = fs::File::open(&entry.source)?;
-            std::io::copy(&mut source, &mut zip)?;
+    let result = (|| -> Result<(), Error> {
+        let file = fs::File::create(&tmp)?;
+        let mut zip = ZipWriter::new(file);
+        let options = SimpleFileOptions::default().compression_method(CompressionMethod::Stored);
+        for entry in entries {
+            if exclude.as_deref() == fs::canonicalize(&entry.source).ok().as_deref() {
+                continue;
+            }
+            let name = entry.relative.to_string_lossy().replace('\\', "/");
+            if entry.dir {
+                zip.add_directory(format!("{name}/"), options)?;
+            } else {
+                zip.start_file(name, options)?;
+                let mut source = fs::File::open(&entry.source)?;
+                std::io::copy(&mut source, &mut zip)?;
+            }
         }
+        zip.finish()?;
+        replace_file(&tmp, archive)?;
+        Ok(())
+    })();
+    if result.is_err() {
+        let _ = fs::remove_file(&tmp);
     }
-    zip.finish()?;
-    Ok(())
+    result
 }
 
 /// Extracts a profile archive into an empty or new directory.
@@ -116,24 +153,41 @@ pub fn restore(archive: &Path, profile: &Path) -> Result<(), Error> {
     }
     let file = fs::File::open(archive)?;
     let mut zip = ZipArchive::new(file)?;
-    fs::create_dir_all(profile)?;
-    for index in 0..zip.len() {
-        let mut entry = zip.by_index(index)?;
-        let Some(relative) = entry.enclosed_name() else {
-            return Err(Error::InvalidArchive);
-        };
-        let destination = profile.join(relative);
-        if entry.is_dir() {
-            fs::create_dir_all(&destination)?;
-            continue;
+    let result = (|| -> Result<(), Error> {
+        fs::create_dir_all(profile)?;
+        let mut total = 0u64;
+        for index in 0..zip.len() {
+            let mut entry = zip.by_index(index)?;
+            let Some(relative) = entry.enclosed_name() else {
+                return Err(Error::InvalidArchive);
+            };
+            let destination = profile.join(relative);
+            if entry.is_dir() {
+                fs::create_dir_all(&destination)?;
+                continue;
+            }
+            if entry.size() > MAX_ENTRY {
+                return Err(Error::ArchiveTooLarge);
+            }
+            total = total.saturating_add(entry.size());
+            if total > MAX_TOTAL {
+                return Err(Error::ArchiveTooLarge);
+            }
+            if let Some(parent) = destination.parent() {
+                fs::create_dir_all(parent)?;
+            }
+            let mut out = fs::File::create(&destination)?;
+            let copied = std::io::copy(&mut (&mut entry).take(MAX_ENTRY + 1), &mut out)?;
+            if copied > MAX_ENTRY {
+                return Err(Error::ArchiveTooLarge);
+            }
         }
-        if let Some(parent) = destination.parent() {
-            fs::create_dir_all(parent)?;
-        }
-        let mut out = fs::File::create(&destination)?;
-        std::io::copy(&mut entry, &mut out)?;
+        Ok(())
+    })();
+    if result.is_err() {
+        let _ = fs::remove_dir_all(profile);
     }
-    Ok(())
+    result
 }
 
 /// Copies a profile to a sibling directory named after `name` and renames it.
@@ -149,26 +203,33 @@ pub fn clone_profile(profile: &Path, name: &str, game: Game) -> Result<PathBuf, 
     if destination.exists() {
         return Err(Error::ProfileExists(name.to_owned()));
     }
-    fs::create_dir_all(&destination)?;
-    for entry in entries {
-        let target = destination.join(&entry.relative);
-        if entry.dir {
-            fs::create_dir_all(&target)?;
-        } else {
-            if let Some(parent) = target.parent() {
-                fs::create_dir_all(parent)?;
+    let result = (|| -> Result<(), Error> {
+        fs::create_dir_all(&destination)?;
+        for entry in entries {
+            let target = destination.join(&entry.relative);
+            if entry.dir {
+                fs::create_dir_all(&target)?;
+            } else {
+                if let Some(parent) = target.parent() {
+                    fs::create_dir_all(parent)?;
+                }
+                fs::copy(&entry.source, &target)?;
             }
-            fs::copy(&entry.source, &target)?;
         }
+        let bytes = fs::read(destination.join(names::PROFILE_FILE))?;
+        let file = siir::open(&bytes)?;
+        let mut document = file.document()?;
+        apply(&mut document, game, Command::RenameProfile(name.to_owned()))?;
+        fs::write(
+            destination.join(names::PROFILE_FILE),
+            file.write(&document)?,
+        )?;
+        Ok(())
+    })();
+    if result.is_err() {
+        let _ = fs::remove_dir_all(&destination);
     }
-    let bytes = fs::read(destination.join(names::PROFILE_FILE))?;
-    let file = siir::open(&bytes)?;
-    let mut document = file.document()?;
-    apply(&mut document, game, Command::RenameProfile(name.to_owned()))?;
-    fs::write(
-        destination.join(names::PROFILE_FILE),
-        file.write(&document)?,
-    )?;
+    result?;
     Ok(destination)
 }
 

@@ -51,7 +51,9 @@ ci: fmt-check lint test build doc audit
 extractor:
     #!/usr/bin/env bash
     set -euo pipefail
-    if [ -x target/extractor/extractor ]; then
+    stamp=target/extractor/.extractor-ref
+    if [ -x target/extractor/extractor ] \
+        && [ "$(cat "$stamp" 2>/dev/null)" = "{{extractor_ref}}" ]; then
         exit 0
     fi
     if ! mise x dotnet@10.0.100 -- dotnet --version >/dev/null 2>&1; then
@@ -64,6 +66,8 @@ extractor:
     git -C target/extractor-src fetch --all
     git -C target/extractor-src checkout --detach {{extractor_ref}}
     mise x dotnet@10.0.100 -- dotnet publish target/extractor-src/Extractor/Extractor.csproj -c Release -o target/extractor
+    mkdir -p target/extractor
+    printf '%s\n' "{{extractor_ref}}" > "$stamp"
 
 # Regenerate the committed catalog snapshots from the installed games.
 catalog game="all":

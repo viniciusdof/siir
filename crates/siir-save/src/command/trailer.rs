@@ -4,7 +4,7 @@ use siir::{Document, Unit, Value};
 
 use crate::error::Error;
 use crate::names::{self, indexed};
-use crate::value::{count, reference, text};
+use crate::value::{length, reference, text};
 
 const WEAR: [&str; 4] = [
     names::TRAILER_BODY_WEAR,
@@ -22,7 +22,7 @@ pub(super) fn repair_trailer(document: &mut Document<'_>, id: &str) -> Result<()
 }
 
 pub(super) fn repair_all_trailers(document: &mut Document<'_>) -> Result<(), Error> {
-    for id in owned_trailers(document) {
+    for id in owned_trailers(document)? {
         if document
             .units_of_class(names::TRAILER)
             .any(|unit| unit.id() == id)
@@ -80,13 +80,11 @@ pub(super) fn unlock_in_restricted_areas(
             .ok_or_else(|| Error::MissingUnit {
                 id: definition.clone(),
             })?;
-        unit.get(names::COUNTRY_VALIDITY)
-            .map(|value| {
-                value
-                    .parse::<usize>()
-                    .map_err(|_| Error::invalid(unit.class(), names::COUNTRY_VALIDITY, value))
-            })
-            .transpose()?
+        if unit.get(names::COUNTRY_VALIDITY).is_none() {
+            None
+        } else {
+            Some(length(unit, names::COUNTRY_VALIDITY)?)
+        }
     };
     let Some(count) = count else {
         return Ok(());
@@ -130,10 +128,18 @@ fn repair(document: &mut Document<'_>, id: &str) -> Result<(), Error> {
     for id in chain(document, id)? {
         let unit = trailer(document, &id)?;
         for name in WEAR {
+            if unit.get(name).is_none() {
+                return Err(Error::missing(unit.class(), name));
+            }
+        }
+        let mut wheels = Vec::new();
+        for name in WHEELS {
+            wheels.push((name, length(unit, name)?));
+        }
+        for name in WEAR {
             unit.set(name, Value::Int(0))?;
         }
-        for name in WHEELS {
-            let total = count(unit, name)? as usize;
+        for (name, total) in wheels {
             for nth in 0..total {
                 unit.set(&indexed(name, nth), Value::Int(0))?;
             }
@@ -161,23 +167,27 @@ fn chain(document: &Document<'_>, id: &str) -> Result<Vec<String>, Error> {
     Ok(ids)
 }
 
-fn owned_trailers(document: &Document<'_>) -> Vec<String> {
+fn owned_trailers(document: &Document<'_>) -> Result<Vec<String>, Error> {
     let Some(player) = document.units_of_class(names::PLAYER).next() else {
-        return Vec::new();
+        return Ok(Vec::new());
     };
-    let Some(count) = player
-        .get(names::TRAILERS)
-        .and_then(|value| value.parse::<usize>().ok())
-    else {
-        return Vec::new();
-    };
-    (0..count)
-        .filter_map(|nth| {
-            player
-                .get(&indexed(names::TRAILERS, nth))
-                .map(str::to_owned)
-        })
-        .collect()
+    let mut trailers = Vec::new();
+    if player.get(names::TRAILERS).is_some() {
+        let count = length(player, names::TRAILERS)?;
+        for nth in 0..count {
+            if let Some(id) = player.get(&indexed(names::TRAILERS, nth)) {
+                trailers.push(id.to_owned());
+            }
+        }
+    }
+    for slot in document.units_of_class(names::PLAYER_VEHICLES) {
+        if let Some(trailer) = reference(slot, names::TRAILER) {
+            trailers.push(trailer.to_owned());
+        }
+    }
+    trailers.sort();
+    trailers.dedup();
+    Ok(trailers)
 }
 
 fn trailer<'a, 'd>(document: &'a mut Document<'d>, id: &str) -> Result<&'a mut Unit<'d>, Error> {

@@ -16,6 +16,7 @@ enum Kind {
     BadCiphertext { len: usize },
     Decrypt,
     Decompress,
+    PayloadTooLarge { size: usize, max: usize },
     Parse { expected: &'static str },
     MissingAttribute { name: String },
     MissingUnit { id: String },
@@ -63,6 +64,13 @@ impl Error {
         Self {
             kind: Kind::Decompress,
             offset,
+        }
+    }
+
+    pub(crate) fn too_large(size: usize, max: usize) -> Self {
+        Self {
+            kind: Kind::PayloadTooLarge { size, max },
+            offset: 0,
         }
     }
 
@@ -189,6 +197,9 @@ impl fmt::Display for Error {
             ),
             Kind::Decrypt => write!(f, "AES-256-CBC decryption failed"),
             Kind::Decompress => write!(f, "zlib decompression failed"),
+            Kind::PayloadTooLarge { size, max } => {
+                write!(f, "payload of {size} bytes exceeds the {max}-byte limit")
+            }
             Kind::Parse { expected } => write!(f, "expected {expected}"),
             Kind::MissingAttribute { name } => write!(f, "missing attribute {name:?}"),
             Kind::InvalidValue { reason } => write!(f, "invalid value: {reason}"),

@@ -4,6 +4,7 @@ use std::fs;
 use std::path::Path;
 
 use crate::error::Error;
+use crate::profiles::replace_file;
 
 /// Developer, console, and convoy settings from `config.cfg`.
 #[derive(Debug)]
@@ -81,6 +82,9 @@ pub fn read_camera(path: &Path) -> Result<Camera, Error> {
     if parts.len() < 8 {
         return Err(Error::InvalidCamera);
     }
+    for part in &parts[..8] {
+        part.parse::<f32>().map_err(|_| Error::InvalidCamera)?;
+    }
     Ok(Camera {
         location: format!("({},{},{})", parts[1], parts[2], parts[3]),
         rotation: format!("({};{},{},{})", parts[4], parts[5], parts[6], parts[7]),
@@ -105,8 +109,20 @@ fn update(config: &Path, changes: &[(&str, &str)]) -> Result<(), Error> {
             key: changes[position].0.to_owned(),
         });
     }
-    fs::write(config, lines.join(&newline))?;
-    Ok(())
+    let name = config
+        .file_name()
+        .map(|name| name.to_string_lossy().to_string())
+        .unwrap_or_else(|| "config.cfg".to_owned());
+    let tmp = config.with_file_name(format!("{name}.{}.tmp", std::process::id()));
+    let result = (|| -> Result<(), Error> {
+        fs::write(&tmp, lines.join(&newline))?;
+        replace_file(&tmp, config)?;
+        Ok(())
+    })();
+    if result.is_err() {
+        let _ = fs::remove_file(&tmp);
+    }
+    result
 }
 
 fn read_lines(path: &Path) -> Result<(String, Vec<String>), Error> {
@@ -172,6 +188,18 @@ mod tests {
         let camera = read_camera(&path).unwrap();
         assert_eq!(camera.location, "(1.0,2.0,3.0)");
         assert_eq!(camera.rotation, "(1.0;0.0,0.0,0.0)");
+
+        let _ = fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[test]
+    fn rejects_a_non_numeric_camera() {
+        let path = temp("bad-numbers").join("cams.txt");
+        fs::write(&path, "0;a;b;c;1;0;0;0\n").unwrap();
+        assert_eq!(
+            read_camera(&path).unwrap_err().to_string(),
+            "cams.txt has no parseable placement"
+        );
 
         let _ = fs::remove_dir_all(path.parent().unwrap());
     }

@@ -35,6 +35,15 @@ pub(crate) fn count(unit: &Unit<'_>, name: &str) -> Result<u64, Error> {
         .map_err(|_| Error::invalid(unit.class(), name, value))
 }
 
+/// An implicit-array length the unit can actually hold.
+pub(crate) fn length(unit: &Unit<'_>, name: &str) -> Result<usize, Error> {
+    let count = count(unit, name)? as usize;
+    if count > unit.attrs().count() {
+        return Err(Error::invalid(unit.class(), name, &count.to_string()));
+    }
+    Ok(count)
+}
+
 pub(crate) fn float(unit: &Unit<'_>, name: &str) -> Result<f32, Error> {
     let value = text(unit, name)?;
     match value.strip_prefix('&') {
@@ -48,7 +57,7 @@ pub(crate) fn float(unit: &Unit<'_>, name: &str) -> Result<f32, Error> {
 }
 
 pub(crate) fn array<'a>(unit: &'a Unit<'_>, name: &str) -> Result<Vec<&'a str>, Error> {
-    let count = count(unit, name)? as usize;
+    let count = length(unit, name)?;
     let mut values = Vec::with_capacity(count);
     for nth in 0..count {
         let value = unit
@@ -64,4 +73,18 @@ pub(crate) fn unquote(value: &str) -> &str {
         .strip_prefix('"')
         .and_then(|value| value.strip_suffix('"'))
         .unwrap_or(value)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rejects_a_count_larger_than_the_attributes() {
+        let source = "SiiNunit\n{\nu : u.one {\n    items: 99\n}\n}\n";
+        let document = siir::Document::parse(source).unwrap();
+        let unit = document.units().next().unwrap();
+        assert!(length(unit, "items").is_err());
+        assert!(array(unit, "items").is_err());
+    }
 }
