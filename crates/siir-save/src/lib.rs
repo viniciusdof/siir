@@ -16,6 +16,7 @@ pub mod config;
 mod error;
 mod model;
 mod names;
+mod plate;
 pub mod profiles;
 mod value;
 
@@ -25,10 +26,11 @@ pub use command::{Command, apply};
 pub use error::Error;
 pub use model::{
     Accessory, Bank, Company, Driver, Game, Garage, Job, Offence, Offer, Player, Save, Skills,
-    Trailer, Truck, UsedTruck,
+    Trailer, Truck, UsedAssortment, UsedTruck,
 };
+pub use plate::LicensePlate;
 
-use value::{array, count, float, integer, reference, string, text, unquote};
+use value::{array, count, float, integer, optional_count, reference, string, text, unquote};
 
 /// Reads the typed view of a save document.
 pub fn read<'a>(document: &'a Document<'_>, game: Game) -> Result<Save<'a>, Error> {
@@ -41,7 +43,7 @@ pub fn read<'a>(document: &'a Document<'_>, game: Game) -> Result<Save<'a>, Erro
     let (experience, skills, visited_cities, unlocked_dealers) = match economy {
         Some(unit) => (
             count(unit, names::EXPERIENCE_POINTS)?,
-            skills(unit)?,
+            read_skills(unit)?,
             array(unit, names::VISITED_CITIES)?,
             array(unit, names::UNLOCKED_DEALERS)?,
         ),
@@ -100,6 +102,7 @@ pub fn read<'a>(document: &'a Document<'_>, game: Game) -> Result<Save<'a>, Erro
             transmission_wear: float(unit, "transmission_wear")?,
             cabin_wear: float(unit, "cabin_wear")?,
             fuel_relative: float(unit, "fuel_relative")?,
+            license_plate: string(unit, names::LICENSE_PLATE)?,
             placement: slot.and_then(|slot| slot.get(names::STORED_VEHICLE_PLACEMENT)),
         });
     }
@@ -130,6 +133,11 @@ pub fn read<'a>(document: &'a Document<'_>, game: Game) -> Result<Save<'a>, Erro
         drivers.push(Driver {
             id: unit.id(),
             experience_points: count(unit, "experience_points")?,
+            skills: read_skills(unit)?,
+            hometown: string(unit, names::HOMETOWN)?,
+            assigned_truck: reference(unit, names::ASSIGNED_TRUCK),
+            job: reference(unit, names::DRIVER_JOB),
+            training_policy: count(unit, names::TRAINING_POLICY)?,
         });
     }
 
@@ -155,6 +163,11 @@ pub fn read<'a>(document: &'a Document<'_>, game: Game) -> Result<Save<'a>, Erro
             target: string(unit, "target")?,
             cargo: text(unit, "cargo")?,
             shortest_distance_km: count(unit, "shortest_distance_km")?,
+            urgency: optional_count(unit, names::URGENCY)?,
+            expiration_time: optional_count(unit, names::EXPIRATION_TIME)?,
+            units_count: count(unit, names::UNITS_COUNT)?,
+            fill_ratio: float(unit, names::FILL_RATIO)?,
+            trailer_definition: text(unit, names::TRAILER_DEFINITION)?,
         });
     }
 
@@ -164,10 +177,28 @@ pub fn read<'a>(document: &'a Document<'_>, game: Game) -> Result<Save<'a>, Erro
             id: unit.id(),
             truck: text(unit, "truck")?,
             price: integer(unit, "price")?,
+            expiration_game_time: count(unit, names::EXPIRATION_GAME_TIME)?,
         });
     }
 
-    let offence = first(document, names::POLICE_OFFENCE_LOG).map(|unit| Offence { id: unit.id() });
+    let used_assortment = match first(document, names::USED_VEHICLE_ASSORTMENT) {
+        Some(unit) => Some(UsedAssortment {
+            id: unit.id(),
+            next_generation_game_time: count(unit, names::NEXT_GENERATION_GAME_TIME)?,
+            trucks: array(unit, names::TRUCKS)?,
+        }),
+        None => None,
+    };
+
+    let offence = match first(document, names::POLICE_OFFENCE_LOG) {
+        Some(unit) => Some(Offence {
+            id: unit.id(),
+            counts: numbers(unit, names::OFFENCE_TOTAL_COUNTS)?,
+            fines: fines(unit, names::OFFENCE_TOTAL_FINES)?,
+            history_entries: count(unit, names::DETAILED_HISTORY_ENTRIES)?,
+        }),
+        None => None,
+    };
 
     Ok(Save {
         game,
@@ -186,6 +217,7 @@ pub fn read<'a>(document: &'a Document<'_>, game: Game) -> Result<Save<'a>, Erro
         player_job,
         offers,
         used_trucks,
+        used_assortment,
         offence,
     })
 }
@@ -202,7 +234,7 @@ fn linked<'a, 'd>(
     units.get(reference(unit?, name)?).copied()
 }
 
-fn skills(unit: &Unit<'_>) -> Result<Skills, Error> {
+fn read_skills(unit: &Unit<'_>) -> Result<Skills, Error> {
     Ok(Skills {
         adr: count(unit, names::ADR)?,
         long_dist: count(unit, names::LONG_DIST)?,
@@ -220,7 +252,32 @@ fn job<'a>(unit: &'a Unit<'_>) -> Result<Job<'a>, Error> {
         source_company: reference(unit, "source_company"),
         target_company: reference(unit, "target_company"),
         planned_distance_km: count(unit, "planned_distance_km")?,
+        urgency: optional_count(unit, names::URGENCY)?,
+        units_count: count(unit, names::UNITS_COUNT)?,
+        fill_ratio: float(unit, names::FILL_RATIO)?,
     })
+}
+
+fn numbers(unit: &Unit<'_>, name: &str) -> Result<Vec<u64>, Error> {
+    array(unit, name)?
+        .into_iter()
+        .map(|value| {
+            value
+                .parse()
+                .map_err(|_| Error::invalid(unit.class(), name, value))
+        })
+        .collect()
+}
+
+fn fines(unit: &Unit<'_>, name: &str) -> Result<Vec<i64>, Error> {
+    array(unit, name)?
+        .into_iter()
+        .map(|value| {
+            value
+                .parse()
+                .map_err(|_| Error::invalid(unit.class(), name, value))
+        })
+        .collect()
 }
 
 /// The truck's accessory units, in `accessories[]` order.
@@ -372,6 +429,7 @@ mod tests {
         assert_eq!(truck.transmission_wear, 0.5);
         assert_eq!(truck.cabin_wear, 0.0);
         assert_eq!(truck.fuel_relative, 1.0);
+        assert_eq!(truck.license_plate, "PL<offset>12|germany");
         assert_eq!(truck.placement, Some("(1, 2, 3) (1; 0, 0, 0)"));
 
         let trailer = save.current_trailer().unwrap();
@@ -384,15 +442,48 @@ mod tests {
         assert_eq!(trailer.chassis_wear, 0.5);
         assert_eq!(save.garages[0].status, 2);
         assert_eq!(save.drivers[0].experience_points, 10);
+        let driver = &save.drivers[0];
+        assert_eq!(
+            driver.skills,
+            Skills {
+                adr: 0,
+                long_dist: 1,
+                heavy: 2,
+                fragile: 3,
+                urgent: 4,
+                mechanical: 5,
+            }
+        );
+        assert_eq!(driver.hometown, "prague");
+        assert_eq!(driver.assigned_truck, Some("vehicle.one"));
+        assert_eq!(driver.job, Some("job.one"));
+        assert_eq!(driver.training_policy, 2);
         assert_eq!(save.companies[0].permanent_data, "company.permanent.test");
         assert_eq!(save.jobs[0].cargo, None);
+        assert_eq!(save.jobs[0].urgency, Some(0));
         assert_eq!(save.player_job.as_ref().unwrap().cargo, Some("cargo.stone"));
         assert_eq!(save.player_job.as_ref().unwrap().planned_distance_km, 12);
+        assert_eq!(save.player_job.as_ref().unwrap().units_count, 20);
+        assert_eq!(save.player_job.as_ref().unwrap().fill_ratio, 0.5);
         assert_eq!(save.offers[0].target, "city.name");
         assert_eq!(save.offers[0].shortest_distance_km, 7);
+        assert_eq!(save.offers[0].urgency, Some(2));
+        assert_eq!(save.offers[0].expiration_time, Some(500));
+        assert_eq!(save.offers[0].units_count, 30);
+        assert_eq!(save.offers[0].fill_ratio, 0.75);
+        assert_eq!(save.offers[0].trailer_definition, "trailer_def.test");
         assert_eq!(save.used_trucks[0].truck, "vehicle.one");
         assert_eq!(save.used_trucks[0].price, 100);
-        assert_eq!(save.offence.as_ref().unwrap().id, "offences");
+        assert_eq!(save.used_trucks[0].expiration_game_time, 800);
+        let assortment = save.used_assortment.as_ref().unwrap();
+        assert_eq!(assortment.id, "used_assortment.one");
+        assert_eq!(assortment.next_generation_game_time, 600);
+        assert_eq!(assortment.trucks, ["used.one"]);
+        let offence = save.offence.as_ref().unwrap();
+        assert_eq!(offence.id, "offences");
+        assert_eq!(offence.counts, [4, 5]);
+        assert_eq!(offence.fines, [600, 700]);
+        assert_eq!(offence.history_entries, 3);
     }
 
     #[test]

@@ -1,7 +1,9 @@
 //! Read model and commands over the real ETS2 and ATS fixtures.
 
 use siir::{Document, Value};
-use siir_save::{Command, Game, Skills, apply, export_accessories, import_accessories, read};
+use siir_save::{
+    Command, Game, LicensePlate, Skills, apply, export_accessories, import_accessories, read,
+};
 
 fn fixture(path: &str) -> Vec<u8> {
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -941,4 +943,245 @@ fn ets2_remove_badge_changes_only_the_accessory_list() {
 
     let reopened = siir::open(after.as_bytes()).unwrap();
     assert_eq!(reopened.document().unwrap().to_text(), after);
+}
+
+#[test]
+fn ets2_plate_country_changes_only_the_plate() {
+    let bytes = fixture("ets2/saves/1/game.sii");
+    let file = siir::open(&bytes).unwrap();
+    let mut document = file.document().unwrap();
+    let id = read(&document, Game::Ets2)
+        .unwrap()
+        .current_truck()
+        .unwrap()
+        .id
+        .to_owned();
+
+    let old = written(&file, &document);
+    apply(
+        &mut document,
+        Game::Ets2,
+        Command::SetLicensePlateCountry {
+            id,
+            country: "poland".into(),
+        },
+    )
+    .unwrap();
+    let new = written(&file, &document);
+    let changed = changed_lines(&old, &new);
+    assert_eq!(changed.len(), 1);
+    assert!(changed[0].0.trim_start().starts_with("license_plate:"));
+    assert!(changed[0].1.trim_end().ends_with("|poland\""));
+
+    let out = file.write(&document).unwrap();
+    let reopened = siir::open(&out).unwrap();
+    let document = reopened.document().unwrap();
+    let save = read(&document, Game::Ets2).unwrap();
+    let plate = LicensePlate::parse(save.current_truck().unwrap().license_plate);
+    assert_eq!(plate.country, Some("poland"));
+    assert!(!plate.text.is_empty());
+}
+
+#[test]
+fn ets2_used_market_expiration_and_assortment_survive_reopen() {
+    let bytes = fixture("ets2/saves/1/game.sii");
+    let file = siir::open(&bytes).unwrap();
+    let mut document = file.document().unwrap();
+    let id = read(&document, Game::Ets2).unwrap().used_trucks[0]
+        .id
+        .to_owned();
+
+    let old = written(&file, &document);
+    apply(
+        &mut document,
+        Game::Ets2,
+        Command::SetUsedTruckExpiration {
+            id: id.clone(),
+            time: 10_000,
+        },
+    )
+    .unwrap();
+    apply(
+        &mut document,
+        Game::Ets2,
+        Command::SetUsedAssortmentNextGeneration(20_000),
+    )
+    .unwrap();
+    let new = written(&file, &document);
+    let changed = changed_lines(&old, &new);
+    assert_eq!(changed.len(), 2);
+    assert!(
+        changed
+            .iter()
+            .any(|(_, new)| new.trim_start() == "expiration_game_time: 10000\n")
+    );
+    assert!(
+        changed
+            .iter()
+            .any(|(_, new)| new.trim_start() == "next_generation_game_time: 20000\n")
+    );
+
+    let out = file.write(&document).unwrap();
+    let reopened = siir::open(&out).unwrap();
+    let document = reopened.document().unwrap();
+    let save = read(&document, Game::Ets2).unwrap();
+    let listing = save.used_trucks.iter().find(|used| used.id == id).unwrap();
+    assert_eq!(listing.expiration_game_time, 10_000);
+    let assortment = save.used_assortment.as_ref().unwrap();
+    assert_eq!(assortment.next_generation_game_time, 20_000);
+    assert!(!assortment.trucks.is_empty());
+}
+
+#[test]
+fn ets2_offer_edits_change_only_expected_lines() {
+    let bytes = fixture("ets2/saves/1/game.sii");
+    let file = siir::open(&bytes).unwrap();
+    let mut document = file.document().unwrap();
+    let id = read(&document, Game::Ets2).unwrap().offers[0].id.to_owned();
+
+    let old = written(&file, &document);
+    for command in [
+        Command::SetOfferUnits {
+            id: id.clone(),
+            units: 12,
+        },
+        Command::SetOfferCargo {
+            id: id.clone(),
+            cargo: "cargo.test_freight".into(),
+        },
+        Command::SetOfferTarget {
+            id: id.clone(),
+            target: "test.company".into(),
+        },
+        Command::SetOfferDistance {
+            id: id.clone(),
+            km: 1,
+        },
+        Command::SetOfferFill {
+            id: id.clone(),
+            fill: 0.25,
+        },
+        Command::SetOfferUrgency {
+            id: id.clone(),
+            urgency: 1,
+        },
+        Command::SetOfferExpiration {
+            id: id.clone(),
+            time: 99_999,
+        },
+    ] {
+        apply(&mut document, Game::Ets2, command).unwrap();
+    }
+    let new = written(&file, &document);
+    let changed = changed_lines(&old, &new);
+    assert_eq!(changed.len(), 7);
+    for (_, new) in changed {
+        assert!(
+            [
+                "units_count: 12\n",
+                "fill_ratio: 0.25\n",
+                "urgency: 1\n",
+                "expiration_time: 99999\n",
+                "cargo: cargo.test_freight\n",
+                "target: \"test.company\"\n",
+                "shortest_distance_km: 1\n",
+            ]
+            .contains(&new.trim_start())
+        );
+    }
+
+    let out = file.write(&document).unwrap();
+    let reopened = siir::open(&out).unwrap();
+    let document = reopened.document().unwrap();
+    let save = read(&document, Game::Ets2).unwrap();
+    let offer = save.offers.iter().find(|offer| offer.id == id).unwrap();
+    assert_eq!(offer.units_count, 12);
+    assert_eq!(offer.fill_ratio, 0.25);
+    assert_eq!(offer.urgency, Some(1));
+    assert_eq!(offer.expiration_time, Some(99_999));
+    assert_eq!(offer.cargo, "cargo.test_freight");
+    assert_eq!(offer.target, "test.company");
+    assert_eq!(offer.shortest_distance_km, 1);
+}
+
+#[test]
+fn ets2_current_job_cargo_survives_reopen() {
+    let bytes = fixture("ets2/saves/1/game.sii");
+    let file = siir::open(&bytes).unwrap();
+    let mut document = file.document().unwrap();
+
+    let old = written(&file, &document);
+    apply(
+        &mut document,
+        Game::Ets2,
+        Command::SetCurrentJobCargo("cargo.plast_film".into()),
+    )
+    .unwrap();
+    let new = written(&file, &document);
+    let changed = changed_lines(&old, &new);
+    assert_eq!(changed.len(), 1);
+    assert_eq!(changed[0].1.trim_start(), "cargo: cargo.plast_film\n");
+
+    let out = file.write(&document).unwrap();
+    let reopened = siir::open(&out).unwrap();
+    let document = reopened.document().unwrap();
+    let save = read(&document, Game::Ets2).unwrap();
+    assert_eq!(save.player_job.unwrap().cargo, Some("cargo.plast_film"));
+}
+
+#[test]
+fn ets2_driver_skills_survive_reopen() {
+    let bytes = fixture("ets2/saves/1/game.sii");
+    let file = siir::open(&bytes).unwrap();
+    let mut document = file.document().unwrap();
+    let id = read(&document, Game::Ets2).unwrap().drivers[0]
+        .id
+        .to_owned();
+    let skills = Skills {
+        adr: 6,
+        long_dist: 5,
+        heavy: 4,
+        fragile: 3,
+        urgent: 2,
+        mechanical: 1,
+    };
+
+    let old = written(&file, &document);
+    apply(
+        &mut document,
+        Game::Ets2,
+        Command::SetDriverSkills {
+            id: id.clone(),
+            skills,
+        },
+    )
+    .unwrap();
+    let new = written(&file, &document);
+    for (old, _) in changed_lines(&old, &new) {
+        let name = old.trim_start().split(':').next().unwrap();
+        assert!(
+            [
+                "adr",
+                "long_dist",
+                "heavy",
+                "fragile",
+                "urgent",
+                "mechanical"
+            ]
+            .contains(&name)
+        );
+    }
+
+    let out = file.write(&document).unwrap();
+    let reopened = siir::open(&out).unwrap();
+    let document = reopened.document().unwrap();
+    let save = read(&document, Game::Ets2).unwrap();
+    assert_eq!(
+        save.drivers
+            .iter()
+            .find(|driver| driver.id == id)
+            .unwrap()
+            .skills,
+        skills
+    );
 }

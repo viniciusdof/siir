@@ -43,6 +43,7 @@ vehicle : vehicle.one {
     transmission_wear: 0.5
     cabin_wear: 0
     fuel_relative: 1
+    license_plate: "PL<offset>12|germany"
     accessories: 7
     accessories[0]: accessory.data
     accessories[1]: accessory.engine
@@ -85,7 +86,17 @@ garage : garage.one {
     status: 2
 }
 driver_ai : driver.one {
+    adr: 0
+    long_dist: 1
+    heavy: 2
+    fragile: 3
+    urgent: 4
+    mechanical: 5
+    hometown: "prague"
+    driver_job: job.one
     experience_points: 10
+    training_policy: 2
+    assigned_truck: vehicle.one
 }
 company : company.one {
     permanent_data: company.permanent.test
@@ -93,23 +104,47 @@ company : company.one {
 job_info : job.one {
     cargo: null
     planned_distance_km: 0
+    urgency: 0
+    units_count: 0
+    fill_ratio: 1
 }
 player_job : player_job.one {
     cargo: cargo.stone
     source_company: company.a
     target_company: company.b
     planned_distance_km: 12
+    urgency: 1
+    units_count: 20
+    fill_ratio: 0.5
 }
 job_offer_data : offer.one {
     target: "city.name"
     cargo: cargo.stone
     shortest_distance_km: 7
+    urgency: 2
+    expiration_time: 500
+    units_count: 30
+    fill_ratio: 0.75
+    trailer_definition: trailer_def.test
 }
 used_truck_offer : used.one {
     truck: vehicle.one
     price: 100
+    expiration_game_time: 800
+}
+used_vehicle_assortment : used_assortment.one {
+    next_generation_game_time: 600
+    trucks: 1
+    trucks[0]: used.one
 }
 police_offence_log : offences {
+    detailed_history_entries: 3
+    offence_total_counts: 2
+    offence_total_counts[0]: 4
+    offence_total_counts[1]: 5
+    offence_total_fines: 2
+    offence_total_fines[0]: 600
+    offence_total_fines[1]: 700
 }
 mystery : unknown.one {
     whatever: 1

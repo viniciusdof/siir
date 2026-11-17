@@ -14,6 +14,7 @@ pub(crate) const JOB_INFO: &str = "job_info";
 pub(crate) const PLAYER_JOB: &str = "player_job";
 pub(crate) const JOB_OFFER_DATA: &str = "job_offer_data";
 pub(crate) const USED_TRUCK_OFFER: &str = "used_truck_offer";
+pub(crate) const USED_VEHICLE_ASSORTMENT: &str = "used_vehicle_assortment";
 pub(crate) const POLICE_OFFENCE_LOG: &str = "police_offence_log";
 
 // Attributes shared by the read model and the commands.
@@ -37,6 +38,21 @@ pub(crate) const TRAILER_BODY_WEAR: &str = "trailer_body_wear";
 pub(crate) const TRAILER_BODY_WEAR_UNFIXABLE: &str = "trailer_body_wear_unfixable";
 pub(crate) const CHASSIS_WEAR: &str = "chassis_wear";
 pub(crate) const CHASSIS_WEAR_UNFIXABLE: &str = "chassis_wear_unfixable";
+
+// Market, job, driver, and offence attributes.
+pub(crate) const EXPIRATION_TIME: &str = "expiration_time";
+pub(crate) const EXPIRATION_GAME_TIME: &str = "expiration_game_time";
+pub(crate) const NEXT_GENERATION_GAME_TIME: &str = "next_generation_game_time";
+pub(crate) const URGENCY: &str = "urgency";
+pub(crate) const UNITS_COUNT: &str = "units_count";
+pub(crate) const FILL_RATIO: &str = "fill_ratio";
+pub(crate) const HOMETOWN: &str = "hometown";
+pub(crate) const DRIVER_JOB: &str = "driver_job";
+pub(crate) const ASSIGNED_TRUCK: &str = "assigned_truck";
+pub(crate) const TRAINING_POLICY: &str = "training_policy";
+pub(crate) const OFFENCE_TOTAL_COUNTS: &str = "offence_total_counts";
+pub(crate) const OFFENCE_TOTAL_FINES: &str = "offence_total_fines";
+pub(crate) const DETAILED_HISTORY_ENTRIES: &str = "detailed_history_entries";
 
 // Economy and profile attributes.
 pub(crate) const COMPANIES: &str = "companies";

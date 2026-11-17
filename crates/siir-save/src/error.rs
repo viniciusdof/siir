@@ -92,6 +92,8 @@ pub enum Error {
     NoCurrentTruck,
     /// The player has no trailer in the assigned vehicle slot.
     NoCurrentTrailer,
+    /// The player has no current job.
+    NoCurrentJob,
     /// A fuel level is outside the range the game accepts.
     InvalidFuel {
         /// Requested level.
@@ -101,6 +103,16 @@ pub enum Error {
     InvalidGarageStatus {
         /// Requested status.
         status: u64,
+    },
+    /// A license plate country is not a lowercase country token.
+    InvalidCountry {
+        /// Requested country.
+        country: String,
+    },
+    /// An offer fill ratio is outside the range the game accepts.
+    InvalidFill {
+        /// Requested ratio.
+        fill: f32,
     },
     /// A garage still holds vehicles or drivers.
     GarageOccupied {
@@ -182,11 +194,18 @@ impl fmt::Display for Error {
             Self::NoGarage { id } => write!(f, "no garage holds {id}"),
             Self::NoCurrentTruck => write!(f, "player has no current truck"),
             Self::NoCurrentTrailer => write!(f, "player has no current trailer"),
+            Self::NoCurrentJob => write!(f, "player has no current job"),
             Self::InvalidFuel { level } => {
                 write!(f, "fuel level {level} is not between 0 and 1")
             }
             Self::InvalidGarageStatus { status } => {
                 write!(f, "garage status {status} is not 1, 2, 3, or 6")
+            }
+            Self::InvalidCountry { country } => {
+                write!(f, "license plate country {country:?} is invalid")
+            }
+            Self::InvalidFill { fill } => {
+                write!(f, "fill ratio {fill} is not between 0 and 1")
             }
             Self::GarageOccupied { id } => {
                 write!(f, "garage {id} still holds vehicles, drivers, or trailers")

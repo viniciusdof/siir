@@ -43,6 +43,8 @@ pub struct Save<'a> {
     pub offers: Vec<Offer<'a>>,
     /// Every used-truck market listing.
     pub used_trucks: Vec<UsedTruck<'a>>,
+    /// The used-truck assortment behind the listings, when the save has one.
+    pub used_assortment: Option<UsedAssortment<'a>>,
     /// The profile's police offence log, when the save has one.
     pub offence: Option<Offence<'a>>,
 }
@@ -114,6 +116,8 @@ pub struct Truck<'a> {
     pub cabin_wear: f32,
     /// Fuel level, from 0 to 1.
     pub fuel_relative: f32,
+    /// Raw license plate text, markup included.
+    pub license_plate: &'a str,
     /// Placement text from the owning slot, kept opaque.
     pub placement: Option<&'a str>,
 }
@@ -150,6 +154,16 @@ pub struct Driver<'a> {
     pub id: &'a str,
     /// The driver's experience points.
     pub experience_points: u64,
+    /// The driver's skill levels.
+    pub skills: Skills,
+    /// Hometown city, empty for a driver hired in place.
+    pub hometown: &'a str,
+    /// Truck unit the driver is assigned to.
+    pub assigned_truck: Option<&'a str>,
+    /// Current `job_info` unit.
+    pub job: Option<&'a str>,
+    /// Training policy the game stores.
+    pub training_policy: u64,
 }
 
 /// One company.
@@ -172,6 +186,12 @@ pub struct Job<'a> {
     pub target_company: Option<&'a str>,
     /// Planned road distance in kilometers.
     pub planned_distance_km: u64,
+    /// Urgency class the game stores, absent when the job has none.
+    pub urgency: Option<u64>,
+    /// Units of cargo.
+    pub units_count: u64,
+    /// Trailer fill ratio, from 0 to 1.
+    pub fill_ratio: f32,
 }
 
 /// One freight market offer.
@@ -184,6 +204,16 @@ pub struct Offer<'a> {
     pub cargo: &'a str,
     /// Shortest road distance in kilometers.
     pub shortest_distance_km: u64,
+    /// Urgency class the game stores, absent when the offer has none.
+    pub urgency: Option<u64>,
+    /// Game time the offer expires, absent when it does not expire.
+    pub expiration_time: Option<u64>,
+    /// Units of cargo offered.
+    pub units_count: u64,
+    /// Trailer fill ratio, from 0 to 1.
+    pub fill_ratio: f32,
+    /// Trailer definition the offer requires.
+    pub trailer_definition: &'a str,
 }
 
 /// One used-truck market listing.
@@ -194,12 +224,30 @@ pub struct UsedTruck<'a> {
     pub truck: &'a str,
     /// Asking price.
     pub price: i64,
+    /// Game time the listing expires.
+    pub expiration_game_time: u64,
+}
+
+/// The used-truck assortment that rotates the listings.
+pub struct UsedAssortment<'a> {
+    /// Unit id.
+    pub id: &'a str,
+    /// Game time the next listing generation is due.
+    pub next_generation_game_time: u64,
+    /// Listing unit ids in the assortment.
+    pub trucks: Vec<&'a str>,
 }
 
 /// The profile's police offence log.
 pub struct Offence<'a> {
     /// Unit id.
     pub id: &'a str,
+    /// Offence counts per category.
+    pub counts: Vec<u64>,
+    /// Fines per category.
+    pub fines: Vec<i64>,
+    /// Number of detailed history entries.
+    pub history_entries: u64,
 }
 
 /// The profile's bank.

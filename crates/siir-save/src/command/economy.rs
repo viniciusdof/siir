@@ -18,14 +18,7 @@ pub(super) fn set_experience(document: &mut Document<'_>, experience: u64) -> Re
 }
 
 pub(super) fn set_skills(document: &mut Document<'_>, skills: Skills) -> Result<(), Error> {
-    let unit = first(document, names::ECONOMY)?;
-    unit.set(names::ADR, Value::UInt(skills.adr))?;
-    unit.set(names::LONG_DIST, Value::UInt(skills.long_dist))?;
-    unit.set(names::HEAVY, Value::UInt(skills.heavy))?;
-    unit.set(names::FRAGILE, Value::UInt(skills.fragile))?;
-    unit.set(names::URGENT, Value::UInt(skills.urgent))?;
-    unit.set(names::MECHANICAL, Value::UInt(skills.mechanical))?;
-    Ok(())
+    super::write_skills(first(document, names::ECONOMY)?, skills)
 }
 
 pub(super) fn set_visited_cities(document: &mut Document<'_>, all: bool) -> Result<(), Error> {

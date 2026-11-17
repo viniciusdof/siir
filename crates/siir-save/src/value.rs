@@ -35,6 +35,16 @@ pub(crate) fn count(unit: &Unit<'_>, name: &str) -> Result<u64, Error> {
         .map_err(|_| Error::invalid(unit.class(), name, value))
 }
 
+pub(crate) fn optional_count(unit: &Unit<'_>, name: &str) -> Result<Option<u64>, Error> {
+    match unit.get(name) {
+        None | Some("nil" | "null") => Ok(None),
+        Some(value) => value
+            .parse()
+            .map(Some)
+            .map_err(|_| Error::invalid(unit.class(), name, value)),
+    }
+}
+
 /// An implicit-array length the unit can actually hold.
 pub(crate) fn length(unit: &Unit<'_>, name: &str) -> Result<usize, Error> {
     let count = count(unit, name)? as usize;

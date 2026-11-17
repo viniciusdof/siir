@@ -1,12 +1,18 @@
 //! Save commands that edit a document.
 
-use siir::Document;
+use siir::{Document, Unit};
 
 use crate::Game;
 use crate::Skills;
 use crate::error::Error;
+use crate::names;
 
+mod driver;
 mod economy;
+mod job;
+mod offence;
+mod offer;
+mod plate;
 mod player;
 mod profile;
 mod trailer;
@@ -156,6 +162,82 @@ pub enum Command {
     },
     /// Renames the profile in a `profile.sii` document.
     RenameProfile(String),
+    /// Sets one freight market offer's cargo unit count.
+    SetOfferUnits {
+        /// Offer unit id.
+        id: String,
+        /// Units of cargo.
+        units: u64,
+    },
+    /// Sets one freight market offer's cargo definition.
+    SetOfferCargo {
+        /// Offer unit id.
+        id: String,
+        /// Cargo `data_path` token, for example `cargo.plast_film`.
+        cargo: String,
+    },
+    /// Sets one freight market offer's target company.
+    SetOfferTarget {
+        /// Offer unit id.
+        id: String,
+        /// Target company token, for example `transinet.ostrava`.
+        target: String,
+    },
+    /// Sets one freight market offer's shortest distance.
+    SetOfferDistance {
+        /// Offer unit id.
+        id: String,
+        /// Shortest road distance in kilometers.
+        km: u64,
+    },
+    /// Sets one freight market offer's fill ratio.
+    SetOfferFill {
+        /// Offer unit id.
+        id: String,
+        /// Trailer fill ratio, from 0 to 1.
+        fill: f32,
+    },
+    /// Sets one freight market offer's urgency class.
+    SetOfferUrgency {
+        /// Offer unit id.
+        id: String,
+        /// Urgency class the game stores.
+        urgency: u64,
+    },
+    /// Sets one freight market offer's expiration time.
+    SetOfferExpiration {
+        /// Offer unit id.
+        id: String,
+        /// Game time the offer expires.
+        time: u64,
+    },
+    /// Sets one AI driver's skill levels.
+    SetDriverSkills {
+        /// Driver unit id.
+        id: String,
+        /// Skill levels to write.
+        skills: Skills,
+    },
+    /// Zeroes the police offence counts and fines.
+    ClearOffences,
+    /// Sets the cargo a player's current job hauls.
+    SetCurrentJobCargo(String),
+    /// Sets a truck's or trailer's license plate country.
+    SetLicensePlateCountry {
+        /// Truck or trailer unit id.
+        id: String,
+        /// Country name after `|`.
+        country: String,
+    },
+    /// Sets one used-truck listing's expiration time.
+    SetUsedTruckExpiration {
+        /// Listing unit id.
+        id: String,
+        /// Game time the listing expires.
+        time: u64,
+    },
+    /// Sets when the next used-truck listing generation is due.
+    SetUsedAssortmentNextGeneration(u64),
 }
 
 /// Applies one command to a save document.
@@ -205,5 +287,45 @@ pub fn apply(document: &mut Document<'_>, _game: Game, command: Command) -> Resu
             player::set_position(document, &location, &rotation)
         }
         Command::RenameProfile(name) => profile::rename(document, name),
+        Command::SetOfferUnits { id, units } => offer::set_units(document, &id, units),
+        Command::SetOfferCargo { id, cargo } => offer::set_cargo(document, &id, cargo),
+        Command::SetOfferTarget { id, target } => offer::set_target(document, &id, target),
+        Command::SetOfferDistance { id, km } => offer::set_distance(document, &id, km),
+        Command::SetOfferFill { id, fill } => offer::set_fill(document, &id, fill),
+        Command::SetOfferUrgency { id, urgency } => offer::set_urgency(document, &id, urgency),
+        Command::SetOfferExpiration { id, time } => offer::set_expiration(document, &id, time),
+        Command::SetDriverSkills { id, skills } => driver::set_skills(document, &id, skills),
+        Command::ClearOffences => offence::clear(document),
+        Command::SetCurrentJobCargo(cargo) => job::set_current_cargo(document, cargo),
+        Command::SetLicensePlateCountry { id, country } => {
+            plate::set_country(document, &id, &country)
+        }
+        Command::SetUsedTruckExpiration { id, time } => used::set_expiration(document, &id, time),
+        Command::SetUsedAssortmentNextGeneration(time) => {
+            used::set_assortment_generation(document, time)
+        }
     }
+}
+
+/// Finds one editable unit by id and class.
+fn edit<'a, 'd>(
+    document: &'a mut Document<'d>,
+    id: &str,
+    class: &str,
+) -> Result<&'a mut Unit<'d>, Error> {
+    match document.get(id) {
+        Some(unit) if unit.class() == class && unit.id() == id => Ok(unit),
+        _ => Err(Error::MissingUnit { id: id.to_owned() }),
+    }
+}
+
+/// Writes the six skill attributes.
+fn write_skills(unit: &mut Unit<'_>, skills: Skills) -> Result<(), Error> {
+    unit.set(names::ADR, siir::Value::UInt(skills.adr))?;
+    unit.set(names::LONG_DIST, siir::Value::UInt(skills.long_dist))?;
+    unit.set(names::HEAVY, siir::Value::UInt(skills.heavy))?;
+    unit.set(names::FRAGILE, siir::Value::UInt(skills.fragile))?;
+    unit.set(names::URGENT, siir::Value::UInt(skills.urgent))?;
+    unit.set(names::MECHANICAL, siir::Value::UInt(skills.mechanical))?;
+    Ok(())
 }

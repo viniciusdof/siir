@@ -9,11 +9,35 @@ pub(super) fn set_price(document: &mut Document<'_>, id: &str, price: i64) -> Re
     if price < 0 {
         return Err(Error::InvalidPrice { price });
     }
+    super::edit(document, id, names::USED_TRUCK_OFFER)?.set("price", Value::Int(price))?;
+    Ok(())
+}
+
+pub(super) fn set_expiration(
+    document: &mut Document<'_>,
+    id: &str,
+    time: u64,
+) -> Result<(), Error> {
+    super::edit(document, id, names::USED_TRUCK_OFFER)?
+        .set(names::EXPIRATION_GAME_TIME, Value::UInt(time))?;
+    Ok(())
+}
+
+pub(super) fn set_assortment_generation(
+    document: &mut Document<'_>,
+    time: u64,
+) -> Result<(), Error> {
+    let id = document
+        .units_of_class(names::USED_VEHICLE_ASSORTMENT)
+        .next()
+        .map(|unit| unit.id().to_owned())
+        .ok_or_else(|| Error::MissingUnit {
+            id: names::USED_VEHICLE_ASSORTMENT.to_owned(),
+        })?;
     let unit = document
-        .get(id)
-        .filter(|unit| unit.class() == names::USED_TRUCK_OFFER && unit.id() == id)
-        .ok_or_else(|| Error::MissingUnit { id: id.to_owned() })?;
-    unit.set("price", Value::Int(price))?;
+        .get(&id)
+        .ok_or_else(|| Error::MissingUnit { id: id.clone() })?;
+    unit.set(names::NEXT_GENERATION_GAME_TIME, Value::UInt(time))?;
     Ok(())
 }
 
@@ -73,5 +97,39 @@ mod tests {
         )
         .unwrap_err();
         assert_eq!(error.to_string(), "missing unit \"used.missing\"");
+    }
+
+    #[test]
+    fn sets_the_expiration_and_the_assortment_generation() {
+        let mut document = Document::parse(SOURCE).unwrap();
+        apply(
+            &mut document,
+            Game::Ets2,
+            Command::SetUsedTruckExpiration {
+                id: "used.one".into(),
+                time: 900,
+            },
+        )
+        .unwrap();
+        apply(
+            &mut document,
+            Game::Ets2,
+            Command::SetUsedAssortmentNextGeneration(700),
+        )
+        .unwrap();
+        assert_eq!(
+            document
+                .get("used.one")
+                .unwrap()
+                .get(names::EXPIRATION_GAME_TIME),
+            Some("900")
+        );
+        assert_eq!(
+            document
+                .get("used_assortment.one")
+                .unwrap()
+                .get(names::NEXT_GENERATION_GAME_TIME),
+            Some("700")
+        );
     }
 }
