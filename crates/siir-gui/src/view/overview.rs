@@ -5,6 +5,7 @@ use gpui_kit::prelude::*;
 use gpui_kit::{FontWeight, IntoElement, div, px};
 
 use siir_gui::edit::ADR_CLASSES;
+use siir_gui::format;
 use siir_gui::i18n::{self, t};
 
 use crate::ui::{self, tokens};
@@ -20,7 +21,7 @@ impl AppView {
         let game = self.state.game();
         let money = view
             .money
-            .map(|money| i18n::money(money, game))
+            .map(|money| format::money(money, game))
             .unwrap_or_else(|| "—".to_owned());
         let vehicle = view
             .current_vehicle
@@ -83,7 +84,7 @@ impl AppView {
                                     ))
                                     .child(stat(
                                         t("field.experience"),
-                                        view.experience.to_string(),
+                                        format::number(view.experience, game),
                                         tokens::TEXT_TITLE * 1.1,
                                         None,
                                     )),
@@ -121,22 +122,22 @@ impl AppView {
                                     .child(ui::metric(
                                         IconName::Truck,
                                         t("field.vehicles"),
-                                        view.counts.vehicles.to_string(),
+                                        format::number(view.counts.vehicles as u64, game),
                                     ))
                                     .child(ui::metric(
                                         IconName::Container,
                                         t("field.trailers"),
-                                        view.counts.trailers.to_string(),
+                                        format::number(view.counts.trailers as u64, game),
                                     ))
                                     .child(ui::metric(
                                         IconName::Users,
                                         t("field.drivers"),
-                                        view.counts.drivers.to_string(),
+                                        format::number(view.counts.drivers as u64, game),
                                     ))
                                     .child(ui::metric(
                                         IconName::Warehouse,
                                         t("field.garages"),
-                                        view.counts.garages.to_string(),
+                                        format::number(view.counts.garages as u64, game),
                                     )),
                             ),
                     )
@@ -150,7 +151,7 @@ impl AppView {
                                 ui::metric(
                                     IconName::ClipboardList,
                                     t("field.offers"),
-                                    view.counts.offers.to_string(),
+                                    format::number(view.counts.offers as u64, game),
                                 ),
                             )),
                     )

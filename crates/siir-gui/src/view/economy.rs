@@ -5,7 +5,8 @@ use gpui_kit::prelude::*;
 use gpui_kit::{Context, Div, FontWeight, IntoElement, SharedString, div, px};
 
 use siir_gui::edit::ADR_CLASSES;
-use siir_gui::i18n::{self, t};
+use siir_gui::format;
+use siir_gui::i18n::t;
 use siir_save::Command;
 
 use crate::ui::{self, Tone, tokens};
@@ -59,7 +60,7 @@ impl AppView {
                                 div().flex_1().min_w(px(0.0)).child(ui::field(
                                     t("field.money"),
                                     ui::text_field("money", &self.money, t("field.money"))
-                                        .prefix(i18n::currency(self.state.game())),
+                                        .prefix(format::currency(self.state.game())),
                                     self.money_error.map(t),
                                 )),
                             )

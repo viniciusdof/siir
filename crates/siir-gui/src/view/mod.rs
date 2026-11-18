@@ -20,6 +20,7 @@ use gpui_kit::{
 };
 
 use siir_gui::edit;
+use siir_gui::format;
 use siir_gui::i18n::{self, t};
 use siir_gui::state::{Settings, State};
 use siir_save::catalog::Catalog;
@@ -501,7 +502,7 @@ impl AppView {
         };
         let view = open.view();
         let money = view.money.unwrap_or_default();
-        let experience = view.experience as i64;
+        let experience = view.experience;
         let profile_name = view.profile_name.clone();
         let adr = view.skills.adr;
         let skills = [
@@ -512,23 +513,16 @@ impl AppView {
             view.skills.mechanical,
         ];
         let mask = MaskPattern::Number {
-            separator: Some(i18n::grouping(game)),
+            separator: Some(format::grouping(game)),
             fraction: None,
         };
         self.money.update(cx, |input, cx| {
             input.set_mask_pattern(mask.clone(), window, cx);
-            input.set_value(i18n::amount(money, game), window, cx);
+            input.set_value(format::amount(money, game), window, cx);
         });
         self.experience.update(cx, |input, cx| {
-            input.set_mask_pattern(
-                MaskPattern::Number {
-                    separator: None,
-                    fraction: None,
-                },
-                window,
-                cx,
-            );
-            input.set_value(experience.to_string(), window, cx);
+            input.set_mask_pattern(mask, window, cx);
+            input.set_value(format::number(experience, game), window, cx);
         });
         self.profile_name.update(cx, |input, cx| {
             input.set_value(profile_name, window, cx);

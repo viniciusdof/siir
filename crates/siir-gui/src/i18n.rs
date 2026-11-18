@@ -73,44 +73,6 @@ pub fn reveal_label() -> &'static str {
     }
 }
 
-/// Currency symbol the game uses for money.
-pub fn currency(game: Game) -> &'static str {
-    match game {
-        Game::Ets2 => "€",
-        Game::Ats => "$",
-    }
-}
-
-/// Thousands separator of the game's number format.
-pub fn grouping(game: Game) -> char {
-    match game {
-        Game::Ets2 => ' ',
-        Game::Ats => ',',
-    }
-}
-
-/// An integer with the game's thousands separators.
-pub fn amount(value: i64, game: Game) -> String {
-    let separator = grouping(game);
-    let digits = value.unsigned_abs().to_string();
-    let mut out = String::with_capacity(digits.len() + digits.len() / 3 + 1);
-    if value < 0 {
-        out.push('-');
-    }
-    for (ix, digit) in digits.chars().enumerate() {
-        if ix > 0 && (digits.len() - ix).is_multiple_of(3) {
-            out.push(separator);
-        }
-        out.push(digit);
-    }
-    out
-}
-
-/// Money as the game shows it: currency symbol and grouped digits.
-pub fn money(value: i64, game: Game) -> String {
-    format!("{}{}", currency(game), amount(value, game))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -171,15 +133,5 @@ mod tests {
             assert_ne!(t(key), key, "{key} is missing from ui.yml");
         }
         assert_eq!(t("banner.no_such_key"), "banner.no_such_key");
-    }
-
-    #[test]
-    fn groups_amounts_per_game() {
-        assert_eq!(amount(99_738_872, Game::Ets2), "99 738 872");
-        assert_eq!(amount(99_738_872, Game::Ats), "99,738,872");
-        assert_eq!(amount(2_000, Game::Ats), "2,000");
-        assert_eq!(amount(-1_234, Game::Ats), "-1,234");
-        assert_eq!(money(2_000, Game::Ets2), "€2 000");
-        assert_eq!(money(2_000, Game::Ats), "$2,000");
     }
 }
