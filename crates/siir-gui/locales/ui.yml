@@ -180,6 +180,9 @@ adr.corrosive:
 adr.none:
   en_us: None
   pt_br: Nenhuma
+link.edit_in:
+  en_us: "%{label}: %{value}, edit in %{screen}"
+  pt_br: "%{label}: %{value}, editar em %{screen}"
 banner.dismiss:
   en_us: Dismiss
   pt_br: Fechar

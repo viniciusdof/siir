@@ -2,17 +2,17 @@
 
 use gpui_kit::assets::IconName;
 use gpui_kit::prelude::*;
-use gpui_kit::{FontWeight, IntoElement, div, px};
+use gpui_kit::{AnyElement, Context, FocusHandle, Focusable, FontWeight, IntoElement, div, px};
 
 use siir_gui::edit::ADR_CLASSES;
 use siir_gui::format;
 use siir_gui::i18n::{self, t};
 
 use crate::ui::{self, tokens};
-use crate::view::AppView;
+use crate::view::{AppView, Section};
 
 impl AppView {
-    pub(crate) fn render_overview(&self) -> impl IntoElement {
+    pub(crate) fn render_overview(&self, cx: &mut Context<'_, Self>) -> impl IntoElement {
         let palette = tokens::palette();
         let Some(open) = self.state.open() else {
             return div().into_any_element();
@@ -44,6 +44,40 @@ impl AppView {
             .collect::<Vec<_>>()
             .join(", ");
         let adr = if adr.is_empty() { t("adr.none") } else { adr };
+        let money_focus = self.money.read(cx).focus_handle(cx);
+        let experience_focus = self.experience.read(cx).focus_handle(cx);
+        let economy = |field: &'static str, value: String, target: FocusHandle| -> AnyElement {
+            let label = t(field);
+            ui::link(
+                format!("overview-{field}"),
+                i18n::edit_link_label(&label, &value, "nav.economy"),
+                value,
+                cx.listener(move |this, _, window, cx| {
+                    this.follow_link(Section::Economy, &target, window, cx)
+                }),
+            )
+            .into_any_element()
+        };
+        let levels = [
+            view.skills.long_dist,
+            view.skills.heavy,
+            view.skills.fragile,
+            view.skills.urgent,
+            view.skills.mechanical,
+        ];
+        let skills = std::iter::once(("skill.adr", adr, self.adr_focus.clone())).chain(
+            [
+                "skill.long_dist",
+                "skill.heavy",
+                "skill.fragile",
+                "skill.urgent",
+                "skill.mechanical",
+            ]
+            .into_iter()
+            .zip(levels)
+            .zip(&self.skill_focus)
+            .map(|((key, level), focus)| (key, level.to_string(), focus.clone())),
+        );
         div()
             .id("overview-scroll")
             .w_full()
@@ -78,13 +112,17 @@ impl AppView {
                                     .gap(px(tokens::SPACE_6))
                                     .child(stat(
                                         t("field.money"),
-                                        money,
+                                        economy("field.money", money, money_focus),
                                         tokens::TEXT_TITLE * 1.6,
                                         None,
                                     ))
                                     .child(stat(
                                         t("field.experience"),
-                                        format::number(view.experience, game),
+                                        economy(
+                                            "field.experience",
+                                            format::number(view.experience, game),
+                                            experience_focus,
+                                        ),
                                         tokens::TEXT_TITLE * 1.1,
                                         None,
                                     )),
@@ -161,34 +199,21 @@ impl AppView {
                             .flex_col()
                             .gap(px(tokens::SPACE_2))
                             .child(ui::section_title(t("discovery.skills")))
-                            .child(ui::info_row(t("skill.adr"), adr))
-                            .child(ui::info_row(
-                                t("skill.long_dist"),
-                                view.skills.long_dist.to_string(),
-                            ))
-                            .child(ui::info_row(
-                                t("skill.heavy"),
-                                view.skills.heavy.to_string(),
-                            ))
-                            .child(ui::info_row(
-                                t("skill.fragile"),
-                                view.skills.fragile.to_string(),
-                            ))
-                            .child(ui::info_row(
-                                t("skill.urgent"),
-                                view.skills.urgent.to_string(),
-                            ))
-                            .child(ui::info_row(
-                                t("skill.mechanical"),
-                                view.skills.mechanical.to_string(),
-                            )),
+                            .children(skills.into_iter().map(|(key, value, focus)| {
+                                ui::info_row(t(key), economy(key, value, focus))
+                            })),
                     ),
             )
             .into_any_element()
     }
 }
 
-fn stat(label: String, value: String, size: f32, max_width: Option<f32>) -> impl IntoElement {
+fn stat(
+    label: String,
+    value: impl IntoElement,
+    size: f32,
+    max_width: Option<f32>,
+) -> impl IntoElement {
     let palette = tokens::palette();
     div()
         .flex()

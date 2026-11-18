@@ -47,6 +47,7 @@ pub struct AppView {
     profile_name: Entity<InputState>,
     skills: Vec<Entity<SliderState>>,
     skill_focus: Vec<FocusHandle>,
+    adr_focus: FocusHandle,
     adr: [bool; 6],
     syncing: bool,
     locale_open: bool,
@@ -157,20 +158,27 @@ impl AppView {
             }));
         }
 
+        // The window is the whole app, so closing it quits instead of
+        // destroying the window: on Touch Bar Macs, AppKit aborts when a GPUI
+        // window is torn down (AccessKit#823), while quitting exits cleanly.
         let close = cx.entity().downgrade();
         window.on_window_should_close(cx, move |window, cx| {
-            close
+            let asked = close
                 .update(cx, |view, cx| {
                     let valid = view.commit_fields(cx);
-                    if view.state.edited() || !valid {
+                    if view.state.asks_before_close(valid) {
                         view.close_after_discard = true;
                         view.ask_leave(window, cx);
-                        false
-                    } else {
                         true
+                    } else {
+                        false
                     }
                 })
-                .unwrap_or(true)
+                .unwrap_or(false);
+            if !asked {
+                cx.quit();
+            }
+            false
         });
 
         Self {
@@ -183,6 +191,7 @@ impl AppView {
             profile_name,
             skills,
             skill_focus,
+            adr_focus: cx.focus_handle().tab_stop(true),
             adr: [false; 6],
             syncing: false,
             locale_open: false,
@@ -250,6 +259,19 @@ impl AppView {
         cx.notify();
     }
 
+    /// Opens `section` with focus on the control a link pointed at, since the
+    /// link itself is no longer drawn.
+    fn follow_link(
+        &mut self,
+        section: Section,
+        target: &FocusHandle,
+        window: &mut Window,
+        cx: &mut Context<'_, Self>,
+    ) {
+        self.set_section(section, cx);
+        window.focus(target, cx);
+    }
+
     fn open_save(&mut self, ix: usize, window: &mut Window, cx: &mut Context<'_, Self>) {
         self.state.open_save(ix);
         if self.state.open().is_some() {
@@ -295,7 +317,7 @@ impl AppView {
         let closes = self.close_after_discard;
         self.close_save(window, cx);
         if closes {
-            window.remove_window();
+            cx.quit();
         }
     }
 
@@ -896,7 +918,7 @@ impl AppView {
 
     fn render_section(&self, cx: &mut Context<'_, Self>) -> impl IntoElement {
         match self.section {
-            Section::Overview => self.render_overview().into_any_element(),
+            Section::Overview => self.render_overview(cx).into_any_element(),
             Section::Economy => self.render_economy(cx).into_any_element(),
             Section::Profile => self.render_profile().into_any_element(),
         }

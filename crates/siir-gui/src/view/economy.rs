@@ -224,11 +224,15 @@ impl AppView {
     fn adr_grid(&self, cx: &mut Context<'_, Self>) -> Div {
         let mut cells: Vec<Div> = Vec::with_capacity(ADR_CLASSES.len());
         for (ix, key) in ADR_CLASSES.iter().enumerate() {
-            cells.push(div().w(px(ADR_CELL)).child(
-                ui::checkbox(("adr-class", ix), t(key), self.adr[ix]).on_change(
-                    cx.listener(move |this, checked: &bool, _, cx| this.set_adr(ix, *checked, cx)),
+            cells.push(
+                div().w(px(ADR_CELL)).child(
+                    ui::checkbox(("adr-class", ix), t(key), self.adr[ix])
+                        .when(ix == 0, |this| this.track_focus(&self.adr_focus))
+                        .on_change(cx.listener(move |this, checked: &bool, _, cx| {
+                            this.set_adr(ix, *checked, cx)
+                        })),
                 ),
-            ));
+            );
         }
         div()
             .flex()

@@ -214,3 +214,33 @@ fn applies_cities_and_dealerships() {
 
     fs::remove_dir_all(&root).unwrap();
 }
+
+#[test]
+fn asks_before_close_only_for_an_open_save_with_pending_work() {
+    let root = game_folder("close");
+    let save_dir = root.join("profiles/AAA/save/1");
+    let mut state = State::with_dirs(Game::Ets2, vec![root.clone()]);
+    assert!(
+        !state.asks_before_close(false),
+        "the home has no form, so its empty fields never block closing"
+    );
+
+    let ix = state
+        .saves()
+        .iter()
+        .position(|row| row.path == save_dir)
+        .expect("the copied save is listed");
+    state.open_save(ix);
+    assert!(!state.asks_before_close(true));
+    assert!(state.asks_before_close(false), "an invalid field asks");
+
+    assert!(state.apply(edit::money("12345").unwrap()).is_ok());
+    assert!(state.asks_before_close(true), "unsaved edits ask");
+    assert!(state.save().is_ok());
+    assert!(!state.asks_before_close(true));
+
+    state.close();
+    assert!(!state.asks_before_close(false));
+
+    fs::remove_dir_all(&root).unwrap();
+}

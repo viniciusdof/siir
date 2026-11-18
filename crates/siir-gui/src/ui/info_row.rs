@@ -6,10 +6,7 @@ use gpui_kit::{IntoElement, SharedString, div, px};
 use crate::ui::tokens::{self, ROW_HEIGHT, SPACE_2, TEXT_BODY};
 
 /// One row of read-only detail.
-pub fn info_row(
-    label: impl Into<SharedString>,
-    value: impl Into<SharedString>,
-) -> impl IntoElement {
+pub fn info_row(label: impl Into<SharedString>, value: impl IntoElement) -> impl IntoElement {
     let palette = tokens::palette();
     div()
         .flex()
@@ -31,6 +28,6 @@ pub fn info_row(
                 .max_w(px(360.0))
                 .text_size(px(TEXT_BODY))
                 .text_color(palette.text)
-                .child(value.into()),
+                .child(value),
         )
 }

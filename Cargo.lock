@@ -5770,8 +5770,9 @@ dependencies = [
  "gpui-kit",
  "rust-i18n",
  "serde",
- "serde_json",
  "siir-save",
+ "sys-locale",
+ "toml 1.2.1+spec-1.1.0",
 ]
 
 [[package]]

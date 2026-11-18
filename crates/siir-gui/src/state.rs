@@ -66,9 +66,9 @@ impl Settings {
     }
 
     fn load_from(path: &Path) -> Self {
-        fs::read(path)
+        fs::read_to_string(path)
             .ok()
-            .and_then(|bytes| serde_json::from_slice(&bytes).ok())
+            .and_then(|text| toml::from_str(&text).ok())
             .unwrap_or_default()
     }
 
@@ -76,9 +76,9 @@ impl Settings {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)?;
         }
-        let json = serde_json::to_vec_pretty(self).map_err(std::io::Error::other)?;
+        let text = toml::to_string_pretty(self).map_err(std::io::Error::other)?;
         let tmp = path.with_extension(format!("{}.tmp", std::process::id()));
-        let result = fs::write(&tmp, json).and_then(|()| fs::rename(&tmp, path));
+        let result = fs::write(&tmp, text).and_then(|()| fs::rename(&tmp, path));
         if result.is_err() {
             let _ = fs::remove_file(&tmp);
         }
@@ -87,7 +87,7 @@ impl Settings {
 }
 
 fn settings_path() -> Option<PathBuf> {
-    dirs::config_dir().map(|dir| dir.join("siir").join("settings.json"))
+    dirs::config_dir().map(|dir| dir.join("siir").join("settings.toml"))
 }
 
 /// One profile group in the save list.
@@ -292,6 +292,13 @@ impl State {
     /// Whether the open save has edits that are not on disk.
     pub fn edited(&self) -> bool {
         self.open.as_ref().is_some_and(Open::edited)
+    }
+
+    /// Whether closing the window asks first: a save is open and it has edits
+    /// or a form field that does not parse. With no save open the form is not
+    /// shown, so its empty fields never count.
+    pub fn asks_before_close(&self, fields_valid: bool) -> bool {
+        self.open.is_some() && (self.edited() || !fields_valid)
     }
 
     /// Backup written by the last successful save.
@@ -520,7 +527,7 @@ mod tests {
     fn round_trips_the_settings_file() {
         let root = std::env::temp_dir().join(format!("siir-gui-settings-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
-        let path = root.join("nested").join("settings.json");
+        let path = root.join("nested").join("settings.toml");
 
         let missing = Settings::load_from(&path);
         assert!(missing.dirs.is_empty());
@@ -543,7 +550,7 @@ mod tests {
             "the temp file must be renamed, not left behind"
         );
 
-        fs::write(&path, b"not json").unwrap();
+        fs::write(&path, b"not = [toml").unwrap();
         assert!(Settings::load_from(&path).dirs.is_empty());
         fs::remove_dir_all(&root).unwrap();
     }

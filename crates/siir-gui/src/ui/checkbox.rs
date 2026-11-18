@@ -4,8 +4,8 @@ use gpui_kit::assets::IconName;
 use gpui_kit::base::{Checkbox as BaseCheckbox, CheckboxIndicator, CheckboxState};
 use gpui_kit::prelude::*;
 use gpui_kit::{
-    App, ClickEvent, ElementId, IntoElement, RenderOnce, SharedString, Window, div, px,
-    transparent_black,
+    App, ClickEvent, ElementId, FocusHandle, IntoElement, RenderOnce, SharedString, Window, div,
+    px, transparent_black,
 };
 
 use crate::ui::{icon, tokens};
@@ -18,6 +18,7 @@ pub struct Checkbox {
     id: ElementId,
     label: SharedString,
     checked: bool,
+    focus: Option<FocusHandle>,
     on_change: Option<ChangeHandler>,
 }
 
@@ -31,11 +32,18 @@ pub fn checkbox(
         id: id.into(),
         label: label.into(),
         checked,
+        focus: None,
         on_change: None,
     }
 }
 
 impl Checkbox {
+    /// Uses `handle` for focus, so the owner can move focus to the checkbox.
+    pub fn track_focus(mut self, handle: &FocusHandle) -> Self {
+        self.focus = Some(handle.clone());
+        self
+    }
+
     /// Reports the next checked state on pointer, Space, or assistive activation.
     pub fn on_change(mut self, handler: impl Fn(&bool, &mut Window, &mut App) + 'static) -> Self {
         self.on_change = Some(Box::new(handler));
@@ -61,6 +69,7 @@ impl RenderOnce for Checkbox {
             .border_color(transparent_black())
             .hover(|style| style.bg(palette.surface_hover))
             .focus_visible(|style| style.border_color(palette.accent))
+            .when_some(self.focus, |this, handle| this.track_focus(&handle))
             .child(
                 CheckboxIndicator::new()
                     .checked(checked)

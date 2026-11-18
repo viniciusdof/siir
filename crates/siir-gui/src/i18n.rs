@@ -59,9 +59,43 @@ pub fn set_locale(locale: &str) {
     rust_i18n::set_locale(&locale);
 }
 
-/// Clamps the startup locale to one `ui.yml` ships.
+/// Starts in the OS language when `ui.yml` ships it, else in English.
 pub fn init() {
-    set_locale(&rust_i18n::locale());
+    let locale = sys_locale::get_locale().and_then(|tag| match_locale(&tag));
+    set_locale(locale.as_deref().unwrap_or(FALLBACK));
+}
+
+/// Shipped locale for an OS tag such as `pt-BR` or `pt_BR.UTF-8`: the exact
+/// region first, then any region of the same language.
+pub fn match_locale(tag: &str) -> Option<Cow<'static, str>> {
+    let tag = tag
+        .split(['.', '@'])
+        .next()
+        .unwrap_or_default()
+        .replace('-', "_")
+        .to_ascii_lowercase();
+    let language = tag.split('_').next().unwrap_or_default();
+    let shipped = locales();
+    shipped
+        .iter()
+        .find(|locale| locale.as_ref() == tag)
+        .or_else(|| {
+            shipped
+                .iter()
+                .find(|locale| locale.split('_').next() == Some(language))
+        })
+        .cloned()
+}
+
+/// Accessible name of an Overview value that opens the screen editing it.
+pub fn edit_link_label(label: &str, value: &str, screen: &str) -> String {
+    rust_i18n::t!(
+        "link.edit_in",
+        label = label,
+        value = value,
+        screen = t(screen)
+    )
+    .to_string()
 }
 
 /// Label of the action that shows the backup in the system file manager.
@@ -121,6 +155,27 @@ mod tests {
             let key = format!("language.{locale}");
             assert_ne!(t(&key), key, "{key} is missing from ui.yml");
         }
+    }
+
+    #[test]
+    fn matches_os_locales_to_shipped_ones() {
+        let matched = |tag: &str| match_locale(tag).map(Cow::into_owned);
+        assert_eq!(matched("pt-BR").as_deref(), Some("pt_br"));
+        assert_eq!(matched("pt_BR.UTF-8").as_deref(), Some("pt_br"));
+        assert_eq!(matched("pt-PT").as_deref(), Some("pt_br"));
+        assert_eq!(matched("en-GB").as_deref(), Some("en_us"));
+        assert_eq!(matched("en").as_deref(), Some("en_us"));
+        assert_eq!(matched("de-DE"), None);
+        assert_eq!(matched("C"), None);
+        assert_eq!(matched(""), None);
+    }
+
+    #[test]
+    fn names_an_edit_link_after_its_screen() {
+        assert_eq!(
+            edit_link_label("Money", "€2 000", "nav.economy"),
+            "Money: €2 000, edit in Economy"
+        );
     }
 
     #[test]
