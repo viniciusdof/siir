@@ -18,6 +18,21 @@ discovery.market:
 discovery.skills:
   en_us: Skills
   pt_br: Habilidades
+economy.discovery:
+  en_us: Discovery
+  pt_br: Exploração
+world.visited_cities:
+  en_us: Cities visited
+  pt_br: Cidades visitadas
+world.dealerships:
+  en_us: Dealerships discovered
+  pt_br: Concessionárias descobertas
+world.discover_all:
+  en_us: Discover all
+  pt_br: Descobrir todas
+world.clear:
+  en_us: Clear
+  pt_br: Limpar
 discovery.add_folder:
   en_us: Add game folder
   pt_br: Adicionar pasta do jogo

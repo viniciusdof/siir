@@ -1,5 +1,7 @@
 //! Economy, skills, cities, dealerships, and garages.
 
+use std::collections::BTreeMap;
+
 use siir::{Document, Unit, Value};
 
 use crate::Skills;
@@ -21,21 +23,41 @@ pub(super) fn set_skills(document: &mut Document<'_>, skills: Skills) -> Result<
     super::write_skills(first(document, names::ECONOMY)?, skills)
 }
 
+/// Filling keeps every city already visited and its visit count; a new city
+/// counts one visit.
 pub(super) fn set_visited_cities(document: &mut Document<'_>, all: bool) -> Result<(), Error> {
-    let cities = if all { cities(document)? } else { Vec::new() };
+    let mut visits: BTreeMap<String, i64> = BTreeMap::new();
+    if all {
+        for city in cities(document)? {
+            visits.insert(city, 1);
+        }
+    }
     let unit = first(document, names::ECONOMY)?;
+    if all {
+        let visited = super::values(unit, names::VISITED_CITIES)?;
+        let counts = super::values(unit, names::VISITED_CITIES_COUNT)?;
+        for (nth, city) in visited.into_iter().enumerate() {
+            let count = match counts.get(nth) {
+                Some(text) => text
+                    .parse()
+                    .map_err(|_| Error::invalid(unit.class(), names::VISITED_CITIES_COUNT, text))?,
+                None => 1,
+            };
+            visits.insert(city, count);
+        }
+    }
     rewrite(
         unit,
         names::VISITED_CITIES,
-        cities
-            .iter()
+        visits
+            .keys()
             .map(|city| Value::token(city.as_str()))
             .collect(),
     )?;
     rewrite(
         unit,
         names::VISITED_CITIES_COUNT,
-        vec![Value::Int(1); cities.len()],
+        visits.into_values().map(Value::Int).collect(),
     )
 }
 
@@ -198,8 +220,14 @@ mod tests {
             Some("2")
         );
         assert_eq!(
+            value(&document, "economy.one", "visited_cities_count[0]"),
+            Some("1"),
+            "a newly visited city counts one visit"
+        );
+        assert_eq!(
             value(&document, "economy.one", "visited_cities_count[1]"),
-            Some("1")
+            Some("3"),
+            "an already visited city keeps its count"
         );
 
         apply(

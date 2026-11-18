@@ -25,8 +25,8 @@ fn copy_tree(from: &Path, to: &Path) {
 }
 
 /// A temp game folder with one profile and one copied save.
-fn game_folder() -> PathBuf {
-    let root = std::env::temp_dir().join(format!("siir-gui-flow-{}", std::process::id()));
+fn game_folder(name: &str) -> PathBuf {
+    let root = std::env::temp_dir().join(format!("siir-gui-flow-{name}-{}", std::process::id()));
     let _ = fs::remove_dir_all(&root);
     let profile = root.join("profiles").join("AAA");
     fs::create_dir_all(&profile).unwrap();
@@ -44,7 +44,7 @@ fn game_folder() -> PathBuf {
 
 #[test]
 fn applies_saves_and_reopens() {
-    let root = game_folder();
+    let root = game_folder("flow");
     let save_dir = root.join("profiles/AAA/save/1");
     let save = save_dir.join("game.sii");
     let original = fs::read(&save).unwrap();
@@ -113,6 +113,45 @@ fn applies_saves_and_reopens() {
     assert_eq!(open.view().experience, 42);
     assert_eq!(open.view().skills.adr, 1);
     assert_eq!(open.view().skills.mechanical, 5);
+
+    fs::remove_dir_all(&root).unwrap();
+}
+
+#[test]
+fn applies_cities_and_dealerships() {
+    let root = game_folder("cities");
+    let save_dir = root.join("profiles/AAA/save/1");
+    let mut state = State::with_dirs(Game::Ets2, vec![root.clone()]);
+    let ix = state
+        .saves()
+        .iter()
+        .position(|row| row.path == save_dir)
+        .expect("the copied save is listed");
+    state.open_save(ix);
+
+    let open = state.open().expect("the fixture save opens");
+    assert_eq!(open.view().visited_cities, 1);
+    assert_eq!(open.view().dealerships, 0);
+
+    assert!(state.apply(Command::SetVisitedCities(true)).is_ok());
+    assert_eq!(state.open().unwrap().view().visited_cities, 388);
+
+    assert!(state.apply(Command::SetDealershipsDiscovered(true)).is_ok());
+    assert_eq!(state.open().unwrap().view().dealerships, 388);
+
+    assert!(
+        state
+            .apply(Command::SetDealershipsDiscovered(false))
+            .is_ok()
+    );
+    assert_eq!(state.open().unwrap().view().dealerships, 0);
+
+    assert!(state.save().is_ok());
+    state.close();
+    state.open_save(ix);
+    let open = state.open().expect("the saved file reopens");
+    assert_eq!(open.view().visited_cities, 388);
+    assert_eq!(open.view().dealerships, 0);
 
     fs::remove_dir_all(&root).unwrap();
 }

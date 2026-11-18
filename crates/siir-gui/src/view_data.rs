@@ -14,6 +14,10 @@ pub struct SaveView {
     pub experience: u64,
     /// Player skill levels.
     pub skills: Skills,
+    /// How many cities the player has visited.
+    pub visited_cities: usize,
+    /// How many dealerships the player has discovered.
+    pub dealerships: usize,
     /// Headquarters city.
     pub hq_city: String,
     /// Model folder of the player's current vehicle, when it has a data path.
@@ -47,6 +51,8 @@ impl SaveView {
             money: save.bank.as_ref().map(|bank| bank.money_account),
             experience: save.experience,
             skills: save.skills,
+            visited_cities: save.visited_cities.len(),
+            dealerships: save.unlocked_dealers.len(),
             hq_city: save
                 .player
                 .as_ref()

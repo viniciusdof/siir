@@ -16,7 +16,7 @@ economy : economy.one {
     visited_cities: 1
     visited_cities[0]: prague
     visited_cities_count: 1
-    visited_cities_count[0]: 1
+    visited_cities_count[0]: 3
     unlocked_dealers: 0
 }
 bank : bank.one {
