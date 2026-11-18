@@ -31,6 +31,10 @@ test:
 build:
     cargo build --all-targets --all-features
 
+# Run the desktop front end.
+gui *args:
+    cargo run -p siir-gui -- {{args}}
+
 # API docs, without dependencies. A warning is an error.
 [env("RUSTDOCFLAGS", "-D warnings")]
 doc:

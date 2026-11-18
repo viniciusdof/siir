@@ -1,0 +1,16 @@
+[package]
+name = "siir-gui"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.99.1"
+description = "Desktop front end for SIIR"
+repository = "https://codeberg.org/viniciusdof/siir"
+publish = false
+
+[dependencies]
+gpui-kit = { version = "=0.10.0", default-features = false, features = ["assets"] }
+rust-i18n = "=4.2.4"
+siir-save = { path = "../siir-save", version = "0.1.0" }
+
+[lints]
+workspace = true

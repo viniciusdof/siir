@@ -1,0 +1,81 @@
+_version: 2
+game.ets2_short:
+  en: ETS 2
+game.ats_short:
+  en: ATS
+discovery.fleet:
+  en: Fleet
+discovery.market:
+  en: Market
+discovery.skills:
+  en: Skills
+discovery.add_folder:
+  en: Add game folder
+empty.no_saves:
+  en: No saves found
+empty.no_saves_hint:
+  en: Add a game folder that holds your profiles.
+empty.no_match:
+  en: No saves match
+empty.no_match_hint:
+  en: Try another search.
+empty.autosaves_hidden:
+  en: Autosaves are hidden
+empty.autosaves_hidden_hint:
+  en: Use Show autosaves to include them.
+kind.local:
+  en: Local
+kind.steam:
+  en: Steam
+kind.proton:
+  en: Proton
+kind.custom:
+  en: Custom
+field.game:
+  en: Game
+field.headquarters:
+  en: Headquarters
+field.vehicle:
+  en: Current vehicle
+field.money:
+  en: Money
+field.experience:
+  en: Experience
+field.vehicles:
+  en: Vehicles
+field.trailers:
+  en: Trailers
+field.drivers:
+  en: Drivers
+field.garages:
+  en: Garages
+field.offers:
+  en: Offers
+skill.adr:
+  en: ADR
+skill.long_dist:
+  en: Long distance
+skill.heavy:
+  en: Heavy cargo
+skill.fragile:
+  en: Fragile cargo
+skill.urgent:
+  en: Urgent delivery
+skill.mechanical:
+  en: Mechanical
+home.continue:
+  en: Continue
+home.search:
+  en: Search saves
+home.hide_autosaves:
+  en: Hide autosaves
+home.show_autosaves:
+  en: Show autosaves
+home.most_recent:
+  en: Most recent save
+home.switch_save:
+  en: Switch save
+error.open_save:
+  en: Could not open this save.
+error.read_saves:
+  en: Could not read the saves of this profile.
