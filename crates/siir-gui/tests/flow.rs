@@ -26,6 +26,11 @@ fn copy_tree(from: &Path, to: &Path) {
 
 /// A temp game folder with one profile and one copied save.
 fn game_folder(name: &str) -> PathBuf {
+    game_folder_with(name, "1")
+}
+
+/// A temp game folder with one profile and the ETS2 fixture save `save`.
+fn game_folder_with(name: &str, save: &str) -> PathBuf {
     let root = std::env::temp_dir().join(format!("siir-gui-flow-{name}-{}", std::process::id()));
     let _ = fs::remove_dir_all(&root);
     let profile = root.join("profiles").join("AAA");
@@ -36,8 +41,8 @@ fn game_folder(name: &str) -> PathBuf {
     )
     .unwrap();
     copy_tree(
-        &fixtures().join("ets2/saves/1"),
-        &profile.join("save").join("1"),
+        &fixtures().join("ets2/saves").join(save),
+        &profile.join("save").join(save),
     );
     root
 }
@@ -241,6 +246,120 @@ fn asks_before_close_only_for_an_open_save_with_pending_work() {
 
     state.close();
     assert!(!state.asks_before_close(false));
+
+    fs::remove_dir_all(&root).unwrap();
+}
+
+#[test]
+fn lists_and_edits_vehicles() {
+    let root = game_folder_with("vehicles", "truck");
+    let save_dir = root.join("profiles/AAA/save/truck");
+    let mut state = State::with_dirs(Game::Ets2, vec![root.clone()]);
+    let ix = state
+        .saves()
+        .iter()
+        .position(|row| row.path == save_dir)
+        .expect("the copied save is listed");
+    state.open_save(ix);
+
+    let vehicles = &state.open().unwrap().view().vehicles;
+    let owned: Vec<String> = vehicles
+        .iter()
+        .take_while(|vehicle| vehicle.owned)
+        .map(|vehicle| vehicle.id.clone())
+        .collect();
+    assert!(owned.len() >= 2, "the truck fixture owns two trucks");
+    assert!(
+        vehicles
+            .iter()
+            .skip(owned.len())
+            .all(|vehicle| !vehicle.owned),
+        "owned vehicles come first"
+    );
+    assert_eq!(vehicles.iter().filter(|vehicle| vehicle.current).count(), 1);
+    let current = vehicles.iter().find(|vehicle| vehicle.current).unwrap();
+    assert!(current.owned);
+    let other = owned.iter().find(|id| **id != current.id).unwrap().clone();
+
+    let row = |state: &State, id: &str| {
+        let view = state.open().unwrap().view();
+        let row = view
+            .vehicles
+            .iter()
+            .find(|vehicle| vehicle.id == id)
+            .unwrap();
+        (row.fuel, row.odometer, row.engine_wear, row.current)
+    };
+    assert!(state.apply(edit::fuel(&other, 25.0)).is_ok());
+    assert!(state.apply(edit::odometer(&other, "4321").unwrap()).is_ok());
+    assert!(state.apply(Command::RepairVehicle(other.clone())).is_ok());
+    assert!(
+        state
+            .apply(Command::SetCurrentVehicle(other.clone()))
+            .is_ok()
+    );
+    assert_eq!(row(&state, &other), (0.25, Some(4321), 0.0, true));
+
+    assert!(state.save().is_ok());
+    state.close();
+    state.open_save(ix);
+    assert_eq!(row(&state, &other), (0.25, Some(4321), 0.0, true));
+
+    assert!(state.apply(Command::FillAllVehicles).is_ok());
+    let view = state.open().unwrap().view();
+    assert!(
+        view.vehicles
+            .iter()
+            .filter(|vehicle| vehicle.owned)
+            .all(|vehicle| vehicle.fuel == 1.0),
+        "Fill all reaches every vehicle the screen calls owned"
+    );
+
+    fs::remove_dir_all(&root).unwrap();
+}
+
+#[test]
+fn lists_and_edits_trailers() {
+    let root = game_folder_with("trailers", "1");
+    let save_dir = root.join("profiles/AAA/save/1");
+    let mut state = State::with_dirs(Game::Ets2, vec![root.clone()]);
+    let ix = state
+        .saves()
+        .iter()
+        .position(|row| row.path == save_dir)
+        .expect("the copied save is listed");
+    state.open_save(ix);
+    let trailers = &state.open().unwrap().view().trailers;
+    assert!(!trailers.is_empty(), "the fixture save has trailers");
+    let id = trailers[0].id.clone();
+
+    let row = |state: &State| {
+        let view = state.open().unwrap().view();
+        let row = view.trailers.iter().find(|row| row.id == id).unwrap();
+        (
+            row.plate.clone(),
+            row.cargo_mass,
+            row.body_wear,
+            row.chassis_wear,
+        )
+    };
+    assert!(
+        state
+            .apply(edit::trailer_plate(&id, "NEW 123").unwrap())
+            .is_ok()
+    );
+    assert!(state.apply(edit::cargo_mass(&id, "1500").unwrap()).is_ok());
+    assert!(state.apply(Command::RepairTrailer(id.clone())).is_ok());
+    let (plate, mass, body, chassis) = row(&state);
+    assert_eq!(plate, "NEW 123");
+    assert_eq!(mass, 1500.0);
+    assert_eq!((body, chassis), (0.0, 0.0));
+
+    assert!(state.save().is_ok());
+    state.close();
+    state.open_save(ix);
+    assert_eq!(row(&state).0, "NEW 123");
+    assert_eq!(row(&state).1, 1500.0);
 
     fs::remove_dir_all(&root).unwrap();
 }

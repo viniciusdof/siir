@@ -152,7 +152,7 @@ pub(super) fn remove_badge(document: &mut Document<'_>, id: &str) -> Result<(), 
                 .units()
                 .find(|unit| unit.id() == accessory)
                 .and_then(|unit| unit.get(names::DATA_PATH))
-                .is_some_and(|path| is_badge(unquote(path)));
+                .is_some_and(|path| crate::model::is_badge(unquote(path)));
             if !badged {
                 kept.push(accessory.to_owned());
             }
@@ -165,11 +165,6 @@ pub(super) fn remove_badge(document: &mut Document<'_>, id: &str) -> Result<(), 
 
     let unit = vehicle(document, id)?;
     write_accessories(unit, &kept, total)
-}
-
-fn is_badge(path: &str) -> bool {
-    path.split('/')
-        .any(|part| part == names::BADGE || part.ends_with(names::BADGE_SUFFIX))
 }
 
 pub(super) fn set_engine(document: &mut Document<'_>, id: &str, path: &str) -> Result<(), Error> {

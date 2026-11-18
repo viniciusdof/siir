@@ -46,6 +46,48 @@ pub fn experience(text: &str) -> Result<Command, FieldError> {
         .map_err(|_| FieldError::Number)
 }
 
+/// Parses a vehicle's odometer in whole kilometers.
+pub fn odometer(id: &str, text: &str) -> Result<Command, FieldError> {
+    text.trim()
+        .parse()
+        .map(|km| Command::SetOdometer {
+            id: id.to_owned(),
+            km,
+        })
+        .map_err(|_| FieldError::Number)
+}
+
+/// Parses a trailer's cargo mass in whole kilograms.
+pub fn cargo_mass(id: &str, text: &str) -> Result<Command, FieldError> {
+    text.trim()
+        .parse::<u32>()
+        .map(|mass| Command::SetCargoMass {
+            id: id.to_owned(),
+            mass: mass as f32,
+        })
+        .map_err(|_| FieldError::Number)
+}
+
+/// Parses a trailer's plate as raw text; markup and country are dropped.
+pub fn trailer_plate(id: &str, text: &str) -> Result<Command, FieldError> {
+    let plate = text.trim();
+    if plate.is_empty() || plate.contains(['"', '\n', '\r']) {
+        return Err(FieldError::Name);
+    }
+    Ok(Command::SetTrailerLicensePlate {
+        id: id.to_owned(),
+        plate: plate.to_owned(),
+    })
+}
+
+/// Sets a vehicle's fuel from a 0 to 100 slider position.
+pub fn fuel(id: &str, percent: f32) -> Command {
+    Command::SetFuel {
+        id: id.to_owned(),
+        level: (percent.round() / 100.0).clamp(0.0, 1.0),
+    }
+}
+
 /// ADR class translation keys, least significant bit first.
 pub const ADR_CLASSES: [&str; 6] = [
     "adr.explosives",
@@ -93,6 +135,38 @@ mod tests {
             money("99999999999999999999"),
             Err(FieldError::Number)
         ));
+    }
+
+    #[test]
+    fn parses_odometers_and_fuel() {
+        assert!(matches!(
+            odometer("vehicle.one", " 1234 "),
+            Ok(Command::SetOdometer { id, km: 1234 }) if id == "vehicle.one"
+        ));
+        assert!(matches!(odometer("v", "-1"), Err(FieldError::Number)));
+        assert!(matches!(odometer("v", ""), Err(FieldError::Number)));
+        assert!(matches!(
+            fuel("v", 49.6),
+            Command::SetFuel { level, .. } if level == 0.5
+        ));
+        assert!(matches!(fuel("v", 140.0), Command::SetFuel { level, .. } if level == 1.0));
+        assert!(matches!(fuel("v", -3.0), Command::SetFuel { level, .. } if level == 0.0));
+    }
+
+    #[test]
+    fn parses_trailer_mass_and_plate() {
+        assert!(matches!(
+            cargo_mass("t", " 1500 "),
+            Ok(Command::SetCargoMass { mass, .. }) if mass == 1500.0
+        ));
+        assert!(matches!(cargo_mass("t", "-1"), Err(FieldError::Number)));
+        assert!(matches!(cargo_mass("t", "1.5"), Err(FieldError::Number)));
+        assert!(matches!(
+            trailer_plate("t", " ABC 123 "),
+            Ok(Command::SetTrailerLicensePlate { plate, .. }) if plate == "ABC 123"
+        ));
+        assert!(matches!(trailer_plate("t", ""), Err(FieldError::Name)));
+        assert!(matches!(trailer_plate("t", "a\"b"), Err(FieldError::Name)));
     }
 
     #[test]

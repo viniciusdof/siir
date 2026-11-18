@@ -47,6 +47,11 @@ pub fn money(value: i64, game: Game) -> String {
     format!("{}{}", currency(game), amount(value, game))
 }
 
+/// A 0 to 1 fraction as a whole percentage.
+pub fn percent(fraction: f32) -> String {
+    format!("{}%", (fraction.clamp(0.0, 1.0) * 100.0).round())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -58,6 +63,15 @@ mod tests {
         assert_eq!(number(700_047, Game::Ets2), "700 047");
         assert_eq!(number(6_499, Game::Ats), "6,499");
         assert_eq!(number(u64::MAX, Game::Ats), "18,446,744,073,709,551,615");
+    }
+
+    #[test]
+    fn rounds_fractions_to_percent() {
+        assert_eq!(percent(0.0), "0%");
+        assert_eq!(percent(0.125), "13%");
+        assert_eq!(percent(1.0), "100%");
+        assert_eq!(percent(1.5), "100%");
+        assert_eq!(percent(-0.2), "0%");
     }
 
     #[test]

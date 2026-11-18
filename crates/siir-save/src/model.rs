@@ -1,5 +1,7 @@
 //! Typed, read-only view of a save.
 
+use crate::names;
+
 /// The game a save belongs to.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Game {
@@ -104,6 +106,19 @@ pub struct Accessory<'a> {
     pub slot: Option<&'a str>,
 }
 
+impl Accessory<'_> {
+    /// Whether this is a badge, the accessories `Command::RemoveBadge` removes.
+    pub fn is_badge(&self) -> bool {
+        self.path.is_some_and(is_badge)
+    }
+}
+
+/// Front and side badges use a `badge` or `*_badge` path segment.
+pub(crate) fn is_badge(path: &str) -> bool {
+    path.split('/')
+        .any(|part| part == names::BADGE || part.ends_with(names::BADGE_SUFFIX))
+}
+
 /// One `vehicle` unit.
 pub struct Vehicle<'a> {
     /// Unit id.
@@ -137,6 +152,8 @@ pub struct Vehicle<'a> {
     pub cabin_wear: f32,
     /// Fuel level, from 0 to 1.
     pub fuel_relative: f32,
+    /// Odometer in kilometers, when the unit stores one.
+    pub odometer: Option<u64>,
     /// Raw license plate text, markup included.
     pub license_plate: &'a str,
     /// Placement text from the owning slot, kept opaque.
@@ -484,4 +501,24 @@ pub struct Player<'a> {
     pub selected_bus_offer: Option<&'a str>,
     /// The player's current `player_car_job` unit id, when there is one.
     pub current_car_job: Option<&'a str>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn recognises_badges_by_path_segment() {
+        let accessory = |path| Accessory {
+            id: "accessory.one",
+            class: "vehicle_accessory",
+            path,
+            slot: None,
+        };
+        assert!(accessory(Some("/def/vehicle/truck/a.b/accessory/badge/x.sii")).is_badge());
+        assert!(accessory(Some("/def/vehicle/truck/a.b/accessory/f_badge/x.sii")).is_badge());
+        assert!(!accessory(Some("/def/vehicle/truck/a.b/accessory/mirror/x.sii")).is_badge());
+        assert!(!accessory(Some("/def/vehicle/truck/a.b/accessory/badger/x.sii")).is_badge());
+        assert!(!accessory(None).is_badge());
+    }
 }

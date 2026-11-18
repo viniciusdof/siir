@@ -299,6 +299,8 @@ fn ets2_commands_change_only_expected_lines() {
         ));
         assert!(new.trim_start().ends_with(": 1234\n"));
     }
+    let save = read(&document, Game::Ets2).unwrap();
+    assert_eq!(save.vehicle(&id).unwrap().odometer, Some(1234));
 
     let old = new;
     apply(

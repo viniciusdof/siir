@@ -39,6 +39,20 @@ impl AppView {
                 cx,
             ))
             .child(self.nav_item(
+                Section::Vehicles,
+                "nav-vehicles",
+                IconName::Truck,
+                t("nav.vehicles"),
+                cx,
+            ))
+            .child(self.nav_item(
+                Section::Trailers,
+                "nav-trailers",
+                IconName::Container,
+                t("nav.trailers"),
+                cx,
+            ))
+            .child(self.nav_item(
                 Section::Profile,
                 "nav-profile",
                 IconName::CircleUser,

@@ -43,6 +43,7 @@ vehicle : vehicle.one {
     transmission_wear: 0.5
     cabin_wear: 0
     fuel_relative: 1
+    odometer: 4321
     license_plate: "PL<offset>12|germany"
     accessories: 7
     accessories[0]: accessory.data

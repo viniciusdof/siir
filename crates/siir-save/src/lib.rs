@@ -116,6 +116,7 @@ pub fn read<'a>(document: &'a Document<'_>, game: Game) -> Result<Save<'a>, Erro
             transmission_wear: float(unit, "transmission_wear")?,
             cabin_wear: float(unit, "cabin_wear")?,
             fuel_relative: float(unit, "fuel_relative")?,
+            odometer: optional_count(unit, "odometer")?,
             license_plate: string(unit, names::LICENSE_PLATE)?,
             placement: slot.and_then(|slot| slot.get(names::STORED_VEHICLE_PLACEMENT)),
         });
@@ -602,6 +603,7 @@ mod tests {
         assert_eq!(vehicle.transmission_wear, 0.5);
         assert_eq!(vehicle.cabin_wear, 0.0);
         assert_eq!(vehicle.fuel_relative, 1.0);
+        assert_eq!(vehicle.odometer, Some(4321));
         assert_eq!(vehicle.license_plate, "PL<offset>12|germany");
         assert_eq!(vehicle.placement, Some("(1, 2, 3) (1; 0, 0, 0)"));
 

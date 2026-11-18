@@ -11,7 +11,7 @@ use crate::ui::tokens::{self, SPACE_1, TEXT_LABEL, TEXT_METRIC};
 pub fn metric(
     name: IconName,
     label: impl Into<SharedString>,
-    value: impl Into<SharedString>,
+    value: impl IntoElement,
 ) -> impl IntoElement {
     let palette = tokens::palette();
     div()
@@ -35,6 +35,6 @@ pub fn metric(
                 .text_size(px(TEXT_METRIC))
                 .font_weight(FontWeight::SEMIBOLD)
                 .text_color(palette.text)
-                .child(value.into()),
+                .child(value),
         )
 }

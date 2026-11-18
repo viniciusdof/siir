@@ -1,6 +1,6 @@
 //! Owned rows the views render, built from a borrowed [`Save`].
 
-use siir_save::{Save, Skills};
+use siir_save::{LicensePlate, Save, Skills, Vehicle};
 
 /// Headline values and counts of one open save.
 pub struct SaveView {
@@ -24,6 +24,75 @@ pub struct SaveView {
     pub current_vehicle: Option<String>,
     /// Owned fleet and market sizes.
     pub counts: Counts,
+    /// Every `vehicle` unit, owned ones first.
+    pub vehicles: Vec<VehicleRow>,
+    /// Every `trailer` unit.
+    pub trailers: Vec<TrailerRow>,
+}
+
+/// One `trailer` unit as the Trailers screen shows it.
+pub struct TrailerRow {
+    /// Unit id, the key every trailer command takes.
+    pub id: String,
+    /// Trailer definition the unit uses.
+    pub definition: String,
+    /// Plate text without markup or country.
+    pub plate: String,
+    /// Attached to the player's current truck.
+    pub current: bool,
+    /// Cargo mass in kilograms.
+    pub cargo_mass: f32,
+    /// Body wear, from 0 to 1.
+    pub body_wear: f32,
+    /// Chassis wear, from 0 to 1.
+    pub chassis_wear: f32,
+}
+
+/// One `vehicle` unit as the Vehicles screen shows it.
+pub struct VehicleRow {
+    /// Unit id, the key every vehicle command takes.
+    pub id: String,
+    /// Model folder, for the catalog's game name.
+    pub model: Option<String>,
+    /// Plate text without markup or country.
+    pub plate: String,
+    /// Owned by the player, so Repair all and Fill all reach it.
+    pub owned: bool,
+    /// The truck the player drives.
+    pub current: bool,
+    /// Engine wear, from 0 to 1.
+    pub engine_wear: f32,
+    /// Transmission wear, from 0 to 1.
+    pub transmission_wear: f32,
+    /// Cabin wear, from 0 to 1.
+    pub cabin_wear: f32,
+    /// Fuel level, from 0 to 1.
+    pub fuel: f32,
+    /// Odometer in kilometers, when the unit stores one.
+    pub odometer: Option<u64>,
+    /// Whether any accessory is a badge `RemoveBadge` would remove.
+    pub badges: bool,
+}
+
+impl VehicleRow {
+    fn new(vehicle: &Vehicle<'_>, owned: bool, current: bool) -> Self {
+        Self {
+            id: vehicle.id.to_owned(),
+            model: vehicle.model.map(str::to_owned),
+            plate: LicensePlate::parse(vehicle.license_plate).text,
+            owned,
+            current,
+            engine_wear: vehicle.engine_wear,
+            transmission_wear: vehicle.transmission_wear,
+            cabin_wear: vehicle.cabin_wear,
+            fuel: vehicle.fuel_relative,
+            odometer: vehicle.odometer,
+            badges: vehicle
+                .accessories
+                .iter()
+                .any(|accessory| accessory.is_badge()),
+        }
+    }
 }
 
 /// Owned fleet and market sizes shown on the overview.
@@ -45,6 +114,20 @@ impl SaveView {
     /// Copies the values the overview shows out of the borrowed save.
     pub fn new(save: &Save<'_>, save_name: String, profile_name: String) -> Self {
         let player = save.player.as_ref();
+        let current = save.current_vehicle().map(|vehicle| vehicle.id);
+        let current_trailer = save.current_trailer().map(|trailer| trailer.id);
+        // Owned as the vehicle commands count it: listed in `player.trucks`
+        // or referenced by a `player_vehicles` slot.
+        let mut vehicles: Vec<VehicleRow> = save
+            .vehicles
+            .iter()
+            .map(|vehicle| {
+                let owned = vehicle.slot.is_some()
+                    || player.is_some_and(|player| player.trucks.contains(&vehicle.id));
+                VehicleRow::new(vehicle, owned, current == Some(vehicle.id))
+            })
+            .collect();
+        vehicles.sort_by_key(|vehicle| !vehicle.owned);
         Self {
             save_name,
             profile_name,
@@ -77,6 +160,20 @@ impl SaveView {
                     .count(),
                 offers: save.offers.len(),
             },
+            vehicles,
+            trailers: save
+                .trailers
+                .iter()
+                .map(|trailer| TrailerRow {
+                    id: trailer.id.to_owned(),
+                    definition: trailer.definition.to_owned(),
+                    plate: LicensePlate::parse(trailer.license_plate).text,
+                    current: current_trailer == Some(trailer.id),
+                    cargo_mass: trailer.cargo_mass,
+                    body_wear: trailer.body_wear,
+                    chassis_wear: trailer.chassis_wear,
+                })
+                .collect(),
         }
     }
 }

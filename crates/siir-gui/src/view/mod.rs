@@ -5,6 +5,8 @@ mod economy;
 mod overview;
 mod profile;
 mod shell;
+mod trailers;
+mod vehicles;
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -34,6 +36,8 @@ enum Section {
     Overview,
     Economy,
     Profile,
+    Vehicles,
+    Trailers,
 }
 
 /// The application window.
@@ -48,6 +52,19 @@ pub struct AppView {
     skills: Vec<Entity<SliderState>>,
     skill_focus: Vec<FocusHandle>,
     adr_focus: FocusHandle,
+    selected_vehicle: Option<String>,
+    show_all_vehicles: bool,
+    odometer: Entity<InputState>,
+    odometer_error: Option<&'static str>,
+    fuel: Entity<SliderState>,
+    fuel_focus: FocusHandle,
+    vehicles_focus: FocusHandle,
+    selected_trailer: Option<String>,
+    trailer_plate: Entity<InputState>,
+    cargo_mass: Entity<InputState>,
+    trailer_plate_error: Option<&'static str>,
+    cargo_mass_error: Option<&'static str>,
+    trailers_focus: FocusHandle,
     adr: [bool; 6],
     syncing: bool,
     locale_open: bool,
@@ -94,6 +111,17 @@ impl AppView {
             .collect();
         let skill_focus: Vec<FocusHandle> =
             (0..5).map(|_| cx.focus_handle().tab_stop(true)).collect();
+        let odometer = Self::number_input(window, cx, false);
+        let fuel = cx.new(|_| {
+            SliderState::new()
+                .min(0.0)
+                .max(100.0)
+                .step(1.0)
+                .default_value(0.0)
+        });
+        let fuel_focus = cx.focus_handle().tab_stop(true);
+        let trailer_plate = Self::input(window, cx);
+        let cargo_mass = Self::number_input(window, cx, false);
 
         let mut subscriptions = vec![
             cx.observe(&search, |_, _, cx| cx.notify()),
@@ -109,7 +137,61 @@ impl AppView {
                 this.profile_name_error = None;
                 cx.notify();
             }),
+            cx.observe(&odometer, |this, _, cx| {
+                this.odometer_error = None;
+                cx.notify();
+            }),
+            cx.observe(&fuel, |this, _, cx| {
+                if !this.syncing {
+                    this.apply_fuel(cx);
+                }
+                cx.notify();
+            }),
         ];
+        subscriptions.push(cx.subscribe(&odometer, |this, _, event: &InputEvent, cx| {
+            if matches!(event, InputEvent::Change) {
+                this.apply_odometer_text(cx);
+            }
+        }));
+        let odometer_focus = odometer.read(cx).focus_handle(cx);
+        subscriptions.push(cx.on_focus(&odometer_focus, window, |_, _, cx| cx.notify()));
+        subscriptions.push(cx.on_blur(&odometer_focus, window, |this, _, cx| {
+            this.commit_odometer(cx)
+        }));
+        subscriptions.push(cx.on_focus(&fuel_focus, window, |_, _, cx| cx.notify()));
+        subscriptions.push(cx.on_blur(&fuel_focus, window, |_, _, cx| cx.notify()));
+        subscriptions.push(cx.observe(&trailer_plate, |this, _, cx| {
+            this.trailer_plate_error = None;
+            cx.notify();
+        }));
+        subscriptions.push(cx.observe(&cargo_mass, |this, _, cx| {
+            this.cargo_mass_error = None;
+            cx.notify();
+        }));
+        subscriptions.push(
+            cx.subscribe(&trailer_plate, |this, _, event: &InputEvent, cx| {
+                if matches!(event, InputEvent::Change) {
+                    this.apply_trailer_plate_text(cx);
+                }
+            }),
+        );
+        subscriptions.push(
+            cx.subscribe(&cargo_mass, |this, _, event: &InputEvent, cx| {
+                if matches!(event, InputEvent::Change) {
+                    this.apply_cargo_mass_text(cx);
+                }
+            }),
+        );
+        let trailer_plate_focus = trailer_plate.read(cx).focus_handle(cx);
+        subscriptions.push(cx.on_focus(&trailer_plate_focus, window, |_, _, cx| cx.notify()));
+        subscriptions.push(cx.on_blur(&trailer_plate_focus, window, |this, _, cx| {
+            this.commit_trailer_plate(cx)
+        }));
+        let cargo_mass_focus = cargo_mass.read(cx).focus_handle(cx);
+        subscriptions.push(cx.on_focus(&cargo_mass_focus, window, |_, _, cx| cx.notify()));
+        subscriptions.push(cx.on_blur(&cargo_mass_focus, window, |this, _, cx| {
+            this.commit_cargo_mass(cx)
+        }));
         subscriptions.push(cx.subscribe(&money, |this, _, event: &InputEvent, cx| {
             if matches!(event, InputEvent::Change) {
                 this.apply_money_text(cx);
@@ -192,6 +274,19 @@ impl AppView {
             skills,
             skill_focus,
             adr_focus: cx.focus_handle().tab_stop(true),
+            selected_vehicle: None,
+            show_all_vehicles: false,
+            odometer,
+            odometer_error: None,
+            fuel,
+            fuel_focus,
+            vehicles_focus: cx.focus_handle().tab_stop(true),
+            selected_trailer: None,
+            trailer_plate,
+            cargo_mass,
+            trailer_plate_error: None,
+            cargo_mass_error: None,
+            trailers_focus: cx.focus_handle().tab_stop(true),
             adr: [false; 6],
             syncing: false,
             locale_open: false,
@@ -393,9 +488,17 @@ impl AppView {
         self.commit_money(cx);
         self.commit_experience(cx);
         self.commit_profile_name(cx);
+        self.commit_odometer(cx);
+        self.trailer_plate_error =
+            (!self.apply_trailer_plate_text(cx)).then_some(edit::FieldError::Name.key());
+        self.cargo_mass_error =
+            (!self.apply_cargo_mass_text(cx)).then_some(edit::FieldError::Number.key());
         self.money_error.is_none()
             && self.experience_error.is_none()
             && self.profile_name_error.is_none()
+            && self.odometer_error.is_none()
+            && self.trailer_plate_error.is_none()
+            && self.cargo_mass_error.is_none()
     }
 
     /// Applies the money text once it parses; reports whether it did.
@@ -465,6 +568,276 @@ impl AppView {
         }
     }
 
+    /// The selected vehicle's row in the owned view.
+    fn selected_row(&self) -> Option<&siir_gui::view_data::VehicleRow> {
+        let id = self.selected_vehicle.as_ref()?;
+        self.state
+            .open()?
+            .view()
+            .vehicles
+            .iter()
+            .find(|vehicle| &vehicle.id == id)
+    }
+
+    /// The game's name for a model folder, or the folder when the catalog
+    /// does not know it.
+    fn vehicle_name(&self, model: Option<&str>) -> String {
+        model
+            .map(|token| {
+                self.catalog
+                    .as_ref()
+                    .and_then(|catalog| {
+                        catalog.vehicle_name(token, i18n::current_locale().as_ref())
+                    })
+                    .unwrap_or(token)
+                    .to_owned()
+            })
+            .unwrap_or_else(|| "—".to_owned())
+    }
+
+    fn select_vehicle(&mut self, id: String, window: &mut Window, cx: &mut Context<'_, Self>) {
+        self.selected_vehicle = Some(id);
+        self.sync_vehicle(window, cx);
+        cx.notify();
+    }
+
+    fn toggle_all_vehicles(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
+        self.show_all_vehicles = !self.show_all_vehicles;
+        if !self.show_all_vehicles && !self.selected_row().is_some_and(|row| row.owned) {
+            self.selected_vehicle = self.default_vehicle();
+            self.sync_vehicle(window, cx);
+        }
+        cx.notify();
+    }
+
+    /// The current truck, else the first listed vehicle.
+    fn default_vehicle(&self) -> Option<String> {
+        let vehicles = &self.state.open()?.view().vehicles;
+        vehicles
+            .iter()
+            .find(|vehicle| vehicle.current)
+            .or_else(|| {
+                vehicles
+                    .iter()
+                    .find(|vehicle| self.show_all_vehicles || vehicle.owned)
+            })
+            .map(|vehicle| vehicle.id.clone())
+    }
+
+    /// Puts the selected vehicle's odometer and fuel into their controls.
+    fn sync_vehicle(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
+        let game = self.state.game();
+        let Some((odometer, fuel)) = self.selected_row().map(|row| (row.odometer, row.fuel)) else {
+            return;
+        };
+        self.odometer_error = None;
+        self.odometer.update(cx, |input, cx| {
+            input.set_mask_pattern(
+                MaskPattern::Number {
+                    separator: Some(format::grouping(game)),
+                    fraction: None,
+                },
+                window,
+                cx,
+            );
+            input.set_value(
+                format::number(odometer.unwrap_or_default(), game),
+                window,
+                cx,
+            );
+        });
+        self.syncing = true;
+        self.fuel
+            .update(cx, |state, cx| state.set_value(fuel * 100.0, window, cx));
+        self.syncing = false;
+    }
+
+    /// Applies the odometer text once it parses; reports whether it did.
+    fn apply_odometer_text(&mut self, cx: &mut Context<'_, Self>) -> bool {
+        let Some((id, Some(current))) = self
+            .selected_row()
+            .map(|row| (row.id.clone(), row.odometer))
+        else {
+            // Without a stored odometer the field is not shown.
+            return true;
+        };
+        let text = self.odometer.read(cx).unmask_value().to_string();
+        let Ok(command) = edit::odometer(&id, &text) else {
+            return false;
+        };
+        self.odometer_error = None;
+        if matches!(command, Command::SetOdometer { km, .. } if km != current) {
+            self.apply(command, |_| {}, cx);
+        }
+        true
+    }
+
+    fn commit_odometer(&mut self, cx: &mut Context<'_, Self>) {
+        if !self.apply_odometer_text(cx) {
+            self.odometer_error = Some(edit::FieldError::Number.key());
+            cx.notify();
+        }
+    }
+
+    fn apply_fuel(&mut self, cx: &mut Context<'_, Self>) {
+        let percent = self.fuel.read(cx).value().end();
+        let Some((id, current)) = self.selected_row().map(|row| (row.id.clone(), row.fuel)) else {
+            return;
+        };
+        if (current * 100.0).round() != percent.round() {
+            self.apply(edit::fuel(&id, percent), |_| {}, cx);
+        }
+    }
+
+    /// Applies a vehicle action, then refreshes the controls it can change.
+    fn vehicle_command(
+        &mut self,
+        command: Command,
+        window: &mut Window,
+        cx: &mut Context<'_, Self>,
+    ) {
+        self.apply(command, |_| {}, cx);
+        self.sync_vehicle(window, cx);
+    }
+
+    /// The selected trailer's row in the owned view.
+    fn selected_trailer_row(&self) -> Option<&siir_gui::view_data::TrailerRow> {
+        let id = self.selected_trailer.as_ref()?;
+        self.state
+            .open()?
+            .view()
+            .trailers
+            .iter()
+            .find(|trailer| &trailer.id == id)
+    }
+
+    fn select_trailer(&mut self, id: String, window: &mut Window, cx: &mut Context<'_, Self>) {
+        self.selected_trailer = Some(id);
+        self.sync_trailer(window, cx);
+        cx.notify();
+    }
+
+    /// The attached trailer, else the first one.
+    fn default_trailer(&self) -> Option<String> {
+        let trailers = &self.state.open()?.view().trailers;
+        trailers
+            .iter()
+            .find(|trailer| trailer.current)
+            .or_else(|| trailers.first())
+            .map(|trailer| trailer.id.clone())
+    }
+
+    /// Puts the selected trailer's plate and cargo mass into their fields.
+    fn sync_trailer(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
+        let game = self.state.game();
+        let Some((plate, mass)) = self
+            .selected_trailer_row()
+            .map(|row| (row.plate.clone(), row.cargo_mass))
+        else {
+            return;
+        };
+        self.trailer_plate_error = None;
+        self.cargo_mass_error = None;
+        self.trailer_plate.update(cx, |input, cx| {
+            input.set_value(plate, window, cx);
+        });
+        self.cargo_mass.update(cx, |input, cx| {
+            input.set_mask_pattern(
+                MaskPattern::Number {
+                    separator: Some(format::grouping(game)),
+                    fraction: None,
+                },
+                window,
+                cx,
+            );
+            input.set_value(
+                format::number(mass.max(0.0).round() as u64, game),
+                window,
+                cx,
+            );
+        });
+    }
+
+    /// Applies the plate text once it is valid; reports whether it was.
+    fn apply_trailer_plate_text(&mut self, cx: &mut Context<'_, Self>) -> bool {
+        let Some((id, plate)) = self
+            .selected_trailer_row()
+            .map(|row| (row.id.clone(), row.plate.clone()))
+        else {
+            // Without a selected trailer the field is not shown.
+            return true;
+        };
+        let text = self.trailer_plate.read(cx).value().to_string();
+        let Ok(Command::SetTrailerLicensePlate { plate: next, .. }) =
+            edit::trailer_plate(&id, &text)
+        else {
+            return false;
+        };
+        self.trailer_plate_error = None;
+        if next != plate {
+            self.apply(
+                edit::trailer_plate(&id, &text).expect("parsed above"),
+                |_| {},
+                cx,
+            );
+        }
+        true
+    }
+
+    /// Applies the cargo mass once it parses; reports whether it did.
+    fn apply_cargo_mass_text(&mut self, cx: &mut Context<'_, Self>) -> bool {
+        let Some((id, mass)) = self
+            .selected_trailer_row()
+            .map(|row| (row.id.clone(), row.cargo_mass))
+        else {
+            return true;
+        };
+        let text = self.cargo_mass.read(cx).unmask_value().to_string();
+        let Ok(Command::SetCargoMass { mass: next, .. }) = edit::cargo_mass(&id, &text) else {
+            return false;
+        };
+        self.cargo_mass_error = None;
+        if next != mass {
+            self.apply(
+                edit::cargo_mass(&id, &text).expect("parsed above"),
+                |_| {},
+                cx,
+            );
+        }
+        true
+    }
+
+    fn commit_trailer_plate(&mut self, cx: &mut Context<'_, Self>) {
+        if self.selected_trailer_row().is_none() {
+            return;
+        }
+        if !self.apply_trailer_plate_text(cx) {
+            self.trailer_plate_error = Some(edit::FieldError::Name.key());
+            cx.notify();
+        }
+    }
+
+    fn commit_cargo_mass(&mut self, cx: &mut Context<'_, Self>) {
+        if self.selected_trailer_row().is_none() {
+            return;
+        }
+        if !self.apply_cargo_mass_text(cx) {
+            self.cargo_mass_error = Some(edit::FieldError::Number.key());
+            cx.notify();
+        }
+    }
+
+    /// Applies a trailer action, then refreshes the fields it can change.
+    fn trailer_command(
+        &mut self,
+        command: Command,
+        window: &mut Window,
+        cx: &mut Context<'_, Self>,
+    ) {
+        self.apply(command, |_| {}, cx);
+        self.sync_trailer(window, cx);
+    }
+
     fn apply_skills(&mut self, cx: &mut Context<'_, Self>) {
         let levels: [u64; 5] = std::array::from_fn(|ix| {
             self.skills[ix]
@@ -512,6 +885,9 @@ impl AppView {
         self.money_error = None;
         self.experience_error = None;
         self.profile_name_error = None;
+        self.odometer_error = None;
+        self.trailer_plate_error = None;
+        self.cargo_mass_error = None;
         self.action_error = None;
         self.confirm_leave = false;
         self.close_after_discard = false;
@@ -555,6 +931,10 @@ impl AppView {
             state.update(cx, |state, cx| state.set_value(level as f32, window, cx));
         }
         self.syncing = false;
+        self.selected_vehicle = self.default_vehicle();
+        self.sync_vehicle(window, cx);
+        self.selected_trailer = self.default_trailer();
+        self.sync_trailer(window, cx);
     }
 
     fn toggle_profile(&mut self, path: PathBuf, cx: &mut Context<'_, Self>) {
@@ -921,6 +1301,8 @@ impl AppView {
             Section::Overview => self.render_overview(cx).into_any_element(),
             Section::Economy => self.render_economy(cx).into_any_element(),
             Section::Profile => self.render_profile().into_any_element(),
+            Section::Vehicles => self.render_vehicles(cx).into_any_element(),
+            Section::Trailers => self.render_trailers(cx).into_any_element(),
         }
     }
 }

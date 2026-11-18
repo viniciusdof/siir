@@ -23,19 +23,7 @@ impl AppView {
             .money
             .map(|money| format::money(money, game))
             .unwrap_or_else(|| "—".to_owned());
-        let vehicle = view
-            .current_vehicle
-            .as_deref()
-            .map(|token| {
-                self.catalog
-                    .as_ref()
-                    .and_then(|catalog| {
-                        catalog.vehicle_name(token, i18n::current_locale().as_ref())
-                    })
-                    .unwrap_or(token)
-                    .to_owned()
-            })
-            .unwrap_or_else(|| "—".to_owned());
+        let vehicle = self.vehicle_name(view.current_vehicle.as_deref());
         let adr = ADR_CLASSES
             .iter()
             .enumerate()
@@ -157,16 +145,44 @@ impl AppView {
                                     .flex()
                                     .flex_wrap()
                                     .gap(px(tokens::SPACE_6))
-                                    .child(ui::metric(
-                                        IconName::Truck,
-                                        t("field.vehicles"),
-                                        format::number(view.counts.vehicles as u64, game),
-                                    ))
-                                    .child(ui::metric(
-                                        IconName::Container,
-                                        t("field.trailers"),
-                                        format::number(view.counts.trailers as u64, game),
-                                    ))
+                                    .child(ui::metric(IconName::Truck, t("field.vehicles"), {
+                                        let label = t("field.vehicles");
+                                        let value =
+                                            format::number(view.counts.vehicles as u64, game);
+                                        let target = self.vehicles_focus.clone();
+                                        ui::link(
+                                            "overview-field.vehicles",
+                                            i18n::edit_link_label(&label, &value, "nav.vehicles"),
+                                            value,
+                                            cx.listener(move |this, _, window, cx| {
+                                                this.follow_link(
+                                                    Section::Vehicles,
+                                                    &target,
+                                                    window,
+                                                    cx,
+                                                )
+                                            }),
+                                        )
+                                    }))
+                                    .child(ui::metric(IconName::Container, t("field.trailers"), {
+                                        let label = t("field.trailers");
+                                        let value =
+                                            format::number(view.counts.trailers as u64, game);
+                                        let target = self.trailers_focus.clone();
+                                        ui::link(
+                                            "overview-field.trailers",
+                                            i18n::edit_link_label(&label, &value, "nav.trailers"),
+                                            value,
+                                            cx.listener(move |this, _, window, cx| {
+                                                this.follow_link(
+                                                    Section::Trailers,
+                                                    &target,
+                                                    window,
+                                                    cx,
+                                                )
+                                            }),
+                                        )
+                                    }))
                                     .child(ui::metric(
                                         IconName::Users,
                                         t("field.drivers"),

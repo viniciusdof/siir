@@ -42,6 +42,12 @@ nav.overview:
 nav.economy:
   en_us: Economy
   pt_br: Economia
+nav.vehicles:
+  en_us: Vehicles
+  pt_br: Veículos
+nav.trailers:
+  en_us: Trailers
+  pt_br: Reboques
 nav.profile:
   en_us: Profile
   pt_br: Perfil
@@ -183,6 +189,87 @@ adr.none:
 link.edit_in:
   en_us: "%{label}: %{value}, edit in %{screen}"
   pt_br: "%{label}: %{value}, editar em %{screen}"
+vehicles.repair_all:
+  en_us: Repair all
+  pt_br: Reparar todos
+vehicles.fill_all:
+  en_us: Fill all
+  pt_br: Abastecer todos
+vehicles.show_all:
+  en_us: Show all vehicles
+  pt_br: Mostrar todos os veículos
+vehicles.show_owned:
+  en_us: Show owned only
+  pt_br: Mostrar só os próprios
+vehicles.current:
+  en_us: Current
+  pt_br: Atual
+vehicles.wear:
+  en_us: Wear
+  pt_br: Desgaste
+vehicles.repair:
+  en_us: Repair
+  pt_br: Reparar
+vehicles.fill:
+  en_us: Fill tank
+  pt_br: Encher o tanque
+vehicles.remove_badges:
+  en_us: Remove badges
+  pt_br: Remover emblemas
+vehicles.set_current:
+  en_us: Drive this truck
+  pt_br: Dirigir este caminhão
+wear.engine:
+  en_us: Engine
+  pt_br: Motor
+wear.transmission:
+  en_us: Transmission
+  pt_br: Transmissão
+wear.cabin:
+  en_us: Cabin
+  pt_br: Cabine
+field.odometer:
+  en_us: Odometer (km)
+  pt_br: Hodômetro (km)
+field.fuel:
+  en_us: Fuel
+  pt_br: Combustível
+empty.no_vehicles:
+  en_us: No vehicle selected
+  pt_br: Nenhum veículo selecionado
+empty.no_vehicles_hint:
+  en_us: Pick a vehicle from the list, or show all vehicles.
+  pt_br: Escolha um veículo na lista ou mostre todos os veículos.
+trailers.repair_all:
+  en_us: Repair all
+  pt_br: Reparar todos
+trailers.repair:
+  en_us: Repair
+  pt_br: Reparar
+trailers.unlock:
+  en_us: Unlock everywhere
+  pt_br: Liberar em todo lugar
+trailers.attach:
+  en_us: Attach to truck
+  pt_br: Engatar no caminhão
+wear.body:
+  en_us: Body
+  pt_br: Carroceria
+wear.chassis:
+  en_us: Chassis
+  pt_br: Chassi
+field.trailer_plate:
+  en_us: Plate
+  pt_br: Placa
+field.cargo_mass:
+  en_us: Cargo mass (kg)
+  pt_br: Massa da carga (kg)
+empty.no_trailers:
+  en_us: No trailers
+  pt_br: Nenhum reboque
+empty.no_trailers_hint:
+  en_us: This save has no trailer units.
+  pt_br: Este save não tem unidades de reboque.
 banner.dismiss:
   en_us: Dismiss
   pt_br: Fechar
