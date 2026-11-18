@@ -3,10 +3,10 @@
 use gpui_kit::base::input::{Input, InputBase, InputState};
 use gpui_kit::prelude::*;
 use gpui_kit::{
-    App, ElementId, Entity, Focusable, IntoElement, RenderOnce, SharedString, Window, px,
+    App, ElementId, Entity, Focusable, IntoElement, RenderOnce, SharedString, Window, div, px,
 };
 
-use crate::ui::tokens::{self, RADIUS, ROW_HEIGHT, SPACE_3, TEXT_BODY};
+use crate::ui::tokens::{self, RADIUS, ROW_HEIGHT, SPACE_2, SPACE_3, TEXT_BODY};
 
 /// A framed input around a retained [`InputState`].
 #[derive(IntoElement)]
@@ -14,6 +14,7 @@ pub struct TextField {
     id: ElementId,
     state: Entity<InputState>,
     label: SharedString,
+    prefix: Option<SharedString>,
 }
 
 /// A single-line input that reports its current value through the state.
@@ -26,6 +27,15 @@ pub fn text_field(
         id: id.into(),
         state: state.clone(),
         label: label.into(),
+        prefix: None,
+    }
+}
+
+impl TextField {
+    /// Shows a fixed symbol before the value, such as a currency.
+    pub fn prefix(mut self, prefix: impl Into<SharedString>) -> Self {
+        self.prefix = Some(prefix.into());
+        self
     }
 }
 
@@ -33,9 +43,11 @@ impl RenderOnce for TextField {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let palette = tokens::palette();
         let focused = self.state.read(cx).focus_handle(cx).is_focused(window);
+        let prefix = self.prefix.clone();
         InputBase::new(self.id)
             .h(px(ROW_HEIGHT))
             .px(px(SPACE_3))
+            .gap(px(SPACE_2))
             .flex()
             .items_center()
             .rounded(px(RADIUS))
@@ -47,6 +59,14 @@ impl RenderOnce for TextField {
             .accessibility_label(self.label)
             .focused(focused)
             .styles(|styles| styles.focused(|style| style.border_color(palette.accent)))
-            .child(Input::new(&self.state))
+            .when_some(prefix, |this, prefix| {
+                this.child(
+                    div()
+                        .flex_shrink_0()
+                        .text_color(palette.muted)
+                        .child(prefix),
+                )
+            })
+            .child(div().flex_1().min_w(px(0.0)).child(Input::new(&self.state)))
     }
 }

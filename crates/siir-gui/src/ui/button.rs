@@ -1,17 +1,18 @@
 //! Action button and primary action.
 
 use gpui_kit::assets::IconName;
-use gpui_kit::base::Button as BaseButton;
+use gpui_kit::base::{Button as BaseButton, Selectable};
 use gpui_kit::prelude::*;
 use gpui_kit::{
-    App, ClickEvent, ElementId, FontWeight, IntoElement, RenderOnce, SharedString, Toggled, Window,
-    px, transparent_black,
+    AccessibleAction, App, ClickEvent, ElementId, FontWeight, IntoElement, RenderOnce,
+    SharedString, Toggled, Window, px, transparent_black,
 };
 
 use crate::ui::icon;
 use crate::ui::tokens::{self, RADIUS, ROW_HEIGHT, SPACE_2, SPACE_3, TEXT_BODY};
 
 type ClickHandler = Box<dyn Fn(&ClickEvent, &mut Window, &mut App) + 'static>;
+type A11yClickHandler = Box<dyn Fn(&mut Window, &mut App) + 'static>;
 
 /// How much weight an action carries.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -29,12 +30,16 @@ pub enum Tone {
 pub struct Button {
     id: ElementId,
     label: SharedString,
+    accessible: Option<SharedString>,
     icon: Option<IconName>,
+    trailing: Option<IconName>,
     tone: Tone,
     selected: bool,
     toggled: Option<bool>,
+    disabled: bool,
     width: Option<f32>,
     on_click: Option<ClickHandler>,
+    on_a11y_click: Option<A11yClickHandler>,
 }
 
 /// A labelled action in the secondary tone.
@@ -42,19 +47,42 @@ pub fn button(id: impl Into<ElementId>, label: impl Into<SharedString>) -> Butto
     Button {
         id: id.into(),
         label: label.into(),
+        accessible: None,
         icon: None,
+        trailing: None,
         tone: Tone::Secondary,
         selected: false,
         toggled: None,
+        disabled: false,
         width: None,
         on_click: None,
+        on_a11y_click: None,
     }
 }
 
 impl Button {
+    /// Overrides the accessible name; the visible label stays the same.
+    pub fn aria_label(mut self, label: impl Into<SharedString>) -> Self {
+        self.accessible = Some(label.into());
+        self
+    }
+
+    /// Runs when assistive technology activates the button, not on a pointer
+    /// or keyboard click.
+    pub fn on_a11y_click(mut self, handler: impl Fn(&mut Window, &mut App) + 'static) -> Self {
+        self.on_a11y_click = Some(Box::new(handler));
+        self
+    }
+
     /// Shows a leading Lucide icon.
     pub fn icon(mut self, name: IconName) -> Self {
         self.icon = Some(name);
+        self
+    }
+
+    /// Shows a Lucide icon after the label, such as a dropdown caret.
+    pub fn trailing_icon(mut self, name: IconName) -> Self {
+        self.trailing = Some(name);
         self
     }
 
@@ -76,6 +104,12 @@ impl Button {
         self
     }
 
+    /// Prevents activation and removes the control from Tab traversal.
+    pub fn disabled(mut self, disabled: bool) -> Self {
+        self.disabled = disabled;
+        self
+    }
+
     /// Fixes the width so a changing label does not move its neighbours.
     pub fn width(mut self, width: f32) -> Self {
         self.width = Some(width);
@@ -92,10 +126,29 @@ impl Button {
     }
 }
 
+/// Lets a [`Button`] act as a popover trigger, which marks it open while the
+/// menu shows.
+impl Selectable for Button {
+    fn selected(mut self, selected: bool) -> Self {
+        self.selected = selected;
+        self
+    }
+
+    fn is_selected(&self) -> bool {
+        self.selected
+    }
+}
+
 impl RenderOnce for Button {
     fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
         let palette = tokens::palette();
         let selected = self.selected;
+        let disabled = self.disabled;
+        let trailing = self.trailing;
+        let accessible = self
+            .accessible
+            .clone()
+            .unwrap_or_else(|| self.label.clone());
         let primary = self.tone == Tone::Primary;
         let quiet = self.tone == Tone::Quiet;
         let (background, foreground, edge) = if primary {
@@ -134,6 +187,8 @@ impl RenderOnce for Button {
                 FontWeight::NORMAL
             })
             .text_color(foreground)
+            .disabled(disabled)
+            .styles(|styles| styles.disabled(|style| style.opacity(0.5)))
             .when_some(self.toggled, |this, toggled| {
                 this.aria_toggled(if toggled {
                     Toggled::True
@@ -142,20 +197,32 @@ impl RenderOnce for Button {
                 })
             })
             .when_some(self.width, |this, width| this.w(px(width)))
-            .accessibility_label(self.label.clone())
+            .accessibility_label(accessible)
             .when_some(self.icon, |this, name| {
                 this.child(icon(name, 16.0, foreground))
             })
             .child(self.label)
-            .when_some(self.on_click, |this, handler| this.on_click(handler));
+            .when_some(trailing, |this, name| {
+                this.child(icon(name, 16.0, foreground))
+            })
+            .when_some(self.on_click, |this, handler| this.on_click(handler))
+            .when_some(self.on_a11y_click, |this, handler| {
+                this.on_a11y_action(AccessibleAction::Click, move |_, window, cx| {
+                    handler(window, cx)
+                })
+            });
         if primary {
-            base.hover(|style| style.bg(palette.accent_hover))
-                .active(|style| style.bg(palette.accent))
-                .focus_visible(|style| style.border_color(palette.accent_text))
+            base.when(!disabled, |this| {
+                this.hover(|style| style.bg(palette.accent_hover))
+                    .active(|style| style.bg(palette.accent))
+            })
+            .focus_visible(|style| style.border_color(palette.accent_text))
         } else {
-            base.hover(|style| style.bg(palette.surface_hover))
-                .active(|style| style.bg(palette.surface_active))
-                .focus_visible(|style| style.border_color(palette.accent))
+            base.when(!disabled, |this| {
+                this.hover(|style| style.bg(palette.surface_hover))
+                    .active(|style| style.bg(palette.surface_active))
+            })
+            .focus_visible(|style| style.border_color(palette.accent))
         }
     }
 }

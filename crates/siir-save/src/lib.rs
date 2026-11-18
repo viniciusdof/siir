@@ -15,6 +15,7 @@ mod color;
 mod command;
 pub mod config;
 mod error;
+mod localization;
 mod model;
 mod names;
 mod plate;
@@ -495,7 +496,9 @@ fn parts<'a>(accessories: &[Accessory<'a>]) -> Parts<'a> {
         }
     }
     let model = data_path.and_then(|path| {
-        path.strip_prefix(names::TRUCK_DIR)
+        [names::TRUCK_DIR, names::BUS_DIR, names::CAR_DIR]
+            .into_iter()
+            .find_map(|dir| path.strip_prefix(dir))
             .and_then(|path| path.strip_suffix(names::DATA_SUFFIX))
     });
     Parts {

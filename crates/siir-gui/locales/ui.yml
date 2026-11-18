@@ -1,81 +1,200 @@
 _version: 2
+language.en_us:
+  en_us: English
+language.pt_br:
+  en_us: Português
 game.ets2_short:
-  en: ETS 2
+  en_us: ETS 2
+  pt_br: ETS 2
 game.ats_short:
-  en: ATS
+  en_us: ATS
+  pt_br: ATS
 discovery.fleet:
-  en: Fleet
+  en_us: Fleet
+  pt_br: Frota
 discovery.market:
-  en: Market
+  en_us: Market
+  pt_br: Mercado
 discovery.skills:
-  en: Skills
+  en_us: Skills
+  pt_br: Habilidades
 discovery.add_folder:
-  en: Add game folder
+  en_us: Add game folder
+  pt_br: Adicionar pasta do jogo
+nav.overview:
+  en_us: Overview
+  pt_br: Visão geral
+nav.economy:
+  en_us: Economy
+  pt_br: Economia
+editor.save:
+  en_us: Save
+  pt_br: Salvar
+editor.edited:
+  en_us: Edited
+  pt_br: Editado
+editor.discard:
+  en_us: Discard
+  pt_br: Descartar
+editor.keep_editing:
+  en_us: Keep editing
+  pt_br: Continuar editando
+editor.saved:
+  en_us: Saved. Previous file kept at
+  pt_br: Salvo. O arquivo anterior está em
 empty.no_saves:
-  en: No saves found
+  en_us: No saves found
+  pt_br: Nenhum save encontrado
 empty.no_saves_hint:
-  en: Add a game folder that holds your profiles.
+  en_us: Add a game folder that holds your profiles.
+  pt_br: Adicione uma pasta de jogo que contenha seus perfis.
 empty.no_match:
-  en: No saves match
+  en_us: No saves match
+  pt_br: Nenhum save corresponde
 empty.no_match_hint:
-  en: Try another search.
+  en_us: Try another search.
+  pt_br: Tente outra busca.
 empty.autosaves_hidden:
-  en: Autosaves are hidden
+  en_us: Autosaves are hidden
+  pt_br: Salvamentos automáticos ocultos
 empty.autosaves_hidden_hint:
-  en: Use Show autosaves to include them.
+  en_us: Use Show autosaves to include them.
+  pt_br: Use Mostrar salvamentos automáticos para incluí-los.
 kind.local:
-  en: Local
+  en_us: Local
+  pt_br: Local
 kind.steam:
-  en: Steam
+  en_us: Steam
+  pt_br: Steam
 kind.proton:
-  en: Proton
+  en_us: Proton
+  pt_br: Proton
 kind.custom:
-  en: Custom
+  en_us: Custom
+  pt_br: Personalizado
 field.game:
-  en: Game
+  en_us: Game
+  pt_br: Jogo
+field.language:
+  en_us: Language
+  pt_br: Idioma
 field.headquarters:
-  en: Headquarters
+  en_us: Headquarters
+  pt_br: Sede
 field.vehicle:
-  en: Current vehicle
+  en_us: Current vehicle
+  pt_br: Veículo atual
 field.money:
-  en: Money
+  en_us: Money
+  pt_br: Dinheiro
 field.experience:
-  en: Experience
+  en_us: Experience
+  pt_br: Experiência
 field.vehicles:
-  en: Vehicles
+  en_us: Vehicles
+  pt_br: Veículos
 field.trailers:
-  en: Trailers
+  en_us: Trailers
+  pt_br: Reboques
 field.drivers:
-  en: Drivers
+  en_us: Drivers
+  pt_br: Motoristas
 field.garages:
-  en: Garages
+  en_us: Garages
+  pt_br: Garagens
 field.offers:
-  en: Offers
+  en_us: Offers
+  pt_br: Ofertas
 skill.adr:
-  en: ADR
+  en_us: ADR
+  pt_br: ADR
 skill.long_dist:
-  en: Long distance
+  en_us: Long distance
+  pt_br: Longa distância
 skill.heavy:
-  en: Heavy cargo
+  en_us: High value cargo
+  pt_br: Carga de alto valor
 skill.fragile:
-  en: Fragile cargo
+  en_us: Fragile cargo
+  pt_br: Carga frágil
 skill.urgent:
-  en: Urgent delivery
+  en_us: Just-in-time delivery
+  pt_br: Entrega Just-in-Time
 skill.mechanical:
-  en: Mechanical
+  en_us: Eco-driving
+  pt_br: Direção econômica
+adr.classes:
+  en_us: ADR classes
+  pt_br: Classes ADR
+adr.explosives:
+  en_us: Explosives
+  pt_br: Explosivos
+adr.gases:
+  en_us: Gases
+  pt_br: Gases
+adr.flammable_liquids:
+  en_us: Flammable liquids
+  pt_br: Líquidos inflamáveis
+adr.flammable_solids:
+  en_us: Flammable solids
+  pt_br: Sólidos inflamáveis
+adr.toxic:
+  en_us: Toxic and infectious
+  pt_br: Tóxicos e infecciosos
+adr.corrosive:
+  en_us: Corrosive
+  pt_br: Corrosivos
+adr.none:
+  en_us: None
+  pt_br: Nenhuma
+banner.dismiss:
+  en_us: Dismiss
+  pt_br: Fechar
+banner.reveal_finder:
+  en_us: Show in Finder
+  pt_br: Mostrar no Finder
+banner.reveal_explorer:
+  en_us: Show in Explorer
+  pt_br: Mostrar no Explorer
+banner.reveal_folder:
+  en_us: Show in folder
+  pt_br: Mostrar na pasta
 home.continue:
-  en: Continue
+  en_us: Continue
+  pt_br: Continuar
 home.search:
-  en: Search saves
+  en_us: Search saves
+  pt_br: Buscar saves
 home.hide_autosaves:
-  en: Hide autosaves
+  en_us: Hide autosaves
+  pt_br: Ocultar salvamentos automáticos
 home.show_autosaves:
-  en: Show autosaves
+  en_us: Show autosaves
+  pt_br: Mostrar salvamentos automáticos
 home.most_recent:
-  en: Most recent save
+  en_us: Most recent save
+  pt_br: Save mais recente
 home.switch_save:
-  en: Switch save
+  en_us: Switch save
+  pt_br: Trocar save
 error.open_save:
-  en: Could not open this save.
+  en_us: Could not open this save.
+  pt_br: Não foi possível abrir este save.
 error.read_saves:
-  en: Could not read the saves of this profile.
+  en_us: Could not read the saves of this profile.
+  pt_br: Não foi possível ler os saves deste perfil.
+error.number:
+  en_us: Enter a whole number.
+  pt_br: Digite um número inteiro.
+error.apply:
+  en_us: Could not apply this change.
+  pt_br: Não foi possível aplicar esta alteração.
+error.save:
+  en_us: Could not save this file.
+  pt_br: Não foi possível salvar este arquivo.
+error.unsaved:
+  en_us: You have unsaved changes.
+  pt_br: Você tem alterações não salvas.
+error.reveal:
+  en_us: Could not open the file manager.
+  pt_br: Não foi possível abrir o gerenciador de arquivos.

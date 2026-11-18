@@ -9,9 +9,35 @@ fn def() -> std::path::PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("testdata/def")
 }
 
+fn locale() -> std::path::PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("testdata/locale")
+}
+
+#[test]
+fn names_vehicle_models_in_every_language() {
+    let catalog = Catalog::generate(&def(), &locale(), Game::Ets2).unwrap();
+    assert_eq!(
+        catalog.vehicle_name("test.bus", "en_us"),
+        Some("Test T 900")
+    );
+    assert_eq!(
+        catalog.vehicle_name("test.bus", "pt_br"),
+        Some("Test T 900")
+    );
+    assert_eq!(
+        catalog.vehicle_name("test.bus", "de_de"),
+        Some("Test T 900")
+    );
+    assert_eq!(
+        catalog.vehicle_name("test.bus", "xx_yy"),
+        Some("Test T 900")
+    );
+    assert_eq!(catalog.vehicle_name("test.unknown", "en_us"), None);
+}
+
 #[test]
 fn reads_trucks_parts_and_transmissions() {
-    let catalog = Catalog::generate(&def(), Game::Ets2).unwrap();
+    let catalog = Catalog::generate(&def(), &locale(), Game::Ets2).unwrap();
     let trucks = catalog.trucks();
     assert_eq!(trucks.len(), 1);
 

@@ -1,5 +1,6 @@
 //! Writes the catalog snapshot as JSON.
 
+use std::collections::BTreeMap;
 use std::error::Error;
 use std::fs::{self, File};
 use std::io::Write;
@@ -11,7 +12,7 @@ use siir_save::catalog::{
     Cargo, Catalog, Company, Engine, Part, TrailerDefinition, Transmission, TruckModel,
 };
 
-const USAGE: &str = "usage: catalog <def-dir> <out.json> <ets2|ats>";
+const USAGE: &str = "usage: catalog <def-dir> <locale-dir> <out.json> <ets2|ats>";
 
 #[derive(Serialize)]
 struct Snapshot<'a> {
@@ -21,6 +22,13 @@ struct Snapshot<'a> {
     cargo: Vec<CargoData<'a>>,
     companies: Vec<CompanyData<'a>>,
     trailers: Vec<TrailerData<'a>>,
+    models: Vec<ModelData<'a>>,
+}
+
+#[derive(Serialize)]
+struct ModelData<'a> {
+    token: &'a str,
+    names: &'a BTreeMap<String, String>,
 }
 
 #[derive(Serialize)]
@@ -173,6 +181,7 @@ impl<'a> From<&'a TrailerDefinition> for TrailerData<'a> {
 fn main() -> Result<(), Box<dyn Error>> {
     let mut args = std::env::args().skip(1);
     let def = PathBuf::from(args.next().ok_or(USAGE)?);
+    let locale = PathBuf::from(args.next().ok_or(USAGE)?);
     let output = PathBuf::from(args.next().ok_or(USAGE)?);
     let (name, game) = match args.next().ok_or(USAGE)?.as_str() {
         "ets2" => ("ets2", Game::Ets2),
@@ -180,14 +189,22 @@ fn main() -> Result<(), Box<dyn Error>> {
         _ => return Err(USAGE.into()),
     };
 
-    let catalog = Catalog::generate(&def, game)?;
+    let catalog = Catalog::generate(&def, &locale, game)?;
     let snapshot = Snapshot {
-        format: 1,
+        format: 2,
         game: name,
         trucks: catalog.trucks().iter().map(TruckData::from).collect(),
         cargo: catalog.cargo().iter().map(CargoData::from).collect(),
         companies: catalog.companies().iter().map(CompanyData::from).collect(),
         trailers: catalog.trailers().iter().map(TrailerData::from).collect(),
+        models: catalog
+            .vehicle_names()
+            .iter()
+            .map(|name| ModelData {
+                token: &name.token,
+                names: &name.names,
+            })
+            .collect(),
     };
 
     if let Some(parent) = output.parent() {
@@ -197,11 +214,12 @@ fn main() -> Result<(), Box<dyn Error>> {
     serde_json::to_writer_pretty(&mut file, &snapshot)?;
     writeln!(&mut file)?;
     println!(
-        "wrote {} trucks, {} cargoes, {} companies, and {} trailers to {}",
+        "wrote {} trucks, {} cargoes, {} companies, {} trailers, and {} vehicle names to {}",
         snapshot.trucks.len(),
         snapshot.cargo.len(),
         snapshot.companies.len(),
         snapshot.trailers.len(),
+        snapshot.models.len(),
         output.display()
     );
     Ok(())

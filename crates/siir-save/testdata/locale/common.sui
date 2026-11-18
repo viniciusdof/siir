@@ -1,0 +1,14 @@
+SiiNunit
+{
+localization_db : .localization
+{
+	# Shared names, not translated.
+	key[]: "brand_test"
+	val[]: "Test"
+
+	key[]: "series_test_truck"
+	val[]: "T 900"
+
+	@include "/locale/nested.sui"
+}
+}

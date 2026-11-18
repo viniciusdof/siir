@@ -16,7 +16,7 @@ pub struct SaveView {
     pub skills: Skills,
     /// Headquarters city.
     pub hq_city: String,
-    /// Model token of the player's current vehicle, or its unit id.
+    /// Model folder of the player's current vehicle, when it has a data path.
     pub current_vehicle: Option<String>,
     /// Owned fleet and market sizes.
     pub counts: Counts,
@@ -54,7 +54,8 @@ impl SaveView {
                 .unwrap_or_default(),
             current_vehicle: save
                 .current_vehicle()
-                .map(|vehicle| vehicle.model.unwrap_or(vehicle.id).to_owned()),
+                .and_then(|vehicle| vehicle.model)
+                .map(str::to_owned),
             counts: Counts {
                 vehicles: player
                     .map(|player| player.my_vehicles.len())

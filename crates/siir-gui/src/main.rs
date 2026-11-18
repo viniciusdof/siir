@@ -16,6 +16,7 @@ fn main() {
         .with_assets(gpui_kit::assets::AllAssets)
         .run(move |cx| {
             gpui_kit::init(cx);
+            siir_gui::i18n::init();
             ui::tokens::install(cx);
             let bounds = Bounds::centered(None, size(px(1100.0), px(720.0)), cx);
             gpui_kit::open_window(

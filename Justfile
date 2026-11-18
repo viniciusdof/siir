@@ -97,6 +97,11 @@ catalog game="all":
         rm -rf "target/game-data/$g"
         archives=("$dir/def.scs" "$dir"/dlc_*.scs)
         mise x dotnet@10.0.100 -- target/extractor/extractor "${archives[@]}" --partial=/def -q -d "target/game-data/$g"
+        if [ ! -f "$dir/locale.scs" ]; then
+            echo "missing $dir/locale.scs" >&2
+            exit 1
+        fi
+        mise x dotnet@10.0.100 -- target/extractor/extractor "$dir/locale.scs" --partial=/locale -q -d "target/game-data/$g"
         cargo run -q -p siir-save --example catalog -- \
-            "target/game-data/$g/def" "crates/siir-save/data/$g.json" "$g"
+            "target/game-data/$g/def" "target/game-data/$g/locale" "crates/siir-save/data/$g.json" "$g"
     done

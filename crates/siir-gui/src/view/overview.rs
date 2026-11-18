@@ -4,7 +4,8 @@ use gpui_kit::assets::IconName;
 use gpui_kit::prelude::*;
 use gpui_kit::{FontWeight, IntoElement, div, px};
 
-use siir_gui::i18n::t;
+use siir_gui::edit::ADR_CLASSES;
+use siir_gui::i18n::{self, t};
 
 use crate::ui::{self, tokens};
 use crate::view::AppView;
@@ -16,14 +17,32 @@ impl AppView {
             return div().into_any_element();
         };
         let view = open.view();
+        let game = self.state.game();
         let money = view
             .money
-            .map(|money| money.to_string())
+            .map(|money| i18n::money(money, game))
             .unwrap_or_else(|| "—".to_owned());
         let vehicle = view
             .current_vehicle
-            .clone()
+            .as_deref()
+            .map(|token| {
+                self.catalog
+                    .as_ref()
+                    .and_then(|catalog| {
+                        catalog.vehicle_name(token, i18n::current_locale().as_ref())
+                    })
+                    .unwrap_or(token)
+                    .to_owned()
+            })
             .unwrap_or_else(|| "—".to_owned());
+        let adr = ADR_CLASSES
+            .iter()
+            .enumerate()
+            .filter(|(ix, _)| view.skills.adr & (1u64 << *ix) != 0)
+            .map(|(_, key)| t(key))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let adr = if adr.is_empty() { t("adr.none") } else { adr };
         div()
             .id("overview-scroll")
             .w_full()
@@ -36,7 +55,8 @@ impl AppView {
             .overflow_y_scroll()
             .child(
                 div()
-                    .w(px(tokens::CONTENT_WIDTH))
+                    .w_full()
+                    .max_w(px(tokens::CONTENT_WIDTH))
                     .flex()
                     .flex_col()
                     .gap(px(tokens::SPACE_6))
@@ -140,7 +160,7 @@ impl AppView {
                             .flex_col()
                             .gap(px(tokens::SPACE_2))
                             .child(ui::section_title(t("discovery.skills")))
-                            .child(ui::info_row(t("skill.adr"), view.skills.adr.to_string()))
+                            .child(ui::info_row(t("skill.adr"), adr))
                             .child(ui::info_row(
                                 t("skill.long_dist"),
                                 view.skills.long_dist.to_string(),

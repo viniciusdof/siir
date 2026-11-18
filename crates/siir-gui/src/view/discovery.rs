@@ -14,8 +14,6 @@ use siir_gui::state::{ProfileRow, SaveRow};
 use crate::ui::{self, Tone, tokens};
 use crate::view::AppView;
 
-const AUTOSAVES_WIDTH: f32 = 176.0;
-
 impl AppView {
     pub(crate) fn render_home(&self, cx: &mut Context<'_, Self>) -> impl IntoElement {
         let mut page = div().flex().flex_col().gap(px(tokens::SPACE_6));
@@ -107,7 +105,6 @@ impl AppView {
             .child(
                 ui::button("toggle-autosaves", label)
                     .icon(icon)
-                    .width(AUTOSAVES_WIDTH)
                     .on_click(cx.listener(|this, _, _, cx| this.toggle_autosaves(cx))),
             )
     }
@@ -164,12 +161,17 @@ impl AppView {
             .child(
                 ui::button("continue", t("home.continue"))
                     .tone(Tone::Primary)
-                    .on_click(cx.listener(|this, _, _, cx| this.open_newest(cx))),
+                    .on_click(cx.listener(|this, _, window, cx| this.open_newest(window, cx))),
             )
             .into_any_element()
     }
 
-    pub(crate) fn render_notice(&self, key: &'static str, detail: &str) -> impl IntoElement {
+    pub(crate) fn render_notice(
+        &self,
+        key: &'static str,
+        detail: &str,
+        cx: &mut Context<'_, Self>,
+    ) -> impl IntoElement {
         let palette = tokens::palette();
         let message = t(key);
         div()
@@ -205,6 +207,12 @@ impl AppView {
                     .text_color(palette.muted)
                     .child(detail.to_owned()),
             )
+            .child(
+                ui::button("dismiss-notice", t("banner.dismiss"))
+                    .tone(Tone::Quiet)
+                    .icon(IconName::X)
+                    .on_click(cx.listener(|this, _, _, cx| this.dismiss_notice(cx))),
+            )
     }
 }
 
@@ -225,7 +233,7 @@ fn group(
             (ElementId::from("save"), row.path.display().to_string()),
             format!("{} · {}", profile.name, row.name),
             view.state.selected_save() == Some(save_ix),
-            cx.listener(move |this, _, _, cx| this.open_save(save_ix, cx)),
+            cx.listener(move |this, _, window, cx| this.open_save(save_ix, window, cx)),
             name,
             suffix,
         ));

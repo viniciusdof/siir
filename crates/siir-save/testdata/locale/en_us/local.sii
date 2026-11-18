@@ -1,0 +1,8 @@
+SiiNunit
+{
+localization_db : .localization
+{
+@include "/locale/common.sui"
+@include "extra.sui"
+}
+}

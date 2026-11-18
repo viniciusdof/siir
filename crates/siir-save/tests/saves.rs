@@ -1355,6 +1355,10 @@ fn reads_a_bus_job() {
     assert_eq!(stage.travelled_distance, 0);
     assert_eq!(stage.satisfaction, -1.0);
 
+    assert_eq!(
+        save.current_vehicle().and_then(|vehicle| vehicle.model),
+        Some("volvo.9700_23")
+    );
     let player = save.player.as_ref().unwrap();
     assert_eq!(player.buses.len(), 2);
     assert_eq!(player.current_bus_job, Some(job.id));

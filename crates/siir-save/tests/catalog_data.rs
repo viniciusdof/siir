@@ -19,9 +19,9 @@ fn snapshot(game: &str) -> Value {
 
 fn assert_snapshot(game: &str, name: &str) {
     let data = snapshot(game);
-    assert_eq!(data["format"], 1, "{name}");
+    assert_eq!(data["format"], 2, "{name}");
     assert_eq!(data["game"], game, "{name}");
-    for section in ["trucks", "cargo", "companies", "trailers"] {
+    for section in ["trucks", "cargo", "companies", "trailers", "models"] {
         let items = data[section].as_array().unwrap_or_else(|| {
             panic!("{name}: {section} is not an array");
         });
@@ -68,6 +68,12 @@ fn assert_load(game: Game, name: &str) {
             "{name}: {section}"
         );
     }
+
+    assert_eq!(
+        catalog.vehicle_names().len(),
+        data["models"].as_array().unwrap().len(),
+        "{name}: models"
+    );
 
     let truck = &catalog.trucks()[0];
     let json = &data["trucks"][0];
@@ -168,4 +174,33 @@ fn ets2_snapshot_loads() {
 #[test]
 fn ats_snapshot_loads() {
     assert_load(Game::Ats, "ats");
+}
+
+#[test]
+fn names_vehicles_in_every_language() {
+    let ets2 = Catalog::load(Game::Ets2).unwrap();
+    assert_eq!(
+        ets2.vehicle_name("volvo.9700_23", "en_us"),
+        Some("Volvo 9700")
+    );
+    assert_eq!(
+        ets2.vehicle_name("volvo.9700_23", "pt_br"),
+        Some("Volvo 9700")
+    );
+    assert_eq!(
+        ets2.vehicle_name("volvo.9700_23", "de_de"),
+        Some("Volvo 9700")
+    );
+    assert_eq!(
+        ets2.vehicle_name("volvo.9700_23", "xx_yy"),
+        Some("Volvo 9700")
+    );
+    assert_eq!(ets2.vehicle_name("renault.t", "en_us"), Some("Renault T"));
+    assert_eq!(ets2.vehicle_name("no.such.model", "en_us"), None);
+
+    let ats = Catalog::load(Game::Ats).unwrap();
+    assert_eq!(
+        ats.vehicle_name("peterbilt.579", "en_us"),
+        Some("Peterbilt 579")
+    );
 }

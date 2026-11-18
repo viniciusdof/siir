@@ -114,7 +114,8 @@ pub struct Vehicle<'a> {
     pub trailer: Option<&'a str>,
     /// Accessories referenced by this vehicle.
     pub accessories: Vec<Accessory<'a>>,
-    /// Model folder under `/def/vehicle/truck/`, for example `renault.etech_t`.
+    /// Model folder under `/def/vehicle/{truck,bus,car}/`, for example
+    /// `renault.etech_t` or `volvo.9700_23`.
     pub model: Option<&'a str>,
     /// The model's `data.sii` path.
     pub data_path: Option<&'a str>,

@@ -109,6 +109,10 @@ pub(crate) const PROFILE_NAME: &str = "profile_name";
 // Paths.
 /// Truck definitions live under `/def/vehicle/truck/<brand>.<model>/`.
 pub(crate) const TRUCK_DIR: &str = "/def/vehicle/truck/";
+/// Bus definitions live under `/def/vehicle/bus/<brand>.<model>/`.
+pub(crate) const BUS_DIR: &str = "/def/vehicle/bus/";
+/// Car definitions live under `/def/vehicle/car/<brand>.<model>/`.
+pub(crate) const CAR_DIR: &str = "/def/vehicle/car/";
 pub(crate) const DATA_SUFFIX: &str = "/data.sii";
 pub(crate) const ENGINE_DIR: &str = "/engine/";
 pub(crate) const TRANSMISSION_DIR: &str = "/transmission/";

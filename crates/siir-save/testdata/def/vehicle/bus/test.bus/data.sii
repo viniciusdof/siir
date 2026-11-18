@@ -1,0 +1,10 @@
+SiiNunit
+{
+accessory_truck_data : vehicle.test.bus
+{
+	info[]: "@@brand_test@@"
+	info[]: "@@series_test_truck@@"
+
+	fallback[]: "chassis|4x2.sii"
+}
+}

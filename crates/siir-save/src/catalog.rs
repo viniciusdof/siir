@@ -1,6 +1,7 @@
 //! Reads the truck catalog from an extracted `def/` directory.
 
 use std::borrow::Cow;
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -8,17 +9,20 @@ use siir::{Document, Index, Unit};
 
 use crate::Game;
 use crate::error::Error;
+use crate::localization;
 use crate::value::unquote;
 
-const SNAPSHOT_FORMAT: u32 = 1;
+const SNAPSHOT_FORMAT: u32 = 2;
 
-/// Truck models, cargoes, companies, and trailer definitions read from `def/`.
+/// Truck models, cargoes, companies, trailer definitions, and vehicle names
+/// read from `def/` and `locale/`.
 #[derive(Debug)]
 pub struct Catalog {
     trucks: Vec<TruckModel>,
     cargo: Vec<Cargo>,
     companies: Vec<Company>,
     trailers: Vec<TrailerDefinition>,
+    vehicle_names: Vec<VehicleName>,
 }
 
 impl Catalog {
@@ -35,7 +39,11 @@ impl Catalog {
     /// `def_dir/cargo`, every company under `def_dir/company`, and every trailer
     /// definition under `def_dir/vehicle/trailer_defs`, skipping files that do
     /// not parse. Both games use the same tree today.
-    pub fn generate(def_dir: &Path, _game: Game) -> Result<Self, Error> {
+    ///
+    /// It also reads each model's brand and series under
+    /// `def_dir/vehicle/{truck,bus,car}` and resolves them with every language
+    /// folder under `locale_dir`.
+    pub fn generate(def_dir: &Path, locale_dir: &Path, _game: Game) -> Result<Self, Error> {
         let mut trucks = Vec::new();
         for entry in directories(&def_dir.join("vehicle").join("truck"))? {
             let Some(name) = entry.file_name().and_then(|name| name.to_str()) else {
@@ -76,11 +84,13 @@ impl Catalog {
             trailer_definition,
         );
         trailers.sort_by(|left, right| left.id.cmp(&right.id));
+        let vehicle_names = model_names(def_dir, locale_dir);
         Ok(Self {
             trucks,
             cargo,
             companies,
             trailers,
+            vehicle_names,
         })
     }
 
@@ -103,6 +113,24 @@ impl Catalog {
     pub fn trailers(&self) -> &[TrailerDefinition] {
         &self.trailers
     }
+
+    /// Every vehicle model name, sorted by token.
+    pub fn vehicle_names(&self) -> &[VehicleName] {
+        &self.vehicle_names
+    }
+
+    /// Display name of one model in `language`, falling back to English.
+    pub fn vehicle_name(&self, token: &str, language: &str) -> Option<&str> {
+        let names = &self
+            .vehicle_names
+            .iter()
+            .find(|name| name.token == token)?
+            .names;
+        names
+            .get(language)
+            .or_else(|| names.get("en_us"))
+            .map(String::as_str)
+    }
 }
 
 fn parse(source: &str, game: Game) -> Result<Catalog, Error> {
@@ -122,6 +150,15 @@ fn parse(source: &str, game: Game) -> Result<Catalog, Error> {
         return Err(Error::Catalog(format!("snapshot is for {}", snapshot.game)));
     }
     Ok(snapshot.into())
+}
+
+/// A vehicle model's display name per game language.
+#[derive(Debug)]
+pub struct VehicleName {
+    /// Model folder token, for example `volvo.9700_23`.
+    pub token: String,
+    /// Name per game language, for example `en_us` and `pt_br`.
+    pub names: BTreeMap<String, String>,
 }
 
 /// One `def/vehicle/truck/<brand>.<model>` folder.
@@ -233,6 +270,13 @@ struct Snapshot {
     cargo: Vec<CargoData>,
     companies: Vec<CompanyData>,
     trailers: Vec<TrailerData>,
+    models: Vec<ModelData>,
+}
+
+#[derive(serde::Deserialize)]
+struct ModelData {
+    token: String,
+    names: BTreeMap<String, String>,
 }
 
 #[derive(serde::Deserialize)]
@@ -307,6 +351,16 @@ impl From<Snapshot> for Catalog {
                 .into_iter()
                 .map(TrailerDefinition::from)
                 .collect(),
+            vehicle_names: snapshot.models.into_iter().map(VehicleName::from).collect(),
+        }
+    }
+}
+
+impl From<ModelData> for VehicleName {
+    fn from(model: ModelData) -> Self {
+        Self {
+            token: model.token,
+            names: model.names,
         }
     }
 }
@@ -395,6 +449,79 @@ impl From<TrailerData> for TrailerDefinition {
             length: trailer.length,
         }
     }
+}
+
+/// Resolves the brand and series of every vehicle model in every extracted
+/// language.
+fn model_names(def_dir: &Path, locale_dir: &Path) -> Vec<VehicleName> {
+    let languages: Vec<(String, BTreeMap<String, String>)> = localization::languages(locale_dir)
+        .into_iter()
+        .map(|language| {
+            let texts = localization::read(locale_dir, &language);
+            (language, texts)
+        })
+        .collect();
+    let mut names = Vec::new();
+    for kind in ["truck", "bus", "car"] {
+        let Ok(entries) = directories(&def_dir.join("vehicle").join(kind)) else {
+            continue;
+        };
+        for folder in entries {
+            if !folder.join("data.sii").is_file() {
+                continue;
+            }
+            let Some(token) = folder.file_name().and_then(|name| name.to_str()) else {
+                continue;
+            };
+            if !token.contains('.') {
+                continue;
+            }
+            let Some(keys) = info_keys(&folder.join("data.sii")) else {
+                continue;
+            };
+            let mut by_language = BTreeMap::new();
+            for (language, texts) in &languages {
+                let parts: Vec<&str> = keys
+                    .iter()
+                    .filter_map(|key| texts.get(key).map(String::as_str))
+                    .collect();
+                if !parts.is_empty() {
+                    by_language.insert(language.clone(), parts.join(" "));
+                }
+            }
+            if !by_language.is_empty() {
+                names.push(VehicleName {
+                    token: token.to_owned(),
+                    names: by_language,
+                });
+            }
+        }
+    }
+    names.sort_by(|left, right| left.token.cmp(&right.token));
+    names.dedup_by(|left, right| left.token == right.token);
+    names
+}
+
+/// The localization keys of a model's brand and series `info[]` entries.
+fn info_keys(file: &Path) -> Option<Vec<String>> {
+    let source = fs::read_to_string(file).ok()?;
+    let source = strip_includes(&source);
+    let document = Document::parse(&source).ok()?;
+    let unit = document.units().next()?;
+    let mut keys = Vec::new();
+    for nth in 0..2 {
+        let Some(value) = unit.get_nth("info[]", nth) else {
+            break;
+        };
+        let Some(key) = unquote(value)
+            .strip_prefix("@@")
+            .and_then(|value| value.strip_suffix("@@"))
+        else {
+            continue;
+        };
+        keys.push(key.to_owned());
+    }
+    (!keys.is_empty()).then_some(keys)
 }
 
 fn directories(root: &Path) -> Result<Vec<PathBuf>, Error> {
@@ -570,7 +697,7 @@ mod tests {
 
     fn snapshot(format: u32, game: &str) -> String {
         format!(
-            r#"{{"format":{format},"game":"{game}","trucks":[],"cargo":[],"companies":[],"trailers":[]}}"#
+            r#"{{"format":{format},"game":"{game}","trucks":[],"cargo":[],"companies":[],"trailers":[],"models":[]}}"#
         )
     }
 
@@ -582,7 +709,7 @@ mod tests {
 
     #[test]
     fn rejects_another_game() {
-        let error = parse(&snapshot(1, "ats"), Game::Ets2).unwrap_err();
+        let error = parse(&snapshot(2, "ats"), Game::Ets2).unwrap_err();
         assert!(error.to_string().contains("snapshot is for ats"));
     }
 }

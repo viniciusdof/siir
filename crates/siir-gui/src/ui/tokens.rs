@@ -3,7 +3,7 @@
 use gpui_kit::base::{ColorTokens, TextStyleToken, Theme, ThemeAppearance, TypographyTokens};
 use gpui_kit::{App, FontWeight, Hsla, px, rgb};
 
-/// The fixed dark palette for both games.
+/// The fixed dark palette.
 #[derive(Clone, Copy)]
 pub struct Palette {
     /// Window background.
@@ -36,6 +36,8 @@ pub struct Palette {
     pub danger: Hsla,
     /// Error text.
     pub danger_text: Hsla,
+    /// Saved state and confirmations.
+    pub success: Hsla,
 }
 
 /// The palette every view and wrapper reads.
@@ -56,6 +58,7 @@ pub fn palette() -> Palette {
         accent_text: color(0x1a1d21),
         danger: color(0xc96a5b),
         danger_text: color(0xe2907f),
+        success: color(0x7fb87f),
     }
 }
 
@@ -84,8 +87,10 @@ pub const RADIUS: f32 = 4.0;
 
 /// Header strip height.
 pub const HEADER_HEIGHT: f32 = 56.0;
-/// Width of the content column on both screens.
+/// Width of the content column on the home and overview.
 pub const CONTENT_WIDTH: f32 = 880.0;
+/// Width of the economy form.
+pub const FORM_WIDTH: f32 = 700.0;
 /// Height of a save row on the home screen.
 pub const SAVE_ROW_HEIGHT: f32 = 40.0;
 
@@ -213,6 +218,7 @@ mod tests {
                 4.5,
                 &format!("danger_text on {name}"),
             );
+            assert_ratio(p.success, background, 4.5, &format!("success on {name}"));
             assert_ratio(p.accent, background, 3.0, &format!("accent on {name}"));
         }
         assert_ratio(p.accent_text, p.accent, 4.5, "accent_text on accent");
