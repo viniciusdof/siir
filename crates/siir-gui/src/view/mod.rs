@@ -3,6 +3,7 @@
 mod discovery;
 mod economy;
 mod overview;
+mod profile;
 mod shell;
 
 use std::collections::HashSet;
@@ -31,6 +32,7 @@ use crate::ui::{self, Tone, tokens};
 enum Section {
     Overview,
     Economy,
+    Profile,
 }
 
 /// The application window.
@@ -41,6 +43,7 @@ pub struct AppView {
     search: Entity<InputState>,
     money: Entity<InputState>,
     experience: Entity<InputState>,
+    profile_name: Entity<InputState>,
     skills: Vec<Entity<SliderState>>,
     skill_focus: Vec<FocusHandle>,
     adr: [bool; 6],
@@ -49,6 +52,7 @@ pub struct AppView {
     catalog: Option<Catalog>,
     money_error: Option<&'static str>,
     experience_error: Option<&'static str>,
+    profile_name_error: Option<&'static str>,
     action_error: Option<&'static str>,
     confirm_leave: bool,
     close_after_discard: bool,
@@ -71,6 +75,7 @@ impl AppView {
         });
         let money = Self::number_input(window, cx, true);
         let experience = Self::number_input(window, cx, false);
+        let profile_name = Self::input(window, cx);
         let skills: Vec<Entity<SliderState>> = (0..5)
             .map(|_| {
                 cx.new(|_| {
@@ -95,6 +100,10 @@ impl AppView {
                 this.experience_error = None;
                 cx.notify();
             }),
+            cx.observe(&profile_name, |this, _, cx| {
+                this.profile_name_error = None;
+                cx.notify();
+            }),
         ];
         subscriptions.push(cx.subscribe(&money, |this, _, event: &InputEvent, cx| {
             if matches!(event, InputEvent::Change) {
@@ -108,6 +117,13 @@ impl AppView {
                 }
             }),
         );
+        subscriptions.push(
+            cx.subscribe(&profile_name, |this, _, event: &InputEvent, cx| {
+                if matches!(event, InputEvent::Change) {
+                    this.apply_profile_name_text(cx);
+                }
+            }),
+        );
         let search_focus = search.read(cx).focus_handle(cx);
         subscriptions.push(cx.on_focus(&search_focus, window, |_, _, cx| cx.notify()));
         subscriptions.push(cx.on_blur(&search_focus, window, |_, _, cx| cx.notify()));
@@ -118,6 +134,11 @@ impl AppView {
         subscriptions.push(cx.on_focus(&experience_focus, window, |_, _, cx| cx.notify()));
         subscriptions.push(cx.on_blur(&experience_focus, window, |this, _, cx| {
             this.commit_experience(cx)
+        }));
+        let profile_name_focus = profile_name.read(cx).focus_handle(cx);
+        subscriptions.push(cx.on_focus(&profile_name_focus, window, |_, _, cx| cx.notify()));
+        subscriptions.push(cx.on_blur(&profile_name_focus, window, |this, _, cx| {
+            this.commit_profile_name(cx)
         }));
         for handle in &skill_focus {
             subscriptions.push(cx.on_focus(handle, window, |_, _, cx| cx.notify()));
@@ -157,6 +178,7 @@ impl AppView {
             search,
             money,
             experience,
+            profile_name,
             skills,
             skill_focus,
             adr: [false; 6],
@@ -165,6 +187,7 @@ impl AppView {
             catalog: None,
             money_error: None,
             experience_error: None,
+            profile_name_error: None,
             action_error: None,
             confirm_leave: false,
             close_after_discard: false,
@@ -327,11 +350,14 @@ impl AppView {
         cx.notify();
     }
 
-    /// Applies the text of both number fields and reports whether both parse.
+    /// Applies the text of every form field and reports whether all parse.
     fn commit_fields(&mut self, cx: &mut Context<'_, Self>) -> bool {
         self.commit_money(cx);
         self.commit_experience(cx);
-        self.money_error.is_none() && self.experience_error.is_none()
+        self.commit_profile_name(cx);
+        self.money_error.is_none()
+            && self.experience_error.is_none()
+            && self.profile_name_error.is_none()
     }
 
     /// Applies the money text once it parses; reports whether it did.
@@ -360,6 +386,31 @@ impl AppView {
             self.apply(Command::SetExperience(value), |_| {}, cx);
         }
         true
+    }
+
+    /// Applies the profile name once it is valid; reports whether it was.
+    fn apply_profile_name_text(&mut self, cx: &mut Context<'_, Self>) -> bool {
+        let Some(open) = self.state.open().filter(|open| open.has_profile()) else {
+            // Without a profile file the field is not shown, so nothing to check.
+            return true;
+        };
+        let current = open.view().profile_name.clone();
+        let text = self.profile_name.read(cx).value().to_string();
+        let Ok(Command::RenameProfile(name)) = edit::profile_name(&text) else {
+            return false;
+        };
+        self.profile_name_error = None;
+        if name != current {
+            self.apply(Command::RenameProfile(name), |_| {}, cx);
+        }
+        true
+    }
+
+    fn commit_profile_name(&mut self, cx: &mut Context<'_, Self>) {
+        if !self.apply_profile_name_text(cx) {
+            self.profile_name_error = Some(edit::FieldError::Name.key());
+            cx.notify();
+        }
     }
 
     fn commit_money(&mut self, cx: &mut Context<'_, Self>) {
@@ -422,6 +473,7 @@ impl AppView {
     fn clear_errors(&mut self) {
         self.money_error = None;
         self.experience_error = None;
+        self.profile_name_error = None;
         self.action_error = None;
         self.confirm_leave = false;
         self.close_after_discard = false;
@@ -435,6 +487,7 @@ impl AppView {
         let view = open.view();
         let money = view.money.unwrap_or_default();
         let experience = view.experience as i64;
+        let profile_name = view.profile_name.clone();
         let adr = view.skills.adr;
         let skills = [
             view.skills.long_dist,
@@ -461,6 +514,9 @@ impl AppView {
                 cx,
             );
             input.set_value(experience.to_string(), window, cx);
+        });
+        self.profile_name.update(cx, |input, cx| {
+            input.set_value(profile_name, window, cx);
         });
         self.adr = std::array::from_fn(|ix| adr & (1 << ix) != 0);
         self.syncing = true;
@@ -845,6 +901,7 @@ impl AppView {
         match self.section {
             Section::Overview => self.render_overview().into_any_element(),
             Section::Economy => self.render_economy(cx).into_any_element(),
+            Section::Profile => self.render_profile().into_any_element(),
         }
     }
 }

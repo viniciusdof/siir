@@ -42,6 +42,15 @@ nav.overview:
 nav.economy:
   en_us: Economy
   pt_br: Economia
+nav.profile:
+  en_us: Profile
+  pt_br: Perfil
+profile.unavailable:
+  en_us: Profile file unreadable
+  pt_br: Arquivo do perfil ilegível
+profile.unavailable_hint:
+  en_us: The save still opens, but profile.sii could not be read, so the profile cannot be renamed.
+  pt_br: O save abre normalmente, mas não foi possível ler o profile.sii, então o perfil não pode ser renomeado.
 editor.save:
   en_us: Save
   pt_br: Salvar
@@ -105,6 +114,9 @@ field.money:
 field.experience:
   en_us: Experience
   pt_br: Experiência
+field.profile_name:
+  en_us: Profile name
+  pt_br: Nome do perfil
 field.vehicles:
   en_us: Vehicles
   pt_br: Veículos
@@ -201,6 +213,9 @@ error.read_saves:
 error.number:
   en_us: Enter a whole number.
   pt_br: Digite um número inteiro.
+error.name:
+  en_us: Enter a name without quotation marks.
+  pt_br: Digite um nome sem aspas.
 error.apply:
   en_us: Could not apply this change.
   pt_br: Não foi possível aplicar esta alteração.

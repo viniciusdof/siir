@@ -7,6 +7,8 @@ use siir_save::{Command, Skills};
 pub enum FieldError {
     /// The text is empty, not a number, or out of range.
     Number,
+    /// The text is blank or holds a character a SII string cannot carry.
+    Name,
 }
 
 impl FieldError {
@@ -14,8 +16,18 @@ impl FieldError {
     pub fn key(self) -> &'static str {
         match self {
             Self::Number => "error.number",
+            Self::Name => "error.name",
         }
     }
+}
+
+/// Parses a profile name; surrounding spaces are dropped.
+pub fn profile_name(text: &str) -> Result<Command, FieldError> {
+    let name = text.trim();
+    if name.is_empty() || name.contains(['"', '\n', '\r']) {
+        return Err(FieldError::Name);
+    }
+    Ok(Command::RenameProfile(name.to_owned()))
 }
 
 /// Parses a bank balance.
@@ -81,6 +93,18 @@ mod tests {
             money("99999999999999999999"),
             Err(FieldError::Number)
         ));
+    }
+
+    #[test]
+    fn parses_profile_names() {
+        assert!(matches!(
+            profile_name(" Road Runner "),
+            Ok(Command::RenameProfile(name)) if name == "Road Runner"
+        ));
+        assert!(matches!(profile_name(""), Err(FieldError::Name)));
+        assert!(matches!(profile_name("   "), Err(FieldError::Name)));
+        assert!(matches!(profile_name("a\"b"), Err(FieldError::Name)));
+        assert!(matches!(profile_name("a\nb"), Err(FieldError::Name)));
     }
 
     #[test]

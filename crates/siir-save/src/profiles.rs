@@ -268,6 +268,11 @@ pub fn save_path(save: &Path) -> PathBuf {
     save.join(names::GAME_FILE)
 }
 
+/// The `profile.sii` file inside a profile directory.
+pub fn profile_path(profile: &Path) -> PathBuf {
+    profile.join(names::PROFILE_FILE)
+}
+
 /// Reads one save's `info.sii`.
 pub fn info(save: &Path) -> Result<SaveInfo, Error> {
     let bytes = fs::read(save.join(names::INFO_FILE))?;
@@ -506,6 +511,14 @@ mod tests {
         assert_eq!(
             save_path(Path::new("/saves/1")),
             Path::new("/saves/1/game.sii")
+        );
+    }
+
+    #[test]
+    fn joins_the_profile_file() {
+        assert_eq!(
+            profile_path(Path::new("/profiles/AAA")),
+            Path::new("/profiles/AAA/profile.sii")
         );
     }
 

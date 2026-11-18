@@ -149,6 +149,13 @@ pub struct Open {
     path: PathBuf,
     session: Session,
     view: SaveView,
+    profile: Option<ProfileFile>,
+}
+
+/// The owning profile's `profile.sii`, edited beside the save.
+struct ProfileFile {
+    path: PathBuf,
+    session: Session,
 }
 
 impl Open {
@@ -172,9 +179,20 @@ impl Open {
         &self.view
     }
 
-    /// Whether a command changed the document since open or save.
+    /// Whether the profile file was read, so the profile can be renamed.
+    pub fn has_profile(&self) -> bool {
+        self.profile.is_some()
+    }
+
+    /// Whether a command changed the save or the profile since open or save.
     pub fn edited(&self) -> bool {
-        self.session.edited()
+        self.session.edited() || self.profile_edited()
+    }
+
+    fn profile_edited(&self) -> bool {
+        self.profile
+            .as_ref()
+            .is_some_and(|profile| profile.session.edited())
     }
 }
 
@@ -192,6 +210,8 @@ enum ViewUpdate {
 pub enum ActionError {
     /// No save is open, so there is nothing to edit or save.
     NoOpenSave,
+    /// The profile file could not be read, so the profile cannot be renamed.
+    NoProfile,
     /// The save document rejected the change.
     Document(Error),
 }
@@ -320,14 +340,19 @@ impl State {
 
     /// Opens one save from the list.
     pub fn open_save(&mut self, ix: usize) {
-        let (path, name, profile) = match self.saves.get(ix) {
+        let (path, name, profile, profile_dir) = match self.saves.get(ix) {
             Some(row) => {
-                let profile = self
+                let (profile, profile_dir) = self
                     .profiles
                     .get(row.profile)
-                    .map(|profile| profile.name.clone())
+                    .map(|profile| (profile.name.clone(), Some(profile.path.clone())))
                     .unwrap_or_default();
-                (profiles::save_path(&row.path), row.name.clone(), profile)
+                (
+                    profiles::save_path(&row.path),
+                    row.name.clone(),
+                    profile,
+                    profile_dir,
+                )
             }
             None => return,
         };
@@ -349,10 +374,18 @@ impl State {
                 return;
             }
         };
+        // An unreadable profile file only disables the rename; the save stays usable.
+        let profile = profile_dir.and_then(|dir| {
+            let path = profiles::profile_path(&dir);
+            Session::open(self.game, &path)
+                .ok()
+                .map(|session| ProfileFile { path, session })
+        });
         self.open = Some(Open {
             path,
             session,
             view,
+            profile,
         });
         self.notice = None;
         self.saved_backup = None;
@@ -364,6 +397,17 @@ impl State {
         let Some(open) = self.open.as_mut() else {
             return Err(ActionError::NoOpenSave);
         };
+        if let Command::RenameProfile(name) = &command {
+            let name = name.clone();
+            let profile = open.profile.as_mut().ok_or(ActionError::NoProfile)?;
+            profile
+                .session
+                .apply(command)
+                .map_err(ActionError::Document)?;
+            open.view.profile_name = name;
+            self.saved_backup = None;
+            return Ok(());
+        }
         let update = match &command {
             Command::SetMoney(value) => Some(ViewUpdate::Money(*value)),
             Command::SetExperience(value) => Some(ViewUpdate::Experience(*value)),
@@ -381,14 +425,34 @@ impl State {
         result.map_err(ActionError::Document)
     }
 
-    /// Writes the open save and returns the backup path.
+    /// Writes the edited files of the open save and returns the backup path:
+    /// the save's when it was written, otherwise the profile's.
     pub fn save(&mut self) -> Result<PathBuf, ActionError> {
         let Some(open) = self.open.as_mut() else {
             return Err(ActionError::NoOpenSave);
         };
-        let path = open.path.clone();
-        open.session.save(&path).map_err(ActionError::Document)?;
-        let backup = backup_path(&path);
+        // With nothing edited the save is still rewritten, as before the profile file.
+        let write_save = open.session.edited() || !open.profile_edited();
+        if write_save {
+            let path = open.path.clone();
+            open.session.save(&path).map_err(ActionError::Document)?;
+        }
+        if let Some(profile) = open.profile.as_mut().filter(|p| p.session.edited()) {
+            let path = profile.path.clone();
+            profile.session.save(&path).map_err(ActionError::Document)?;
+            let name = open.view.profile_name.clone();
+            if let Some(row) = self
+                .selected_save
+                .and_then(|ix| self.saves.get(ix))
+                .and_then(|save| self.profiles.get_mut(save.profile))
+            {
+                row.name = name;
+            }
+        }
+        let backup = match open.profile.as_ref().filter(|_| !write_save) {
+            Some(profile) => backup_path(&profile.path),
+            None => backup_path(&open.path),
+        };
         self.saved_backup = Some(backup.clone());
         Ok(backup)
     }

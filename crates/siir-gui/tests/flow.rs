@@ -118,6 +118,65 @@ fn applies_saves_and_reopens() {
 }
 
 #[test]
+fn renames_the_profile_on_save() {
+    let root = game_folder("profile");
+    let save_dir = root.join("profiles/AAA/save/1");
+    let save = save_dir.join("game.sii");
+    let profile = root.join("profiles/AAA/profile.sii");
+    let original_save = fs::read(&save).unwrap();
+    let original_profile = fs::read(&profile).unwrap();
+
+    let mut state = State::with_dirs(Game::Ets2, vec![root.clone()]);
+    let ix = state
+        .saves()
+        .iter()
+        .position(|row| row.path == save_dir)
+        .expect("the copied save is listed");
+    let old_name = state.profiles()[state.saves()[ix].profile].name.clone();
+
+    state.open_save(ix);
+    assert!(state.open().unwrap().has_profile());
+    assert!(state.apply(edit::profile_name("Renamed").unwrap()).is_ok());
+    assert!(state.edited());
+    assert_eq!(state.open().unwrap().view().profile_name, "Renamed");
+    assert_eq!(fs::read(&profile).unwrap(), original_profile);
+
+    state.close();
+    assert_eq!(
+        state.profiles()[state.saves()[ix].profile].name,
+        old_name,
+        "discarding keeps the listed name"
+    );
+
+    state.open_save(ix);
+    assert_eq!(state.open().unwrap().view().profile_name, old_name);
+    assert!(state.apply(edit::profile_name("Renamed").unwrap()).is_ok());
+    let backup = match state.save() {
+        Ok(path) => path,
+        Err(_) => panic!("save failed"),
+    };
+    assert!(!state.edited());
+    assert_eq!(backup, root.join("profiles/AAA/profile.sii.bak"));
+    assert_eq!(fs::read(&backup).unwrap(), original_profile);
+    assert_eq!(
+        fs::read(&save).unwrap(),
+        original_save,
+        "an untouched save is not rewritten"
+    );
+    assert_eq!(state.profiles()[state.saves()[ix].profile].name, "Renamed");
+
+    let state = State::with_dirs(Game::Ets2, vec![root.clone()]);
+    let ix = state
+        .saves()
+        .iter()
+        .position(|row| row.path == save_dir)
+        .expect("the copied save is listed");
+    assert_eq!(state.profiles()[state.saves()[ix].profile].name, "Renamed");
+
+    fs::remove_dir_all(&root).unwrap();
+}
+
+#[test]
 fn applies_cities_and_dealerships() {
     let root = game_folder("cities");
     let save_dir = root.join("profiles/AAA/save/1");

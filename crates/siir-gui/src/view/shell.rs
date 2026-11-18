@@ -38,6 +38,13 @@ impl AppView {
                 t("nav.economy"),
                 cx,
             ))
+            .child(self.nav_item(
+                Section::Profile,
+                "nav-profile",
+                IconName::CircleUser,
+                t("nav.profile"),
+                cx,
+            ))
     }
 
     fn nav_item(
