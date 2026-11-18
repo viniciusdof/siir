@@ -5766,8 +5766,11 @@ dependencies = [
 name = "siir-gui"
 version = "0.1.0"
 dependencies = [
+ "dirs 7.0.0",
  "gpui-kit",
  "rust-i18n",
+ "serde",
+ "serde_json",
  "siir-save",
 ]
 

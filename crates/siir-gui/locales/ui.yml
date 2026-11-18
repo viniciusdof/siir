@@ -198,3 +198,6 @@ error.unsaved:
 error.reveal:
   en_us: Could not open the file manager.
   pt_br: Não foi possível abrir o gerenciador de arquivos.
+error.settings:
+  en_us: Could not save your settings.
+  pt_br: Não foi possível salvar suas configurações.

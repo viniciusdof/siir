@@ -50,19 +50,18 @@ pub fn language_name(locale: &str) -> String {
     t(&format!("language.{locale}"))
 }
 
-/// Switches the UI language for the rest of the session.
+/// Switches the UI language, clamped to a shipped locale.
 pub fn set_locale(locale: &str) {
-    rust_i18n::set_locale(locale);
+    let locale = locales()
+        .into_iter()
+        .find(|shipped| shipped.as_ref() == locale)
+        .unwrap_or(Cow::Borrowed(FALLBACK));
+    rust_i18n::set_locale(&locale);
 }
 
-/// Starts in the fallback locale until a settings store remembers the choice.
+/// Clamps the startup locale to one `ui.yml` ships.
 pub fn init() {
-    if !locales()
-        .into_iter()
-        .any(|locale| locale.as_ref() == &*rust_i18n::locale())
-    {
-        rust_i18n::set_locale(FALLBACK);
-    }
+    set_locale(&rust_i18n::locale());
 }
 
 /// Label of the action that shows the backup in the system file manager.

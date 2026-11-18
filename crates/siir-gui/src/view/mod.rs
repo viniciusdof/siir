@@ -20,7 +20,7 @@ use gpui_kit::{
 
 use siir_gui::edit;
 use siir_gui::i18n::{self, t};
-use siir_gui::state::State;
+use siir_gui::state::{Settings, State};
 use siir_save::catalog::Catalog;
 use siir_save::{Command, Game};
 
@@ -36,6 +36,7 @@ enum Section {
 /// The application window.
 pub struct AppView {
     state: State,
+    settings: Settings,
     section: Section,
     search: Entity<InputState>,
     money: Entity<InputState>,
@@ -57,9 +58,13 @@ pub struct AppView {
 }
 
 impl AppView {
-    /// Discovers saves for the first game under the folders given on the
-    /// command line.
-    pub fn new(dirs: Vec<PathBuf>, window: &mut Window, cx: &mut Context<'_, Self>) -> Self {
+    /// Discovers saves for the remembered game and folders.
+    pub fn new(mut dirs: Vec<PathBuf>, window: &mut Window, cx: &mut Context<'_, Self>) -> Self {
+        let settings = Settings::load();
+        if let Some(locale) = settings.locale() {
+            i18n::set_locale(locale);
+        }
+        dirs.extend(settings.dirs.iter().cloned());
         let search = Self::input(window, cx);
         search.update(cx, |search, cx| {
             search.set_placeholder(t("home.search"), window, cx)
@@ -146,7 +151,8 @@ impl AppView {
         });
 
         Self {
-            state: State::with_dirs(Game::Ets2, dirs),
+            state: State::with_dirs(settings.game().unwrap_or(Game::Ets2), dirs),
+            settings,
             section: Section::Overview,
             search,
             money,
@@ -186,6 +192,8 @@ impl AppView {
 
     fn set_locale(&mut self, locale: &str, window: &mut Window, cx: &mut Context<'_, Self>) {
         i18n::set_locale(locale);
+        self.settings.set_locale(locale);
+        self.save_settings();
         self.search.update(cx, |search, cx| {
             search.set_placeholder(t("home.search"), window, cx)
         });
@@ -194,8 +202,19 @@ impl AppView {
 
     fn set_game(&mut self, game: Game, cx: &mut Context<'_, Self>) {
         self.state.set_game(game);
+        self.settings.set_game(game);
+        self.save_settings();
         self.catalog = None;
         cx.notify();
+    }
+
+    /// Writes the settings; a failure shows the banner.
+    fn save_settings(&mut self) {
+        if self.settings.save().is_err() {
+            self.action_error = Some("error.settings");
+        } else if self.action_error == Some("error.settings") {
+            self.action_error = None;
+        }
     }
 
     fn set_section(&mut self, section: Section, cx: &mut Context<'_, Self>) {
@@ -465,7 +484,9 @@ impl AppView {
 
     fn add_dirs(&mut self, dirs: Vec<PathBuf>, cx: &mut Context<'_, Self>) {
         if !dirs.is_empty() {
-            self.state.add_dirs(dirs);
+            self.state.add_dirs(dirs.clone());
+            self.settings.dirs.extend(dirs);
+            self.save_settings();
             cx.notify();
         }
     }
@@ -486,8 +507,7 @@ impl AppView {
         .detach();
     }
 
-    /// The language dropdown; the trigger is a quiet button and the menu lists
-    /// every locale `ui.yml` ships.
+    /// The language dropdown over every shipped locale.
     fn locale_menu(&self, cx: &mut Context<'_, Self>) -> impl IntoElement {
         let palette = tokens::palette();
         let current = i18n::current_locale();

@@ -1,12 +1,94 @@
 //! Profile discovery, the save list, and the one open save.
 
+use std::fs;
 use std::path::{Path, PathBuf};
 
+use serde::{Deserialize, Serialize};
 use siir_save::profiles::{self, Profile};
 use siir_save::{Command, Error, Game, Origin, Session, Skills};
 
 use crate::i18n;
 use crate::view_data::SaveView;
+
+/// What the app remembers between runs.
+#[derive(Debug, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Settings {
+    /// Extra game folders added by the user.
+    pub dirs: Vec<PathBuf>,
+    game: Option<String>,
+    locale: Option<String>,
+}
+
+impl Settings {
+    /// Reads the settings file, or defaults when it is unusable.
+    pub fn load() -> Self {
+        settings_path()
+            .map(|path| Self::load_from(&path))
+            .unwrap_or_default()
+    }
+
+    /// Writes the settings file.
+    pub fn save(&self) -> std::io::Result<()> {
+        let path =
+            settings_path().ok_or_else(|| std::io::Error::other("no OS config directory"))?;
+        self.save_to(&path)
+    }
+
+    /// Game the app was showing.
+    pub fn game(&self) -> Option<Game> {
+        match self.game.as_deref() {
+            Some("ets2") => Some(Game::Ets2),
+            Some("ats") => Some(Game::Ats),
+            _ => None,
+        }
+    }
+
+    /// Remembers `game`.
+    pub fn set_game(&mut self, game: Game) {
+        self.game = Some(
+            match game {
+                Game::Ets2 => "ets2",
+                Game::Ats => "ats",
+            }
+            .to_string(),
+        );
+    }
+
+    /// Locale the app was showing.
+    pub fn locale(&self) -> Option<&str> {
+        self.locale.as_deref()
+    }
+
+    /// Remembers `locale`.
+    pub fn set_locale(&mut self, locale: &str) {
+        self.locale = Some(locale.to_string());
+    }
+
+    fn load_from(path: &Path) -> Self {
+        fs::read(path)
+            .ok()
+            .and_then(|bytes| serde_json::from_slice(&bytes).ok())
+            .unwrap_or_default()
+    }
+
+    fn save_to(&self, path: &Path) -> std::io::Result<()> {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        let json = serde_json::to_vec_pretty(self).map_err(std::io::Error::other)?;
+        let tmp = path.with_extension(format!("{}.tmp", std::process::id()));
+        let result = fs::write(&tmp, json).and_then(|()| fs::rename(&tmp, path));
+        if result.is_err() {
+            let _ = fs::remove_file(&tmp);
+        }
+        result
+    }
+}
+
+fn settings_path() -> Option<PathBuf> {
+    dirs::config_dir().map(|dir| dir.join("siir").join("settings.json"))
+}
 
 /// One profile group in the save list.
 pub struct ProfileRow {
@@ -276,11 +358,8 @@ impl State {
         self.saved_backup = None;
     }
 
-    /// Applies one command and keeps the overview in step with the document.
-    ///
-    /// The economy commands update their one view field in place; rebuilding
-    /// the whole view re-reads every unit, and live editing sends one command
-    /// per keystroke.
+    /// Applies one command; economy fields update in place, since live editing
+    /// sends one per keystroke.
     pub fn apply(&mut self, command: Command) -> Result<(), ActionError> {
         let Some(open) = self.open.as_mut() else {
             return Err(ActionError::NoOpenSave);
@@ -367,4 +446,41 @@ fn backup_path(path: &Path) -> PathBuf {
     let mut name = path.as_os_str().to_owned();
     name.push(".bak");
     PathBuf::from(name)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn round_trips_the_settings_file() {
+        let root = std::env::temp_dir().join(format!("siir-gui-settings-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        let path = root.join("nested").join("settings.json");
+
+        let missing = Settings::load_from(&path);
+        assert!(missing.dirs.is_empty());
+        assert_eq!(missing.game(), None);
+        assert_eq!(missing.locale(), None);
+
+        let mut settings = Settings::default();
+        settings.dirs.push(PathBuf::from("/games/ets2"));
+        settings.set_game(Game::Ats);
+        settings.set_locale("pt_br");
+        settings.save_to(&path).unwrap();
+
+        let loaded = Settings::load_from(&path);
+        assert_eq!(loaded.dirs, [PathBuf::from("/games/ets2")]);
+        assert_eq!(loaded.game(), Some(Game::Ats));
+        assert_eq!(loaded.locale(), Some("pt_br"));
+        let leftovers = fs::read_dir(path.parent().unwrap()).unwrap().count();
+        assert_eq!(
+            leftovers, 1,
+            "the temp file must be renamed, not left behind"
+        );
+
+        fs::write(&path, b"not json").unwrap();
+        assert!(Settings::load_from(&path).dirs.is_empty());
+        fs::remove_dir_all(&root).unwrap();
+    }
 }
