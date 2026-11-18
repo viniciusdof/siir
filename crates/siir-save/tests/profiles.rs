@@ -55,15 +55,28 @@ fn finds_profiles_saves_and_info() {
     let profiles = find_profiles(&fixtures()).unwrap();
     assert_eq!(profiles, vec![fixtures().join("ets2")]);
 
-    let saves = saves(&fixtures().join("ets2")).unwrap();
-    assert_eq!(saves.len(), 5);
-    assert!(saves.contains(&fixtures().join("ets2/saves/1")));
+    let temp = temp("profile-layout");
+    let profile = temp.join("profiles").join("abc");
+    fs::create_dir_all(profile.join("save/1")).unwrap();
+    fs::write(
+        profile.join("profile.sii"),
+        include_str!("../testdata/profile.sii"),
+    )
+    .unwrap();
+    fs::copy(
+        fixtures().join("ets2/saves/1/info.sii"),
+        profile.join("save/1/info.sii"),
+    )
+    .unwrap();
+    assert_eq!(saves(&profile).unwrap(), vec![profile.join("save/1")]);
 
     let info = info(&fixtures().join("ets2/saves/1")).unwrap();
     assert_eq!(info.name, "teste");
     assert_eq!(info.version, 105);
     assert_eq!(info.info_version, 1);
     assert_eq!(info.dependencies.len(), 106);
+
+    let _ = fs::remove_dir_all(&temp);
 }
 
 #[test]
@@ -73,11 +86,11 @@ fn profiles_scan_every_profiles_folder_of_a_custom_game_folder() {
     let profile = include_str!("../testdata/profile.sii");
     for name in ["profiles", "profiles.bak", "other"] {
         let dir = game.join(name).join("abc");
-        fs::create_dir_all(dir.join("saves/1")).unwrap();
+        fs::create_dir_all(dir.join("save/1")).unwrap();
         fs::write(dir.join("profile.sii"), profile).unwrap();
         fs::copy(
             fixtures().join("ets2/saves/1/info.sii"),
-            dir.join("saves/1/info.sii"),
+            dir.join("save/1/info.sii"),
         )
         .unwrap();
     }
@@ -166,7 +179,7 @@ fn backup_rejects_a_link_outside_the_profile() {
     fs::create_dir_all(&profile).unwrap();
     fs::create_dir_all(&outside).unwrap();
     fs::write(profile.join("profile.sii"), b"profile").unwrap();
-    symlink(&outside, profile.join("saves")).unwrap();
+    symlink(&outside, profile.join("save")).unwrap();
 
     let error = backup(&profile, &temp.join("profile.zip")).unwrap_err();
     assert!(error.to_string().contains("points outside the profile"));
@@ -258,7 +271,7 @@ fn backup_does_not_include_itself() {
 }
 
 #[test]
-fn saves_returns_empty_without_a_saves_directory() {
+fn saves_returns_empty_without_a_save_directory() {
     let temp = temp("no-saves");
     let profile = temp.join("profile");
     fs::create_dir_all(&profile).unwrap();

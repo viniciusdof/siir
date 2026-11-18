@@ -129,7 +129,7 @@ pub(crate) const PROFILES_PREFIX: &str = "profiles";
 pub(crate) const PROFILE_FILE: &str = "profile.sii";
 pub(crate) const INFO_FILE: &str = "info.sii";
 pub(crate) const GAME_FILE: &str = "game.sii";
-pub(crate) const SAVES_DIR: &str = "saves";
+pub(crate) const SAVES_DIR: &str = "save";
 pub(crate) const ALBUM_DIR: &str = "album";
 pub(crate) const SETTINGS_FILES: [&str; 3] = ["config.cfg", "config_local.cfg", "controls.sii"];
 

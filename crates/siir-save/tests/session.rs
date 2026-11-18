@@ -165,7 +165,7 @@ fn contract_flow_discover_open_edit_save_reopen() {
     let dir = temp("contract");
     let game = dir.join("game");
     let profile = game.join("profiles/abcdef");
-    let save_dir = profile.join("saves/1");
+    let save_dir = profile.join("save/1");
     fs::create_dir_all(&save_dir).unwrap();
     fs::copy(fixture("ets2/profile.sii"), profile.join("profile.sii")).unwrap();
     fs::copy(fixture("ets2/saves/1/info.sii"), save_dir.join("info.sii")).unwrap();
