@@ -2,6 +2,7 @@
 
 pub mod button;
 pub mod checkbox;
+pub mod dialog;
 pub mod empty_state;
 pub mod field;
 pub mod icon;
@@ -14,6 +15,7 @@ pub mod tokens;
 
 pub use button::{Tone, button};
 pub use checkbox::checkbox;
+pub use dialog::confirm;
 pub use empty_state::empty_state;
 pub use field::field;
 pub use icon::icon;

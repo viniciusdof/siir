@@ -63,6 +63,12 @@ editor.discard:
 editor.keep_editing:
   en_us: Keep editing
   pt_br: Continuar editando
+dialog.unsaved_title:
+  en_us: Unsaved changes
+  pt_br: Alterações não salvas
+dialog.unsaved_message:
+  en_us: Leaving this save throws away the edits you have not saved.
+  pt_br: Sair deste save descarta as edições que você não salvou.
 editor.saved:
   en_us: Saved. Previous file kept at
   pt_br: Salvo. O arquivo anterior está em
@@ -222,9 +228,6 @@ error.apply:
 error.save:
   en_us: Could not save this file.
   pt_br: Não foi possível salvar este arquivo.
-error.unsaved:
-  en_us: You have unsaved changes.
-  pt_br: Você tem alterações não salvas.
 error.reveal:
   en_us: Could not open the file manager.
   pt_br: Não foi possível abrir o gerenciador de arquivos.

@@ -56,6 +56,9 @@ pub struct AppView {
     action_error: Option<&'static str>,
     confirm_leave: bool,
     close_after_discard: bool,
+    leave_focus: FocusHandle,
+    keep_editing_focus: FocusHandle,
+    switch_focus: FocusHandle,
     _subscriptions: Vec<Subscription>,
     collapsed: HashSet<PathBuf>,
     hide_autosaves: bool,
@@ -154,15 +157,13 @@ impl AppView {
         }
 
         let close = cx.entity().downgrade();
-        window.on_window_should_close(cx, move |_, cx| {
+        window.on_window_should_close(cx, move |window, cx| {
             close
                 .update(cx, |view, cx| {
                     let valid = view.commit_fields(cx);
                     if view.state.edited() || !valid {
-                        view.action_error = None;
-                        view.confirm_leave = true;
                         view.close_after_discard = true;
-                        cx.notify();
+                        view.ask_leave(window, cx);
                         false
                     } else {
                         true
@@ -191,6 +192,9 @@ impl AppView {
             action_error: None,
             confirm_leave: false,
             close_after_discard: false,
+            leave_focus: cx.focus_handle(),
+            keep_editing_focus: cx.focus_handle().tab_stop(true),
+            switch_focus: cx.focus_handle().tab_stop(true),
             _subscriptions: subscriptions,
             collapsed: HashSet::new(),
             hide_autosaves: true,
@@ -269,33 +273,43 @@ impl AppView {
         cx.notify();
     }
 
-    fn close(&mut self, cx: &mut Context<'_, Self>) {
+    fn close(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
         if self.state.edited() {
-            self.action_error = None;
-            self.confirm_leave = true;
-            cx.notify();
+            self.ask_leave(window, cx);
             return;
         }
-        self.close_save(cx);
+        self.close_save(window, cx);
+    }
+
+    /// Opens the unsaved-changes dialog with focus on the safe choice.
+    fn ask_leave(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
+        self.action_error = None;
+        self.confirm_leave = true;
+        window.focus(&self.keep_editing_focus, cx);
+        cx.notify();
     }
 
     /// Leaves the open save without writing it.
     fn discard(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
         let closes = self.close_after_discard;
-        self.close_save(cx);
+        self.close_save(window, cx);
         if closes {
             window.remove_window();
         }
     }
 
-    fn keep_editing(&mut self, cx: &mut Context<'_, Self>) {
+    /// Closes the dialog and returns focus to the Switch save trigger.
+    fn keep_editing(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
         self.confirm_leave = false;
         self.close_after_discard = false;
         self.action_error = None;
+        window.focus(&self.switch_focus, cx);
         cx.notify();
     }
 
-    fn close_save(&mut self, cx: &mut Context<'_, Self>) {
+    /// Returns to the save list with focus on its search field, since the
+    /// control that closed the save is gone.
+    fn close_save(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
         if let Some(ix) = self.state.selected_save()
             && let Some(row) = self.state.saves().get(ix)
             && let Some(profile) = self.state.profiles().get(row.profile)
@@ -305,6 +319,7 @@ impl AppView {
         self.state.close();
         self.catalog = None;
         self.clear_errors();
+        window.focus(&self.search.read(cx).focus_handle(cx), cx);
         cx.notify();
     }
 
@@ -671,7 +686,8 @@ impl AppView {
                 .child(
                     ui::button("switch-save", t("home.switch_save"))
                         .icon(IconName::List)
-                        .on_click(cx.listener(|this, _, _, cx| this.close(cx))),
+                        .track_focus(&self.switch_focus)
+                        .on_click(cx.listener(|this, _, window, cx| this.close(window, cx))),
                 )
                 .child(
                     ui::button("save", t("editor.save"))
@@ -725,45 +741,7 @@ impl AppView {
     fn render_banners(&self, cx: &mut Context<'_, Self>) -> impl IntoElement {
         let palette = tokens::palette();
         let mut banners = div().flex().flex_col();
-        if self.confirm_leave {
-            let message = t("error.unsaved");
-            banners = banners.child(
-                div()
-                    .id("confirm-leave")
-                    .role(Role::Alert)
-                    .aria_label(message.clone())
-                    .flex()
-                    .items_center()
-                    .gap(px(tokens::SPACE_2))
-                    .px(px(tokens::SPACE_4))
-                    .py(px(tokens::SPACE_2))
-                    .bg(palette.surface)
-                    .border_b_1()
-                    .border_color(palette.accent)
-                    .child(div().flex_shrink_0().child(ui::icon(
-                        IconName::CircleAlert,
-                        16.0,
-                        palette.accent,
-                    )))
-                    .child(
-                        div()
-                            .flex_1()
-                            .min_w(px(0.0))
-                            .text_size(px(tokens::TEXT_BODY))
-                            .text_color(palette.text)
-                            .child(message),
-                    )
-                    .child(
-                        ui::button("discard-changes", t("editor.discard"))
-                            .on_click(cx.listener(|this, _, window, cx| this.discard(window, cx))),
-                    )
-                    .child(
-                        ui::button("keep-editing", t("editor.keep_editing"))
-                            .tone(Tone::Quiet)
-                            .on_click(cx.listener(|this, _, _, cx| this.keep_editing(cx))),
-                    ),
-            );
-        } else if let Some(key) = self.action_error {
+        if let Some(key) = self.action_error {
             let message = t(key);
             banners = banners.child(
                 div()
@@ -886,6 +864,7 @@ impl AppView {
                 this.child(self.render_notice(key, &detail, cx))
             })
             .child(self.render_banners(cx))
+            .child(self.render_leave_dialog(cx))
             .child(
                 div()
                     .w_full()
@@ -895,6 +874,30 @@ impl AppView {
                     .flex()
                     .child(content),
             )
+    }
+
+    fn render_leave_dialog(&self, cx: &mut Context<'_, Self>) -> impl IntoElement {
+        let view = cx.entity().downgrade();
+        ui::confirm(
+            t("dialog.unsaved_title"),
+            t("dialog.unsaved_message"),
+            &self.leave_focus,
+        )
+        .open(self.confirm_leave)
+        .on_cancel(move |window, cx| {
+            view.update(cx, |view, cx| view.keep_editing(window, cx))
+                .ok();
+        })
+        .action(
+            ui::button("discard-changes", t("editor.discard"))
+                .tone(Tone::Danger)
+                .on_click(cx.listener(|this, _, window, cx| this.discard(window, cx))),
+        )
+        .action(
+            ui::button("keep-editing", t("editor.keep_editing"))
+                .track_focus(&self.keep_editing_focus)
+                .on_click(cx.listener(|this, _, window, cx| this.keep_editing(window, cx))),
+        )
     }
 
     fn render_section(&self, cx: &mut Context<'_, Self>) -> impl IntoElement {

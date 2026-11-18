@@ -4,7 +4,7 @@ use gpui_kit::assets::IconName;
 use gpui_kit::base::{Button as BaseButton, Selectable};
 use gpui_kit::prelude::*;
 use gpui_kit::{
-    AccessibleAction, App, ClickEvent, ElementId, FontWeight, IntoElement, RenderOnce,
+    AccessibleAction, App, ClickEvent, ElementId, FocusHandle, FontWeight, IntoElement, RenderOnce,
     SharedString, Toggled, Window, px, transparent_black,
 };
 
@@ -23,6 +23,8 @@ pub enum Tone {
     Primary,
     /// A quiet choice in a group, such as the game switch.
     Quiet,
+    /// An action that throws work away.
+    Danger,
 }
 
 /// A labelled action with an optional leading icon.
@@ -38,6 +40,7 @@ pub struct Button {
     toggled: Option<bool>,
     disabled: bool,
     width: Option<f32>,
+    focus: Option<FocusHandle>,
     on_click: Option<ClickHandler>,
     on_a11y_click: Option<A11yClickHandler>,
 }
@@ -55,6 +58,7 @@ pub fn button(id: impl Into<ElementId>, label: impl Into<SharedString>) -> Butto
         toggled: None,
         disabled: false,
         width: None,
+        focus: None,
         on_click: None,
         on_a11y_click: None,
     }
@@ -116,6 +120,12 @@ impl Button {
         self
     }
 
+    /// Uses `handle` for focus, so the owner can move focus to the button.
+    pub fn track_focus(mut self, handle: &FocusHandle) -> Self {
+        self.focus = Some(handle.clone());
+        self
+    }
+
     /// Runs on pointer click, Enter, and Space.
     pub fn on_click(
         mut self,
@@ -151,6 +161,7 @@ impl RenderOnce for Button {
             .unwrap_or_else(|| self.label.clone());
         let primary = self.tone == Tone::Primary;
         let quiet = self.tone == Tone::Quiet;
+        let danger = self.tone == Tone::Danger;
         let (background, foreground, edge) = if primary {
             (palette.accent, palette.accent_text, palette.accent)
         } else if quiet {
@@ -167,6 +178,8 @@ impl RenderOnce for Button {
                 },
                 transparent_black(),
             )
+        } else if danger {
+            (palette.surface, palette.danger_text, palette.danger)
         } else {
             (palette.surface, palette.text, palette.control_border)
         };
@@ -197,6 +210,7 @@ impl RenderOnce for Button {
                 })
             })
             .when_some(self.width, |this, width| this.w(px(width)))
+            .when_some(self.focus, |this, handle| this.track_focus(&handle))
             .accessibility_label(accessible)
             .when_some(self.icon, |this, name| {
                 this.child(icon(name, 16.0, foreground))
@@ -217,6 +231,12 @@ impl RenderOnce for Button {
                     .active(|style| style.bg(palette.accent))
             })
             .focus_visible(|style| style.border_color(palette.accent_text))
+        } else if danger {
+            base.when(!disabled, |this| {
+                this.hover(|style| style.bg(palette.danger).text_color(palette.bg))
+                    .active(|style| style.bg(palette.danger).text_color(palette.bg))
+            })
+            .focus_visible(|style| style.border_color(palette.accent))
         } else {
             base.when(!disabled, |this| {
                 this.hover(|style| style.bg(palette.surface_hover))

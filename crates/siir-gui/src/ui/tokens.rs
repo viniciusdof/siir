@@ -1,7 +1,7 @@
 //! The application palette and the Base theme projection.
 
 use gpui_kit::base::{ColorTokens, TextStyleToken, Theme, ThemeAppearance, TypographyTokens};
-use gpui_kit::{App, FontWeight, Hsla, px, rgb};
+use gpui_kit::{App, FontWeight, Hsla, hsla, px, rgb};
 
 /// The fixed dark palette.
 #[derive(Clone, Copy)]
@@ -38,6 +38,8 @@ pub struct Palette {
     pub danger_text: Hsla,
     /// Saved state and confirmations.
     pub success: Hsla,
+    /// Modal backdrop.
+    pub scrim: Hsla,
 }
 
 /// The palette every view and wrapper reads.
@@ -59,6 +61,7 @@ pub fn palette() -> Palette {
         danger: color(0xc96a5b),
         danger_text: color(0xe2907f),
         success: color(0x7fb87f),
+        scrim: hsla(0.0, 0.0, 0.0, 0.55),
     }
 }
 
