@@ -19,7 +19,19 @@ fn snapshot(game: &str) -> Value {
 
 fn assert_snapshot(game: &str, name: &str) {
     let data = snapshot(game);
-    assert_eq!(data["format"], 2, "{name}");
+    assert_eq!(data["format"], 4, "{name}");
+    assert!(
+        !data["countries"].as_array().unwrap().is_empty(),
+        "{name}: no countries"
+    );
+    let steps = data["levels"]["steps"].as_array().unwrap();
+    assert!(!steps.is_empty(), "{name}: no level steps");
+    assert!(
+        steps
+            .iter()
+            .all(|step| step.as_u64().is_some_and(|step| step > 0)),
+        "{name}: a level step is not positive"
+    );
     assert_eq!(data["game"], game, "{name}");
     for section in ["trucks", "cargo", "companies", "trailers", "models"] {
         let items = data[section].as_array().unwrap_or_else(|| {
@@ -203,4 +215,52 @@ fn names_vehicles_in_every_language() {
         ats.vehicle_name("peterbilt.579", "en_us"),
         Some("Peterbilt 579")
     );
+}
+
+#[test]
+fn levels_follow_each_game_table() {
+    let ets2 = Catalog::load(Game::Ets2).unwrap();
+    let levels = ets2.levels();
+    assert_eq!(levels.experience(5), Some(3300));
+    assert_eq!(levels.level(3300), 5);
+    assert_eq!(levels.title(50, "pt_br"), Some("Lenda"));
+
+    let ats = Catalog::load(Game::Ats).unwrap();
+    let levels = ats.levels();
+    assert_eq!(levels.experience(5), Some(3400));
+    assert_eq!(levels.title(10, "en_us"), Some("Workhorse"));
+}
+
+#[test]
+fn names_plate_countries_in_every_language() {
+    let ets2 = Catalog::load(Game::Ets2).unwrap();
+    assert_eq!(ets2.country_name("germany", "en_us"), Some("Germany"));
+    assert_eq!(ets2.country_name("germany", "pt_br"), Some("Alemanha"));
+    assert_eq!(ets2.country_name("poland", "en_us"), Some("Poland"));
+    assert!(
+        ets2.countries()
+            .iter()
+            .any(|country| country.token == "czech")
+    );
+
+    let ats = Catalog::load(Game::Ats).unwrap();
+    assert_eq!(ats.country_name("texas", "en_us"), Some("Texas"));
+    assert_eq!(ats.country_name("texas", "pt_br"), Some("Texas"));
+}
+
+#[test]
+fn currencies_start_with_the_stored_one() {
+    let ets2 = Catalog::load(Game::Ets2).unwrap();
+    let first = &ets2.currencies()[0];
+    assert_eq!((first.code.as_str(), first.ratio), ("EUR", 1.0));
+    assert!(
+        ets2.currencies()
+            .iter()
+            .any(|currency| currency.code == "GBP")
+    );
+
+    let ats = Catalog::load(Game::Ats).unwrap();
+    let first = &ats.currencies()[0];
+    assert_eq!((first.code.as_str(), first.ratio), ("USD", 1.0));
+    assert!(ats.currencies().iter().all(|currency| currency.ratio > 0.0));
 }

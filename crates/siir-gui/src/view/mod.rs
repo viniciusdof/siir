@@ -25,10 +25,24 @@ use siir_gui::edit;
 use siir_gui::format;
 use siir_gui::i18n::{self, t};
 use siir_gui::state::{Settings, State};
-use siir_save::catalog::Catalog;
+use siir_save::catalog::{Catalog, Currency, Levels};
 use siir_save::{Command, Game};
 
 use crate::ui::{self, Tone, tokens};
+
+/// Highest level the slider offers. The game defines no cap: this is a product
+/// choice, the level of the last title, far below what the 32-bit experience
+/// counter holds.
+const LEVEL_SLIDER_MAX: u32 = 100;
+
+/// A whole-level slider from 0 to `max`.
+fn level_slider(max: u32) -> SliderState {
+    SliderState::new()
+        .min(0.0)
+        .max(max as f32)
+        .step(1.0)
+        .default_value(0.0)
+}
 
 /// One section of the editor shell.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -47,15 +61,22 @@ pub struct AppView {
     section: Section,
     search: Entity<InputState>,
     money: Entity<InputState>,
-    experience: Entity<InputState>,
+    level: Entity<SliderState>,
+    level_focus: FocusHandle,
+    country_focus: FocusHandle,
+    locale_focus: FocusHandle,
     profile_name: Entity<InputState>,
     skills: Vec<Entity<SliderState>>,
     skill_focus: Vec<FocusHandle>,
     adr_focus: FocusHandle,
     selected_vehicle: Option<String>,
-    show_all_vehicles: bool,
+    show_used_market: bool,
     odometer: Entity<InputState>,
+    plate: Entity<InputState>,
+    used_price: Entity<InputState>,
     odometer_error: Option<&'static str>,
+    plate_error: Option<&'static str>,
+    used_price_error: Option<&'static str>,
     fuel: Entity<SliderState>,
     fuel_focus: FocusHandle,
     vehicles_focus: FocusHandle,
@@ -67,10 +88,8 @@ pub struct AppView {
     trailers_focus: FocusHandle,
     adr: [bool; 6],
     syncing: bool,
-    locale_open: bool,
     catalog: Option<Catalog>,
     money_error: Option<&'static str>,
-    experience_error: Option<&'static str>,
     profile_name_error: Option<&'static str>,
     action_error: Option<&'static str>,
     confirm_leave: bool,
@@ -96,7 +115,8 @@ impl AppView {
             search.set_placeholder(t("home.search"), window, cx)
         });
         let money = Self::number_input(window, cx, true);
-        let experience = Self::number_input(window, cx, false);
+        let level = cx.new(|_| level_slider(LEVEL_SLIDER_MAX));
+        let level_focus = cx.focus_handle().tab_stop(true);
         let profile_name = Self::input(window, cx);
         let skills: Vec<Entity<SliderState>> = (0..5)
             .map(|_| {
@@ -120,6 +140,8 @@ impl AppView {
                 .default_value(0.0)
         });
         let fuel_focus = cx.focus_handle().tab_stop(true);
+        let plate = Self::input(window, cx);
+        let used_price = Self::number_input(window, cx, false);
         let trailer_plate = Self::input(window, cx);
         let cargo_mass = Self::number_input(window, cx, false);
 
@@ -129,8 +151,10 @@ impl AppView {
                 this.money_error = None;
                 cx.notify();
             }),
-            cx.observe(&experience, |this, _, cx| {
-                this.experience_error = None;
+            cx.observe(&level, |this, _, cx| {
+                if !this.syncing {
+                    this.apply_level(cx);
+                }
                 cx.notify();
             }),
             cx.observe(&profile_name, |this, _, cx| {
@@ -160,6 +184,40 @@ impl AppView {
         }));
         subscriptions.push(cx.on_focus(&fuel_focus, window, |_, _, cx| cx.notify()));
         subscriptions.push(cx.on_blur(&fuel_focus, window, |_, _, cx| cx.notify()));
+        subscriptions.push(cx.observe(&plate, |this, _, cx| {
+            this.plate_error = None;
+            cx.notify();
+        }));
+        subscriptions.push(cx.observe(&used_price, |this, _, cx| {
+            this.used_price_error = None;
+            cx.notify();
+        }));
+        subscriptions.push(cx.subscribe_in(
+            &used_price,
+            window,
+            |this, _, event: &InputEvent, window, cx| {
+                // `Some(false)` means the typed amount converts back to the
+                // stored one, so the field would keep a value nobody saved.
+                if matches!(event, InputEvent::Change)
+                    && this.apply_used_price_text(cx) == Some(false)
+                {
+                    this.sync_used_price(window, cx);
+                }
+            },
+        ));
+        let used_price_focus = used_price.read(cx).focus_handle(cx);
+        subscriptions.push(cx.on_focus(&used_price_focus, window, |_, _, cx| cx.notify()));
+        subscriptions.push(cx.on_blur(&used_price_focus, window, |this, _, cx| {
+            this.commit_used_price(cx)
+        }));
+        subscriptions.push(cx.subscribe(&plate, |this, _, event: &InputEvent, cx| {
+            if matches!(event, InputEvent::Change) {
+                this.apply_plate_text(cx);
+            }
+        }));
+        let plate_focus = plate.read(cx).focus_handle(cx);
+        subscriptions.push(cx.on_focus(&plate_focus, window, |_, _, cx| cx.notify()));
+        subscriptions.push(cx.on_blur(&plate_focus, window, |this, _, cx| this.commit_plate(cx)));
         subscriptions.push(cx.observe(&trailer_plate, |this, _, cx| {
             this.trailer_plate_error = None;
             cx.notify();
@@ -192,18 +250,15 @@ impl AppView {
         subscriptions.push(cx.on_blur(&cargo_mass_focus, window, |this, _, cx| {
             this.commit_cargo_mass(cx)
         }));
-        subscriptions.push(cx.subscribe(&money, |this, _, event: &InputEvent, cx| {
-            if matches!(event, InputEvent::Change) {
-                this.apply_money_text(cx);
-            }
-        }));
-        subscriptions.push(
-            cx.subscribe(&experience, |this, _, event: &InputEvent, cx| {
-                if matches!(event, InputEvent::Change) {
-                    this.apply_experience_text(cx);
+        subscriptions.push(cx.subscribe_in(
+            &money,
+            window,
+            |this, _, event: &InputEvent, window, cx| {
+                if matches!(event, InputEvent::Change) && this.apply_money_text(cx) == Some(false) {
+                    this.sync_money(window, cx);
                 }
-            }),
-        );
+            },
+        ));
         subscriptions.push(
             cx.subscribe(&profile_name, |this, _, event: &InputEvent, cx| {
                 if matches!(event, InputEvent::Change) {
@@ -217,11 +272,8 @@ impl AppView {
         let money_focus = money.read(cx).focus_handle(cx);
         subscriptions.push(cx.on_focus(&money_focus, window, |_, _, cx| cx.notify()));
         subscriptions.push(cx.on_blur(&money_focus, window, |this, _, cx| this.commit_money(cx)));
-        let experience_focus = experience.read(cx).focus_handle(cx);
-        subscriptions.push(cx.on_focus(&experience_focus, window, |_, _, cx| cx.notify()));
-        subscriptions.push(cx.on_blur(&experience_focus, window, |this, _, cx| {
-            this.commit_experience(cx)
-        }));
+        subscriptions.push(cx.on_focus(&level_focus, window, |_, _, cx| cx.notify()));
+        subscriptions.push(cx.on_blur(&level_focus, window, |_, _, cx| cx.notify()));
         let profile_name_focus = profile_name.read(cx).focus_handle(cx);
         subscriptions.push(cx.on_focus(&profile_name_focus, window, |_, _, cx| cx.notify()));
         subscriptions.push(cx.on_blur(&profile_name_focus, window, |this, _, cx| {
@@ -269,15 +321,22 @@ impl AppView {
             section: Section::Overview,
             search,
             money,
-            experience,
+            level,
+            level_focus,
+            country_focus: cx.focus_handle().tab_stop(true),
+            locale_focus: cx.focus_handle().tab_stop(true),
             profile_name,
             skills,
             skill_focus,
             adr_focus: cx.focus_handle().tab_stop(true),
             selected_vehicle: None,
-            show_all_vehicles: false,
+            show_used_market: false,
             odometer,
+            plate,
+            used_price,
             odometer_error: None,
+            plate_error: None,
+            used_price_error: None,
             fuel,
             fuel_focus,
             vehicles_focus: cx.focus_handle().tab_stop(true),
@@ -289,10 +348,8 @@ impl AppView {
             trailers_focus: cx.focus_handle().tab_stop(true),
             adr: [false; 6],
             syncing: false,
-            locale_open: false,
             catalog: None,
             money_error: None,
-            experience_error: None,
             profile_name_error: None,
             action_error: None,
             confirm_leave: false,
@@ -371,7 +428,6 @@ impl AppView {
         self.state.open_save(ix);
         if self.state.open().is_some() {
             self.catalog = Catalog::load(self.state.game()).ok();
-            self.locale_open = false;
             self.section = Section::Overview;
             self.clear_errors();
             self.sync_forms(window, cx);
@@ -383,7 +439,6 @@ impl AppView {
         self.state.open_newest();
         if self.state.open().is_some() {
             self.catalog = Catalog::load(self.state.game()).ok();
-            self.locale_open = false;
             self.section = Section::Overview;
             self.clear_errors();
             self.sync_forms(window, cx);
@@ -486,47 +541,109 @@ impl AppView {
     /// Applies the text of every form field and reports whether all parse.
     fn commit_fields(&mut self, cx: &mut Context<'_, Self>) -> bool {
         self.commit_money(cx);
-        self.commit_experience(cx);
         self.commit_profile_name(cx);
         self.commit_odometer(cx);
+        self.commit_plate(cx);
+        self.commit_used_price(cx);
         self.trailer_plate_error =
             (!self.apply_trailer_plate_text(cx)).then_some(edit::FieldError::Name.key());
         self.cargo_mass_error =
             (!self.apply_cargo_mass_text(cx)).then_some(edit::FieldError::Number.key());
         self.money_error.is_none()
-            && self.experience_error.is_none()
             && self.profile_name_error.is_none()
             && self.odometer_error.is_none()
+            && self.plate_error.is_none()
+            && self.used_price_error.is_none()
             && self.trailer_plate_error.is_none()
             && self.cargo_mass_error.is_none()
     }
 
-    /// Applies the money text once it parses; reports whether it did.
-    fn apply_money_text(&mut self, cx: &mut Context<'_, Self>) -> bool {
+    /// Puts the stored balance into its field, converted to the shown currency.
+    fn sync_money(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
+        let game = self.state.game();
+        let Some(money) = self.state.open().and_then(|open| open.view().money) else {
+            return;
+        };
+        let shown = format::amount(self.currency().from_native(money), game);
+        self.money.update(cx, |input, cx| {
+            input.set_value(shown, window, cx);
+        });
+    }
+
+    /// Puts the selected listing's stored asking price into its field, in the
+    /// shown currency.
+    fn sync_used_price(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
+        let game = self.state.game();
+        let Some(price) = self
+            .selected_row()
+            .and_then(|row| row.listing.as_ref())
+            .map(|listing| listing.price)
+        else {
+            return;
+        };
+        let shown = format::amount(self.currency().from_native(price), game);
+        self.used_price.update(cx, |input, cx| {
+            input.set_value(shown, window, cx);
+        });
+    }
+
+    /// Applies the money text. `None` means it does not parse, `Some(true)`
+    /// that the balance changed, `Some(false)` that the typed amount is the
+    /// amount already stored once converted back.
+    ///
+    /// The text is in the profile's currency. Leaving it as shown never
+    /// rewrites the balance, even when the conversion rounds.
+    fn apply_money_text(&mut self, cx: &mut Context<'_, Self>) -> Option<bool> {
         let text = self.money.read(cx).unmask_value().to_string();
-        let Ok(Command::SetMoney(value)) = edit::money(&text) else {
-            return false;
+        let currency = self.currency();
+        let Ok(Command::SetMoney(value)) = edit::money(&text, &currency) else {
+            return None;
         };
         self.money_error = None;
         let current = self.state.open().and_then(|open| open.view().money);
-        if current != Some(value) {
-            self.apply(Command::SetMoney(value), |_| {}, cx);
+        let shown = current.map(|current| currency.to_native(currency.from_native(current)));
+        if current == Some(value) || shown == Some(value) {
+            return Some(false);
         }
-        true
+        self.apply(Command::SetMoney(value), |_| {}, cx);
+        Some(true)
     }
 
-    /// Applies the experience text once it parses; reports whether it did.
-    fn apply_experience_text(&mut self, cx: &mut Context<'_, Self>) -> bool {
-        let text = self.experience.read(cx).unmask_value().to_string();
-        let Ok(Command::SetExperience(value)) = edit::experience(&text) else {
-            return false;
+    /// Moves the experience to the start of the slider's level, unless it
+    /// already sits inside that level.
+    fn apply_level(&mut self, cx: &mut Context<'_, Self>) {
+        let level = self.level.read(cx).value().end().round().max(0.0) as u32;
+        let Some(levels) = self.levels() else {
+            return;
         };
-        self.experience_error = None;
-        let current = self.state.open().map(|open| open.view().experience);
-        if current != Some(value) {
-            self.apply(Command::SetExperience(value), |_| {}, cx);
+        let Some(current) = self.state.open().map(|open| open.view().experience) else {
+            return;
+        };
+        if levels.level(current) == level {
+            return;
         }
-        true
+        if let Some(command) = edit::level(level, levels) {
+            self.apply(command, |_| {}, cx);
+        }
+    }
+
+    /// The level table, when the catalog has one.
+    fn levels(&self) -> Option<&Levels> {
+        self.catalog
+            .as_ref()
+            .map(Catalog::levels)
+            .filter(|levels| !levels.steps.is_empty())
+    }
+
+    /// The profile's display currency; the save's own currency when the
+    /// catalog does not list the profile's choice.
+    fn currency(&self) -> Currency {
+        let index = self.state.open().map(|open| open.currency()).unwrap_or(0);
+        self.catalog
+            .as_ref()
+            .and_then(|catalog| catalog.currencies().get(index))
+            .cloned()
+            .unwrap_or_else(|| format::native_currency(self.state.game()))
     }
 
     /// Applies the profile name once it is valid; reports whether it was.
@@ -555,15 +672,97 @@ impl AppView {
     }
 
     fn commit_money(&mut self, cx: &mut Context<'_, Self>) {
-        if !self.apply_money_text(cx) {
+        if self.apply_money_text(cx).is_none() {
             self.money_error = Some("error.number");
             cx.notify();
         }
     }
 
-    fn commit_experience(&mut self, cx: &mut Context<'_, Self>) {
-        if !self.apply_experience_text(cx) {
-            self.experience_error = Some("error.number");
+    /// Applies the plate text once it is valid; reports whether it was.
+    fn apply_plate_text(&mut self, cx: &mut Context<'_, Self>) -> bool {
+        let Some((id, plate)) = self
+            .selected_row()
+            .map(|row| (row.id.clone(), row.plate.clone()))
+        else {
+            // Without a selected vehicle the field is not shown.
+            return true;
+        };
+        let text = self.plate.read(cx).value().to_string();
+        let country = self.selected_row().and_then(|row| row.country.clone());
+        let Ok(Command::SetLicensePlate { plate: next, .. }) = edit::plate(&id, &text) else {
+            return false;
+        };
+        self.plate_error = None;
+        if next != plate {
+            self.apply(edit::plate(&id, &text).expect("parsed above"), |_| {}, cx);
+            // The plate text replaces the raw text, country included, so put
+            // back the country the dropdown still shows.
+            if let Some(country) = country {
+                self.set_plate_country(&country, cx);
+            }
+        }
+        true
+    }
+
+    /// Applies the asking price of the selected listing once it parses;
+    /// reports whether it did.
+    fn apply_used_price_text(&mut self, cx: &mut Context<'_, Self>) -> Option<bool> {
+        let Some((listing, price)) = self
+            .selected_row()
+            .and_then(|row| row.listing.as_ref())
+            .map(|listing| (listing.id.clone(), listing.price))
+        else {
+            // Without a listing the field is not shown.
+            return Some(false);
+        };
+        let text = self.used_price.read(cx).unmask_value().to_string();
+        let currency = self.currency();
+        let Ok(Command::SetUsedTruckPrice { price: next, .. }) =
+            edit::used_price(&listing, &text, &currency)
+        else {
+            return None;
+        };
+        self.used_price_error = None;
+        if price == next {
+            return Some(false);
+        }
+        self.apply(
+            Command::SetUsedTruckPrice {
+                id: listing,
+                price: next,
+            },
+            |_| {},
+            cx,
+        );
+        Some(true)
+    }
+
+    fn commit_used_price(&mut self, cx: &mut Context<'_, Self>) {
+        if self.apply_used_price_text(cx).is_none() {
+            self.used_price_error = Some(edit::FieldError::Number.key());
+            cx.notify();
+        }
+    }
+
+    /// Applies the plate country the dropdown names.
+    fn set_plate_country(&mut self, country: &str, cx: &mut Context<'_, Self>) {
+        let Some((id, current)) = self
+            .selected_row()
+            .map(|row| (row.id.clone(), row.country.clone()))
+        else {
+            return;
+        };
+        if current.as_deref() == Some(country) {
+            return;
+        }
+        if let Ok(command) = edit::plate_country(&id, country) {
+            self.apply(command, |_| {}, cx);
+        }
+    }
+
+    fn commit_plate(&mut self, cx: &mut Context<'_, Self>) {
+        if !self.apply_plate_text(cx) {
+            self.plate_error = Some(edit::FieldError::Name.key());
             cx.notify();
         }
     }
@@ -601,26 +800,30 @@ impl AppView {
         cx.notify();
     }
 
-    fn toggle_all_vehicles(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
-        self.show_all_vehicles = !self.show_all_vehicles;
-        if !self.show_all_vehicles && !self.selected_row().is_some_and(|row| row.owned) {
+    /// Switches the list between the owned vehicles and the used market.
+    fn toggle_used_market(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
+        self.show_used_market = !self.show_used_market;
+        let listed = self
+            .selected_row()
+            .is_some_and(|row| row.owned != self.show_used_market);
+        if !listed {
             self.selected_vehicle = self.default_vehicle();
             self.sync_vehicle(window, cx);
         }
         cx.notify();
     }
 
-    /// The current truck, else the first listed vehicle.
+    /// The first vehicle of the shown list, preferring the current truck when
+    /// the list holds it.
     fn default_vehicle(&self) -> Option<String> {
         let vehicles = &self.state.open()?.view().vehicles;
+        let listed =
+            |vehicle: &&siir_gui::view_data::VehicleRow| vehicle.owned != self.show_used_market;
         vehicles
             .iter()
+            .filter(listed)
             .find(|vehicle| vehicle.current)
-            .or_else(|| {
-                vehicles
-                    .iter()
-                    .find(|vehicle| self.show_all_vehicles || vehicle.owned)
-            })
+            .or_else(|| vehicles.iter().find(listed))
             .map(|vehicle| vehicle.id.clone())
     }
 
@@ -631,6 +834,14 @@ impl AppView {
             return;
         };
         self.odometer_error = None;
+        let plate = self
+            .selected_row()
+            .map(|row| row.plate.clone())
+            .unwrap_or_default();
+        self.plate_error = None;
+        self.plate.update(cx, |input, cx| {
+            input.set_value(plate, window, cx);
+        });
         self.odometer.update(cx, |input, cx| {
             input.set_mask_pattern(
                 MaskPattern::Number {
@@ -645,6 +856,24 @@ impl AppView {
                 window,
                 cx,
             );
+        });
+        self.used_price_error = None;
+        let currency = self.currency();
+        let price = self
+            .selected_row()
+            .and_then(|row| row.listing.as_ref())
+            .map(|listing| format::amount(currency.from_native(listing.price), game))
+            .unwrap_or_default();
+        self.used_price.update(cx, |input, cx| {
+            input.set_mask_pattern(
+                MaskPattern::Number {
+                    separator: Some(format::grouping(game)),
+                    fraction: None,
+                },
+                window,
+                cx,
+            );
+            input.set_value(price, window, cx);
         });
         self.syncing = true;
         self.fuel
@@ -883,9 +1112,10 @@ impl AppView {
 
     fn clear_errors(&mut self) {
         self.money_error = None;
-        self.experience_error = None;
         self.profile_name_error = None;
         self.odometer_error = None;
+        self.plate_error = None;
+        self.used_price_error = None;
         self.trailer_plate_error = None;
         self.cargo_mass_error = None;
         self.action_error = None;
@@ -901,6 +1131,7 @@ impl AppView {
         let view = open.view();
         let money = view.money.unwrap_or_default();
         let experience = view.experience;
+        let currency = self.currency();
         let profile_name = view.profile_name.clone();
         let adr = view.skills.adr;
         let skills = [
@@ -915,13 +1146,25 @@ impl AppView {
             fraction: None,
         };
         self.money.update(cx, |input, cx| {
-            input.set_mask_pattern(mask.clone(), window, cx);
-            input.set_value(format::amount(money, game), window, cx);
-        });
-        self.experience.update(cx, |input, cx| {
             input.set_mask_pattern(mask, window, cx);
-            input.set_value(format::number(experience, game), window, cx);
+            input.set_value(
+                format::amount(currency.from_native(money), game),
+                window,
+                cx,
+            );
         });
+        let level = self
+            .levels()
+            .map(|levels| levels.level(experience))
+            .unwrap_or_default();
+        self.syncing = true;
+        self.level.update(cx, |state, cx| {
+            // A save already past the slider's range widens it instead of
+            // showing a lower level than it has.
+            *state = level_slider(LEVEL_SLIDER_MAX.max(level));
+            state.set_value(level as f32, window, cx);
+        });
+        self.syncing = false;
         self.profile_name.update(cx, |input, cx| {
             input.set_value(profile_name, window, cx);
         });
@@ -983,30 +1226,10 @@ impl AppView {
         let view = cx.entity().downgrade();
         Popover::new("locale-menu")
             .anchor(gpui_kit::Anchor::TopRight)
-            .open(self.locale_open)
-            .on_open_change({
-                let view = view.clone();
-                move |open, _, cx| {
-                    view.update(cx, |view, cx| {
-                        view.locale_open = *open;
-                        cx.notify();
-                    })
-                    .ok();
-                }
-            })
             .trigger(
                 ui::button("locale-trigger", label)
                     .aria_label(accessible)
-                    .on_a11y_click({
-                        let view = view.clone();
-                        move |_, cx| {
-                            view.update(cx, |view, cx| {
-                                view.locale_open = !view.locale_open;
-                                cx.notify();
-                            })
-                            .ok();
-                        }
-                    })
+                    .track_focus(&self.locale_focus)
                     .tone(Tone::Quiet)
                     .trailing_icon(IconName::ChevronDown),
             )

@@ -1,12 +1,12 @@
-//! The economy form: money, experience, skills, ADR classes, cities, and
-//! dealerships.
+//! The economy form: money, level and experience, skills, ADR classes,
+//! cities, and dealerships.
 
 use gpui_kit::prelude::*;
 use gpui_kit::{Context, Div, FontWeight, IntoElement, SharedString, div, px};
 
 use siir_gui::edit::ADR_CLASSES;
 use siir_gui::format;
-use siir_gui::i18n::t;
+use siir_gui::i18n::{self, t};
 use siir_save::Command;
 
 use crate::ui::{self, Tone, tokens};
@@ -52,28 +52,8 @@ impl AppView {
                     .flex()
                     .flex_col()
                     .gap(px(tokens::SPACE_6))
-                    .child(
-                        div()
-                            .flex()
-                            .gap(px(tokens::SPACE_4))
-                            .child(
-                                div().flex_1().min_w(px(0.0)).child(ui::field(
-                                    t("field.money"),
-                                    ui::text_field("money", &self.money, t("field.money"))
-                                        .prefix(format::currency(self.state.game())),
-                                    self.money_error.map(t),
-                                )),
-                            )
-                            .child(div().flex_1().min_w(px(0.0)).child(ui::field(
-                                t("field.experience"),
-                                ui::text_field(
-                                    "experience",
-                                    &self.experience,
-                                    t("field.experience"),
-                                ),
-                                self.experience_error.map(t),
-                            ))),
-                    )
+                    .child(self.money_field())
+                    .child(self.level_row(cx))
                     .child(
                         div()
                             .flex()
@@ -117,6 +97,91 @@ impl AppView {
                                 cx,
                             )),
                     ),
+            )
+    }
+
+    /// The balance in the profile's currency, with the game's signs around it.
+    fn money_field(&self) -> impl IntoElement {
+        let currency = self.currency();
+        let before = format!("{}{}", currency.sign1, currency.sign2);
+        let before = before.trim();
+        let after = currency.sign3.trim();
+        ui::field(
+            t("field.money"),
+            ui::text_field("money", &self.money, t("field.money"))
+                .when(!before.is_empty(), |this| this.prefix(before.to_owned()))
+                .when(!after.is_empty(), |this| this.suffix(after.to_owned())),
+            self.money_error.map(t),
+        )
+    }
+
+    /// The level slider with its title, and the experience it stands for,
+    /// shown but not edited. Without a level table only the experience shows.
+    fn level_row(&self, cx: &mut Context<'_, Self>) -> Div {
+        let palette = tokens::palette();
+        let game = self.state.game();
+        let experience = self
+            .state
+            .open()
+            .map(|open| open.view().experience)
+            .unwrap_or_default();
+        let experience_text = format!("{} XP", format::number(experience, game));
+        let Some(levels) = self.levels() else {
+            return div().child(ui::field(
+                t("field.experience"),
+                div()
+                    .text_size(px(tokens::TEXT_BODY))
+                    .text_color(palette.text)
+                    .child(experience_text),
+                None,
+            ));
+        };
+        let level = self.level.read(cx).value().end().round().max(0.0) as u32;
+        let heading = match levels.title(level, i18n::current_locale().as_ref()) {
+            Some(title) => format!("{} · {title}", format::number(u64::from(level), game)),
+            None => format::number(u64::from(level), game),
+        };
+        let next = levels
+            .experience(levels.level(experience).saturating_add(1))
+            .filter(|next| *next <= u64::from(u32::MAX));
+        let detail = match next {
+            Some(next) => format!(
+                "{experience_text} · {} XP {} {}",
+                format::number(next - experience, game),
+                t("level.to_next"),
+                format::number(u64::from(levels.level(experience)) + 1, game),
+            ),
+            None => format!("{experience_text} · {}", t("level.max")),
+        };
+        div()
+            .flex()
+            .flex_col()
+            .gap(px(tokens::SPACE_1))
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .child(
+                        div()
+                            .text_size(px(tokens::TEXT_LABEL))
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .text_color(palette.muted)
+                            .child(t("field.level")),
+                    )
+                    .child(
+                        div()
+                            .text_size(px(tokens::TEXT_BODY))
+                            .text_color(palette.text)
+                            .child(heading),
+                    ),
+            )
+            .child(ui::slider(&self.level, &self.level_focus, t("field.level")))
+            .child(
+                div()
+                    .text_size(px(tokens::TEXT_LABEL))
+                    .text_color(palette.muted)
+                    .child(detail),
             )
     }
 

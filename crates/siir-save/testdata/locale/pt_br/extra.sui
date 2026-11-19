@@ -1,2 +1,11 @@
 	key[]: "shared_quote"
 	val[]: "Um valor \"entre aspas\""
+
+	key[]: "country_testland"
+	val[]: "Testelândia"
+
+	key[]: "lvl_name0"
+	val[]: "Novato"
+
+	key[]: "lvl_name1"
+	val[]: "Entusiasta"

@@ -397,6 +397,56 @@ fn bulk_commands_reach_the_assigned_vehicle_and_trailer() {
 }
 
 #[test]
+fn owned_buses_and_cars_count_and_get_filled() {
+    for (path, game) in [
+        ("ets2/saves/bus/game.sii", Game::Ets2),
+        ("ats/saves/car/game.sii", Game::Ats),
+    ] {
+        let bytes = fixture(path);
+        let file = siir::open(&bytes).unwrap();
+        let source = file.document().to_text();
+        let mut document = Document::parse(&source).unwrap();
+        let listed: Vec<String> = {
+            let save = read(&document, game).unwrap();
+            let player = save.player.as_ref().unwrap();
+            let listed: Vec<String> = player
+                .buses
+                .iter()
+                .chain(&player.cars)
+                .map(|id| id.to_string())
+                .collect();
+            assert!(listed.len() >= 2, "{path} lists more than one bus or car");
+            assert!(
+                listed
+                    .iter()
+                    .any(|id| save.vehicle(id).is_some_and(|v| v.slot.is_none())),
+                "{path} has a listed vehicle outside any slot"
+            );
+            for id in &listed {
+                assert!(save.owns(id), "{path}: {id} is owned");
+            }
+            listed
+        };
+        for id in &listed {
+            apply(
+                &mut document,
+                game,
+                Command::SetFuel {
+                    id: id.clone(),
+                    level: 0.25,
+                },
+            )
+            .unwrap();
+        }
+        apply(&mut document, game, Command::FillAllVehicles).unwrap();
+        let save = read(&document, game).unwrap();
+        for id in &listed {
+            assert_eq!(save.vehicle(id).unwrap().fuel_relative, 1.0, "{path}: {id}");
+        }
+    }
+}
+
+#[test]
 fn visited_cities_and_dealers_handle_a_real_save() {
     let bytes = fixture("ets2/saves/1/game.sii");
     let file = siir::open(&bytes).unwrap();

@@ -12,10 +12,10 @@ use crate::error::Error;
 use crate::localization;
 use crate::value::unquote;
 
-const SNAPSHOT_FORMAT: u32 = 2;
+const SNAPSHOT_FORMAT: u32 = 4;
 
-/// Truck models, cargoes, companies, trailer definitions, and vehicle names
-/// read from `def/` and `locale/`.
+/// Truck models, cargoes, companies, trailer definitions, vehicle names, and
+/// the experience levels read from `def/` and `locale/`.
 #[derive(Debug)]
 pub struct Catalog {
     trucks: Vec<TruckModel>,
@@ -23,6 +23,9 @@ pub struct Catalog {
     companies: Vec<Company>,
     trailers: Vec<TrailerDefinition>,
     vehicle_names: Vec<VehicleName>,
+    levels: Levels,
+    currencies: Vec<Currency>,
+    countries: Vec<CountryName>,
 }
 
 impl Catalog {
@@ -41,8 +44,10 @@ impl Catalog {
     /// not parse. Both games use the same tree today.
     ///
     /// It also reads each model's brand and series under
-    /// `def_dir/vehicle/{truck,bus,car}` and resolves them with every language
-    /// folder under `locale_dir`.
+    /// `def_dir/vehicle/{truck,bus,car}` and the player's levels in
+    /// `def_dir/economy_data_xp.sii`, and resolves their names with every
+    /// language folder under `locale_dir`. The display currencies come from
+    /// `def_dir/economy_data.sii`.
     pub fn generate(def_dir: &Path, locale_dir: &Path, _game: Game) -> Result<Self, Error> {
         let mut trucks = Vec::new();
         for entry in directories(&def_dir.join("vehicle").join("truck"))? {
@@ -84,13 +89,20 @@ impl Catalog {
             trailer_definition,
         );
         trailers.sort_by(|left, right| left.id.cmp(&right.id));
-        let vehicle_names = model_names(def_dir, locale_dir);
+        let languages = languages(locale_dir);
+        let vehicle_names = model_names(def_dir, &languages);
+        let levels = levels(&def_dir.join("economy_data_xp.sii"), &languages);
+        let currencies = currencies(&def_dir.join("economy_data.sii"));
+        let countries = countries(&def_dir.join("country"), &languages);
         Ok(Self {
             trucks,
             cargo,
             companies,
             trailers,
             vehicle_names,
+            levels,
+            currencies,
+            countries,
         })
     }
 
@@ -125,6 +137,147 @@ impl Catalog {
             .vehicle_names
             .iter()
             .find(|name| name.token == token)?
+            .names;
+        names
+            .get(language)
+            .or_else(|| names.get("en_us"))
+            .map(String::as_str)
+    }
+
+    /// The player's experience levels.
+    pub fn levels(&self) -> &Levels {
+        &self.levels
+    }
+
+    /// The currencies the game can show money in, in the game's order; the
+    /// first is the one the save stores, and `g_currency` indexes this list.
+    pub fn currencies(&self) -> &[Currency] {
+        &self.currencies
+    }
+
+    /// Every plate country, sorted by token.
+    pub fn countries(&self) -> &[CountryName] {
+        &self.countries
+    }
+
+    /// Display name of one plate country in `language`, falling back to
+    /// English.
+    pub fn country_name(&self, token: &str, language: &str) -> Option<&str> {
+        let names = &self
+            .countries
+            .iter()
+            .find(|country| country.token == token)?
+            .names;
+        names
+            .get(language)
+            .or_else(|| names.get("en_us"))
+            .map(String::as_str)
+    }
+}
+
+/// A plate country from `def/country`: the token a plate names after `|`, and
+/// the name the game shows for it.
+#[derive(Debug)]
+pub struct CountryName {
+    /// Token, for example `germany` or `texas`.
+    pub token: String,
+    /// Name per game language, for example `en_us` and `pt_br`.
+    pub names: BTreeMap<String, String>,
+}
+
+/// One display currency from `def/economy_data.sii`.
+///
+/// The game shows an amount as `[sign1] - [sign2] 1.234,- [sign3]`: the minus
+/// sits between the first two signs, and the third follows the number.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Currency {
+    /// Code, for example `EUR` or `CZK`.
+    pub code: String,
+    /// Units of this currency per unit the save stores.
+    pub ratio: f64,
+    /// Text before the minus sign.
+    pub sign1: String,
+    /// Text between the minus sign and the number.
+    pub sign2: String,
+    /// Text after the number.
+    pub sign3: String,
+}
+
+impl Currency {
+    /// `native`, the amount the save stores, in this currency.
+    pub fn from_native(&self, native: i64) -> i64 {
+        if self.ratio == 1.0 {
+            return native;
+        }
+        (native as f64 * self.ratio).round() as i64
+    }
+
+    /// `shown`, an amount in this currency, as the amount the save stores.
+    pub fn to_native(&self, shown: i64) -> i64 {
+        if self.ratio == 1.0 {
+            return shown;
+        }
+        (shown as f64 / self.ratio).round() as i64
+    }
+}
+
+/// The player's experience levels from `def/economy_data_xp.sii`.
+#[derive(Debug, Default)]
+pub struct Levels {
+    /// Experience from each level to the next, from level 0; the game keeps
+    /// using the last step past the end of the table.
+    pub steps: Vec<u32>,
+    /// Level titles, sorted by the first level each one names.
+    pub titles: Vec<LevelTitle>,
+}
+
+/// The title the game shows from one level on.
+#[derive(Debug)]
+pub struct LevelTitle {
+    /// First level with this title.
+    pub from: u32,
+    /// Title per game language, for example `en_us` and `pt_br`.
+    pub names: BTreeMap<String, String>,
+}
+
+impl Levels {
+    /// The level `experience` points reach; 0 without a table.
+    pub fn level(&self, experience: u64) -> u32 {
+        let Some(&last) = self.steps.last() else {
+            return 0;
+        };
+        let mut start = 0u64;
+        for (level, step) in self.steps.iter().enumerate() {
+            let next = start + u64::from(*step);
+            if experience < next {
+                return level as u32;
+            }
+            start = next;
+        }
+        let past = (experience - start) / u64::from(last).max(1);
+        u32::try_from(self.steps.len() as u64 + past).unwrap_or(u32::MAX)
+    }
+
+    /// The experience points at the start of `level`, or `None` without a
+    /// table for any level above 0.
+    pub fn experience(&self, level: u32) -> Option<u64> {
+        if level == 0 {
+            return Some(0);
+        }
+        let last = u64::from(*self.steps.last()?);
+        let level = level as usize;
+        let counted = level.min(self.steps.len());
+        let table: u64 = self.steps[..counted].iter().copied().map(u64::from).sum();
+        Some(table + (level - counted) as u64 * last)
+    }
+
+    /// Title of `level` in `language`, falling back to English.
+    pub fn title(&self, level: u32, language: &str) -> Option<&str> {
+        let names = &self
+            .titles
+            .iter()
+            .rev()
+            .find(|title| title.from <= level)?
             .names;
         names
             .get(language)
@@ -271,6 +424,36 @@ struct Snapshot {
     companies: Vec<CompanyData>,
     trailers: Vec<TrailerData>,
     models: Vec<ModelData>,
+    levels: LevelsData,
+    currencies: Vec<CurrencyData>,
+    countries: Vec<CountryData>,
+}
+
+#[derive(serde::Deserialize)]
+struct CountryData {
+    token: String,
+    names: BTreeMap<String, String>,
+}
+
+#[derive(serde::Deserialize)]
+struct CurrencyData {
+    code: String,
+    ratio: f64,
+    sign1: String,
+    sign2: String,
+    sign3: String,
+}
+
+#[derive(serde::Deserialize)]
+struct LevelsData {
+    steps: Vec<u32>,
+    titles: Vec<LevelTitleData>,
+}
+
+#[derive(serde::Deserialize)]
+struct LevelTitleData {
+    from: u32,
+    names: BTreeMap<String, String>,
 }
 
 #[derive(serde::Deserialize)]
@@ -352,6 +535,42 @@ impl From<Snapshot> for Catalog {
                 .map(TrailerDefinition::from)
                 .collect(),
             vehicle_names: snapshot.models.into_iter().map(VehicleName::from).collect(),
+            levels: snapshot.levels.into(),
+            currencies: snapshot
+                .currencies
+                .into_iter()
+                .map(|currency| Currency {
+                    code: currency.code,
+                    ratio: currency.ratio,
+                    sign1: currency.sign1,
+                    sign2: currency.sign2,
+                    sign3: currency.sign3,
+                })
+                .collect(),
+            countries: snapshot
+                .countries
+                .into_iter()
+                .map(|country| CountryName {
+                    token: country.token,
+                    names: country.names,
+                })
+                .collect(),
+        }
+    }
+}
+
+impl From<LevelsData> for Levels {
+    fn from(levels: LevelsData) -> Self {
+        Self {
+            steps: levels.steps,
+            titles: levels
+                .titles
+                .into_iter()
+                .map(|title| LevelTitle {
+                    from: title.from,
+                    names: title.names,
+                })
+                .collect(),
         }
     }
 }
@@ -451,16 +670,185 @@ impl From<TrailerData> for TrailerDefinition {
     }
 }
 
-/// Resolves the brand and series of every vehicle model in every extracted
-/// language.
-fn model_names(def_dir: &Path, locale_dir: &Path) -> Vec<VehicleName> {
-    let languages: Vec<(String, BTreeMap<String, String>)> = localization::languages(locale_dir)
+/// Every extracted language with its texts.
+type Languages = Vec<(String, BTreeMap<String, String>)>;
+
+fn languages(locale_dir: &Path) -> Languages {
+    localization::languages(locale_dir)
         .into_iter()
         .map(|language| {
             let texts = localization::read(locale_dir, &language);
             (language, texts)
         })
+        .collect()
+}
+
+/// Reads the level steps and titles; a missing or unreadable file gives no
+/// levels.
+fn levels(file: &Path, languages: &Languages) -> Levels {
+    let Ok(source) = fs::read_to_string(file) else {
+        return Levels::default();
+    };
+    let source = strip_includes(source.trim_start_matches('\u{feff}')).into_owned();
+    let Ok(document) = Document::parse(&source) else {
+        return Levels::default();
+    };
+    let Some(unit) = document
+        .units()
+        .find(|unit| unit.id() == "economy.data.xp_levels")
+    else {
+        return Levels::default();
+    };
+    let mut steps: Vec<(u32, u32)> = unit
+        .attrs()
+        .filter_map(|(attribute, index, value)| match (attribute, index) {
+            ("level_xp", Index::At(at)) => Some((at, value.parse().ok()?)),
+            _ => None,
+        })
         .collect();
+    steps.sort_by_key(|(at, _)| *at);
+    // A gap would shift every later step onto the wrong level.
+    if steps
+        .iter()
+        .enumerate()
+        .any(|(ix, (at, _))| ix as u32 != *at)
+    {
+        return Levels::default();
+    }
+    let mut titles: Vec<LevelTitle> = strings(unit, "level_names")
+        .iter()
+        .filter_map(|entry| {
+            let (from, name) = entry.split_once('|')?;
+            let key = name.strip_prefix("@@")?.strip_suffix("@@")?;
+            let names: BTreeMap<String, String> = languages
+                .iter()
+                .filter_map(|(language, texts)| Some((language.clone(), texts.get(key)?.clone())))
+                .collect();
+            Some(LevelTitle {
+                from: from.trim().parse().ok()?,
+                names,
+            })
+        })
+        .collect();
+    titles.sort_by_key(|title| title.from);
+    Levels {
+        steps: steps.into_iter().map(|(_, step)| step).collect(),
+        titles,
+    }
+}
+
+/// Reads the display currencies; a missing or unreadable file, or arrays of
+/// different lengths, give none.
+fn currencies(file: &Path) -> Vec<Currency> {
+    let Ok(source) = fs::read_to_string(file) else {
+        return Vec::new();
+    };
+    let source = strip_includes(source.trim_start_matches('\u{feff}')).into_owned();
+    let Ok(document) = Document::parse(&source) else {
+        return Vec::new();
+    };
+    let Some(unit) = document
+        .units()
+        .find(|unit| unit.get("currency_code[]").is_some())
+    else {
+        return Vec::new();
+    };
+    let codes = strings(unit, "currency_code");
+    let ratios = strings(unit, "currency_ratio");
+    if ratios.len() != codes.len() {
+        return Vec::new();
+    }
+    // A sign the file omits is an empty sign; only codes and ratios must line
+    // up, so one dropped array does not cost the whole table.
+    let sign1 = strings(unit, "currency_sign1");
+    let sign2 = strings(unit, "currency_sign2");
+    let sign3 = strings(unit, "currency_sign3");
+    let sign = |values: &[String], ix: usize| values.get(ix).cloned().unwrap_or_default();
+    let mut currencies = Vec::with_capacity(codes.len());
+    for ix in 0..codes.len() {
+        let Ok(ratio) = ratios[ix].parse::<f64>() else {
+            return Vec::new();
+        };
+        currencies.push(Currency {
+            code: codes[ix].clone(),
+            ratio,
+            sign1: sign(&sign1, ix),
+            sign2: sign(&sign2, ix),
+            sign3: sign(&sign3, ix),
+        });
+    }
+    currencies
+}
+
+/// Reads every `country_data` unit under `def/country`, skipping files that do
+/// not parse and units without a localized name.
+fn countries(folder: &Path, languages: &Languages) -> Vec<CountryName> {
+    let Ok(entries) = fs::read_dir(folder) else {
+        return Vec::new();
+    };
+    let mut files: Vec<PathBuf> = entries
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .filter(|path| path.is_file())
+        .collect();
+    files.sort();
+    let mut found = Vec::new();
+    for file in files {
+        let Ok(source) = fs::read_to_string(&file) else {
+            continue;
+        };
+        let source = strip_includes(source.trim_start_matches('\u{feff}')).into_owned();
+        // Each country is a bare unit; only the included file lacks the
+        // `SiiNunit { ... }` wrapper the game adds around it.
+        let source = if source.trim_start().starts_with("SiiNunit") {
+            source
+        } else {
+            format!("SiiNunit\n{{\n{source}\n}}\n")
+        };
+        let Ok(document) = Document::parse(&source) else {
+            continue;
+        };
+        for unit in document.units() {
+            let Some(token) = unit.id().strip_prefix("country.data.") else {
+                continue;
+            };
+            let Some(key) = unit
+                .get("name_localized")
+                .map(unquote)
+                .and_then(|value| {
+                    value
+                        .strip_prefix("@@")
+                        .and_then(|key| key.strip_suffix("@@"))
+                })
+                .map(str::to_owned)
+            else {
+                continue;
+            };
+            let Some(fallback) = unit.get("name").map(unquote) else {
+                continue;
+            };
+            let mut names = BTreeMap::new();
+            for (language, texts) in languages {
+                let name = match texts.get(&key) {
+                    Some(name) => name.clone(),
+                    None => fallback.to_owned(),
+                };
+                names.insert(language.clone(), name);
+            }
+            found.push(CountryName {
+                token: token.to_owned(),
+                names,
+            });
+        }
+    }
+    found.sort_by(|left, right| left.token.cmp(&right.token));
+    found.dedup_by(|left, right| left.token == right.token);
+    found
+}
+
+/// Resolves the brand and series of every vehicle model in every extracted
+/// language.
+fn model_names(def_dir: &Path, languages: &Languages) -> Vec<VehicleName> {
     let mut names = Vec::new();
     for kind in ["truck", "bus", "car"] {
         let Ok(entries) = directories(&def_dir.join("vehicle").join(kind)) else {
@@ -480,7 +868,7 @@ fn model_names(def_dir: &Path, locale_dir: &Path) -> Vec<VehicleName> {
                 continue;
             };
             let mut by_language = BTreeMap::new();
-            for (language, texts) in &languages {
+            for (language, texts) in languages {
                 let parts: Vec<&str> = keys
                     .iter()
                     .filter_map(|key| texts.get(key).map(String::as_str))
@@ -697,8 +1085,19 @@ mod tests {
 
     fn snapshot(format: u32, game: &str) -> String {
         format!(
-            r#"{{"format":{format},"game":"{game}","trucks":[],"cargo":[],"companies":[],"trailers":[],"models":[]}}"#
+            r#"{{"format":{format},"game":"{game}","trucks":[],"cargo":[],"companies":[],"trailers":[],"models":[],"levels":{{"steps":[],"titles":[]}},"currencies":[],"countries":[]}}"#
         )
+    }
+
+    fn levels() -> Levels {
+        let title = |from, name: &str| LevelTitle {
+            from,
+            names: BTreeMap::from([("en_us".to_owned(), name.to_owned())]),
+        };
+        Levels {
+            steps: vec![200, 500, 700],
+            titles: vec![title(0, "Newbie"), title(2, "Enthusiast")],
+        }
     }
 
     #[test]
@@ -709,7 +1108,88 @@ mod tests {
 
     #[test]
     fn rejects_another_game() {
-        let error = parse(&snapshot(2, "ats"), Game::Ets2).unwrap_err();
+        let error = parse(&snapshot(SNAPSHOT_FORMAT, "ats"), Game::Ets2).unwrap_err();
         assert!(error.to_string().contains("snapshot is for ats"));
+    }
+
+    #[test]
+    fn levels_follow_the_table_then_repeat_the_last_step() {
+        let levels = levels();
+        assert_eq!(levels.level(0), 0);
+        assert_eq!(levels.level(199), 0);
+        assert_eq!(levels.level(200), 1);
+        assert_eq!(levels.level(1399), 2);
+        assert_eq!(levels.level(1400), 3);
+        assert_eq!(levels.level(2099), 3);
+        assert_eq!(levels.level(2100), 4);
+        assert_eq!(levels.experience(0), Some(0));
+        assert_eq!(levels.experience(1), Some(200));
+        assert_eq!(levels.experience(3), Some(1400));
+        assert_eq!(levels.experience(4), Some(2100));
+        for level in 0..20 {
+            assert_eq!(levels.level(levels.experience(level).unwrap()), level);
+        }
+    }
+
+    #[test]
+    fn titles_pick_the_last_one_reached() {
+        let levels = levels();
+        assert_eq!(levels.title(0, "en_us"), Some("Newbie"));
+        assert_eq!(levels.title(1, "pt_br"), Some("Newbie"));
+        assert_eq!(levels.title(2, "en_us"), Some("Enthusiast"));
+        assert_eq!(levels.title(90, "en_us"), Some("Enthusiast"));
+    }
+
+    #[test]
+    fn keeps_the_currency_table_when_a_sign_array_is_missing() {
+        let path =
+            std::env::temp_dir().join(format!("siir-catalog-currency-{}.sii", std::process::id()));
+        std::fs::write(
+            &path,
+            "SiiNunit\n{\neconomy_data : economy.data.storage\n{\n\
+             currency_code[]: \"EUR\"\n\
+             currency_ratio[]: 1\n\
+             currency_sign2[]: \"€\"\n\
+             currency_sign3[]: \"\"\n\
+             currency_code[]: \"CZK\"\n\
+             currency_ratio[]: 24.4\n\
+             currency_sign2[]: \"\"\n\
+             currency_sign3[]: \" Kč\"\n}\n}\n",
+        )
+        .unwrap();
+        let currencies = currencies(&path);
+        let _ = std::fs::remove_file(&path);
+        assert_eq!(currencies.len(), 2, "a missing sign array keeps the table");
+        assert_eq!(currencies[0].sign1, "");
+        assert_eq!(currencies[1].code, "CZK");
+        assert_eq!(currencies[1].sign3, " Kč");
+    }
+
+    #[test]
+    fn currencies_convert_both_ways() {
+        let currency = |ratio| Currency {
+            code: "XYZ".to_owned(),
+            ratio,
+            sign1: String::new(),
+            sign2: String::new(),
+            sign3: String::new(),
+        };
+        let euro = currency(1.0);
+        assert_eq!(euro.from_native(i64::MAX), i64::MAX);
+        assert_eq!(euro.to_native(-7), -7);
+        let koruna = currency(24.4);
+        assert_eq!(koruna.from_native(1000), 24_400);
+        assert_eq!(koruna.from_native(-1000), -24_400);
+        assert_eq!(koruna.to_native(24_400), 1000);
+        assert_eq!(koruna.to_native(1000), 41);
+    }
+
+    #[test]
+    fn no_table_means_level_zero_only() {
+        let levels = Levels::default();
+        assert_eq!(levels.level(5000), 0);
+        assert_eq!(levels.experience(0), Some(0));
+        assert_eq!(levels.experience(1), None);
+        assert_eq!(levels.title(0, "en_us"), None);
     }
 }

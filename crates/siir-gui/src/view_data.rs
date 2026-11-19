@@ -1,6 +1,8 @@
 //! Owned rows the views render, built from a borrowed [`Save`].
 
-use siir_save::{LicensePlate, Save, Skills, Vehicle};
+use std::collections::BTreeMap;
+
+use siir_save::{LicensePlate, Save, Skills, UsedTruck, Vehicle};
 
 /// Headline values and counts of one open save.
 pub struct SaveView {
@@ -56,6 +58,8 @@ pub struct VehicleRow {
     pub model: Option<String>,
     /// Plate text without markup or country.
     pub plate: String,
+    /// Country after `|`, when the plate names one.
+    pub country: Option<String>,
     /// Owned by the player, so Repair all and Fill all reach it.
     pub owned: bool,
     /// The truck the player drives.
@@ -72,14 +76,26 @@ pub struct VehicleRow {
     pub odometer: Option<u64>,
     /// Whether any accessory is a badge `RemoveBadge` would remove.
     pub badges: bool,
+    /// The used-market listing that offers this vehicle, when one does.
+    pub listing: Option<Listing>,
+}
+
+/// One used-market listing.
+pub struct Listing {
+    /// Listing unit id, the key `SetUsedTruckPrice` takes.
+    pub id: String,
+    /// Asking price.
+    pub price: i64,
 }
 
 impl VehicleRow {
-    fn new(vehicle: &Vehicle<'_>, owned: bool, current: bool) -> Self {
+    fn new(vehicle: &Vehicle<'_>, owned: bool, current: bool, listing: Option<Listing>) -> Self {
+        let plate = LicensePlate::parse(vehicle.license_plate);
         Self {
             id: vehicle.id.to_owned(),
             model: vehicle.model.map(str::to_owned),
-            plate: LicensePlate::parse(vehicle.license_plate).text,
+            plate: plate.text,
+            country: plate.country.map(str::to_owned),
             owned,
             current,
             engine_wear: vehicle.engine_wear,
@@ -91,6 +107,7 @@ impl VehicleRow {
                 .accessories
                 .iter()
                 .any(|accessory| accessory.is_badge()),
+            listing,
         }
     }
 }
@@ -98,7 +115,8 @@ impl VehicleRow {
 /// Owned fleet and market sizes shown on the overview.
 #[derive(Clone, Copy, Default)]
 pub struct Counts {
-    /// Owned `player_vehicles` slots.
+    /// Vehicles the player owns, by `Save::owns`: the same set the Vehicles
+    /// screen lists as owned.
     pub vehicles: usize,
     /// Owned trailer unit ids.
     pub trailers: usize,
@@ -116,18 +134,30 @@ impl SaveView {
         let player = save.player.as_ref();
         let current = save.current_vehicle().map(|vehicle| vehicle.id);
         let current_trailer = save.current_trailer().map(|trailer| trailer.id);
-        // Owned as the vehicle commands count it: listed in `player.trucks`
-        // or referenced by a `player_vehicles` slot.
+        // One pass over the listings instead of a search per vehicle.
+        let listings: BTreeMap<&str, &UsedTruck<'_>> = save
+            .used_trucks
+            .iter()
+            .map(|listing| (listing.truck, listing))
+            .collect();
         let mut vehicles: Vec<VehicleRow> = save
             .vehicles
             .iter()
             .map(|vehicle| {
-                let owned = vehicle.slot.is_some()
-                    || player.is_some_and(|player| player.trucks.contains(&vehicle.id));
-                VehicleRow::new(vehicle, owned, current == Some(vehicle.id))
+                let listing = listings.get(vehicle.id).map(|listing| Listing {
+                    id: listing.id.to_owned(),
+                    price: listing.price,
+                });
+                VehicleRow::new(
+                    vehicle,
+                    save.owns(vehicle.id),
+                    current == Some(vehicle.id),
+                    listing,
+                )
             })
             .collect();
         vehicles.sort_by_key(|vehicle| !vehicle.owned);
+        let owned = vehicles.iter().filter(|vehicle| vehicle.owned).count();
         Self {
             save_name,
             profile_name,
@@ -146,9 +176,7 @@ impl SaveView {
                 .and_then(|vehicle| vehicle.model)
                 .map(str::to_owned),
             counts: Counts {
-                vehicles: player
-                    .map(|player| player.my_vehicles.len())
-                    .unwrap_or_default(),
+                vehicles: owned,
                 trailers: player
                     .map(|player| player.trailers.len())
                     .unwrap_or_default(),

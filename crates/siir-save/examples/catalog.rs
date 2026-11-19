@@ -23,6 +23,36 @@ struct Snapshot<'a> {
     companies: Vec<CompanyData<'a>>,
     trailers: Vec<TrailerData<'a>>,
     models: Vec<ModelData<'a>>,
+    levels: LevelsData<'a>,
+    currencies: Vec<CurrencyData<'a>>,
+    countries: Vec<CountryData<'a>>,
+}
+
+#[derive(Serialize)]
+struct CountryData<'a> {
+    token: &'a str,
+    names: &'a BTreeMap<String, String>,
+}
+
+#[derive(Serialize)]
+struct CurrencyData<'a> {
+    code: &'a str,
+    ratio: f64,
+    sign1: &'a str,
+    sign2: &'a str,
+    sign3: &'a str,
+}
+
+#[derive(Serialize)]
+struct LevelsData<'a> {
+    steps: &'a [u32],
+    titles: Vec<LevelTitleData<'a>>,
+}
+
+#[derive(Serialize)]
+struct LevelTitleData<'a> {
+    from: u32,
+    names: &'a BTreeMap<String, String>,
 }
 
 #[derive(Serialize)]
@@ -191,7 +221,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let catalog = Catalog::generate(&def, &locale, game)?;
     let snapshot = Snapshot {
-        format: 2,
+        format: 4,
         game: name,
         trucks: catalog.trucks().iter().map(TruckData::from).collect(),
         cargo: catalog.cargo().iter().map(CargoData::from).collect(),
@@ -205,7 +235,51 @@ fn main() -> Result<(), Box<dyn Error>> {
                 names: &name.names,
             })
             .collect(),
+        levels: LevelsData {
+            steps: &catalog.levels().steps,
+            titles: catalog
+                .levels()
+                .titles
+                .iter()
+                .map(|title| LevelTitleData {
+                    from: title.from,
+                    names: &title.names,
+                })
+                .collect(),
+        },
+        currencies: catalog
+            .currencies()
+            .iter()
+            .map(|currency| CurrencyData {
+                code: &currency.code,
+                ratio: currency.ratio,
+                sign1: &currency.sign1,
+                sign2: &currency.sign2,
+                sign3: &currency.sign3,
+            })
+            .collect(),
+        countries: catalog
+            .countries()
+            .iter()
+            .map(|country| CountryData {
+                token: &country.token,
+                names: &country.names,
+            })
+            .collect(),
     };
+    if snapshot.levels.steps.is_empty() {
+        return Err(format!("no levels in {}", def.join("economy_data_xp.sii").display()).into());
+    }
+    if snapshot.countries.is_empty() {
+        return Err(format!("no countries in {}", def.join("country").display()).into());
+    }
+    if snapshot.currencies.is_empty() {
+        return Err(format!(
+            "no currencies in {}",
+            def.join("economy_data.sii").display()
+        )
+        .into());
+    }
 
     if let Some(parent) = output.parent() {
         fs::create_dir_all(parent)?;
@@ -214,12 +288,15 @@ fn main() -> Result<(), Box<dyn Error>> {
     serde_json::to_writer_pretty(&mut file, &snapshot)?;
     writeln!(&mut file)?;
     println!(
-        "wrote {} trucks, {} cargoes, {} companies, {} trailers, and {} vehicle names to {}",
+        "wrote {} trucks, {} cargoes, {} companies, {} trailers, {} vehicle names, {} level steps, {} currencies, and {} countries to {}",
         snapshot.trucks.len(),
         snapshot.cargo.len(),
         snapshot.companies.len(),
         snapshot.trailers.len(),
         snapshot.models.len(),
+        snapshot.levels.steps.len(),
+        snapshot.currencies.len(),
+        snapshot.countries.len(),
         output.display()
     );
     Ok(())

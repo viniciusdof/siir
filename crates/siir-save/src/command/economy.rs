@@ -14,8 +14,9 @@ pub(super) fn set_money(document: &mut Document<'_>, money: i64) -> Result<(), E
     Ok(())
 }
 
-pub(super) fn set_experience(document: &mut Document<'_>, experience: u64) -> Result<(), Error> {
-    first(document, names::ECONOMY)?.set(names::EXPERIENCE_POINTS, Value::UInt(experience))?;
+pub(super) fn set_experience(document: &mut Document<'_>, experience: u32) -> Result<(), Error> {
+    first(document, names::ECONOMY)?
+        .set(names::EXPERIENCE_POINTS, Value::UInt(u64::from(experience)))?;
     Ok(())
 }
 

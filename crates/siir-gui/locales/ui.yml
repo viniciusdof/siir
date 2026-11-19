@@ -126,6 +126,15 @@ field.money:
 field.experience:
   en_us: Experience
   pt_br: Experiência
+field.level:
+  en_us: Level
+  pt_br: Nível
+level.to_next:
+  en_us: to level
+  pt_br: até o nível
+level.max:
+  en_us: Highest level the game can store
+  pt_br: Maior nível que o jogo consegue guardar
 field.profile_name:
   en_us: Profile name
   pt_br: Nome do perfil
@@ -195,12 +204,15 @@ vehicles.repair_all:
 vehicles.fill_all:
   en_us: Fill all
   pt_br: Abastecer todos
-vehicles.show_all:
-  en_us: Show all vehicles
-  pt_br: Mostrar todos os veículos
+vehicles.show_used:
+  en_us: Show used market
+  pt_br: Mostrar mercado de usados
 vehicles.show_owned:
-  en_us: Show owned only
-  pt_br: Mostrar só os próprios
+  en_us: Show owned vehicles
+  pt_br: Mostrar meus veículos
+vehicles.used_listing:
+  en_us: Used market listing
+  pt_br: Anúncio do mercado de usados
 vehicles.current:
   en_us: Current
   pt_br: Atual
@@ -217,8 +229,8 @@ vehicles.remove_badges:
   en_us: Remove badges
   pt_br: Remover emblemas
 vehicles.set_current:
-  en_us: Drive this truck
-  pt_br: Dirigir este caminhão
+  en_us: Drive this vehicle
+  pt_br: Dirigir este veículo
 wear.engine:
   en_us: Engine
   pt_br: Motor
@@ -228,6 +240,24 @@ wear.transmission:
 wear.cabin:
   en_us: Cabin
   pt_br: Cabine
+field.plate:
+  en_us: Plate
+  pt_br: Placa
+field.plate_country:
+  en_us: Country
+  pt_br: País
+field.plate_state:
+  en_us: State
+  pt_br: Estado
+vehicles.plate_hint:
+  en_us: Saving the plate text as typed drops any markup it had.
+  pt_br: Gravar o texto da placa como digitado descarta a formatação que ela tinha.
+plate.country_none:
+  en_us: No country
+  pt_br: Sem país
+field.price:
+  en_us: Price
+  pt_br: Preço
 field.odometer:
   en_us: Odometer (km)
   pt_br: Hodômetro (km)
@@ -238,8 +268,8 @@ empty.no_vehicles:
   en_us: No vehicle selected
   pt_br: Nenhum veículo selecionado
 empty.no_vehicles_hint:
-  en_us: Pick a vehicle from the list, or show all vehicles.
-  pt_br: Escolha um veículo na lista ou mostre todos os veículos.
+  en_us: Pick a vehicle from the list.
+  pt_br: Escolha um veículo na lista.
 trailers.repair_all:
   en_us: Repair all
   pt_br: Reparar todos

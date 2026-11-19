@@ -1,0 +1,8 @@
+﻿SiiNunit
+{
+country_data : country.data.testland
+{
+	name: "Testland"
+	name_localized: "@@country_testland@@"
+}
+}

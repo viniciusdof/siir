@@ -1,0 +1,20 @@
+﻿SiiNunit
+{
+xp_level_data : economy.data.xp_levels
+{
+#
+#	Level names  "level_limit|level name"
+#
+	level_names[]: "0|@@lvl_name0@@"
+	level_names[]: "2|@@lvl_name1@@"
+
+#
+#	experience points to the next level
+#
+	level_xp[0]: 200
+	level_xp[1]: 500
+	level_xp[2]: 700	
+
+	driver_xp_scale: 2.0
+}
+}

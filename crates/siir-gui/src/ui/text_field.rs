@@ -15,6 +15,7 @@ pub struct TextField {
     state: Entity<InputState>,
     label: SharedString,
     prefix: Option<SharedString>,
+    suffix: Option<SharedString>,
 }
 
 /// A single-line input that reports its current value through the state.
@@ -28,6 +29,7 @@ pub fn text_field(
         state: state.clone(),
         label: label.into(),
         prefix: None,
+        suffix: None,
     }
 }
 
@@ -37,6 +39,12 @@ impl TextField {
         self.prefix = Some(prefix.into());
         self
     }
+
+    /// Shows a fixed symbol after the value, such as a currency.
+    pub fn suffix(mut self, suffix: impl Into<SharedString>) -> Self {
+        self.suffix = Some(suffix.into());
+        self
+    }
 }
 
 impl RenderOnce for TextField {
@@ -44,6 +52,9 @@ impl RenderOnce for TextField {
         let palette = tokens::palette();
         let focused = self.state.read(cx).focus_handle(cx).is_focused(window);
         let prefix = self.prefix.clone();
+        let suffix = self.suffix.clone();
+        let symbol =
+            move |text: SharedString| div().flex_shrink_0().text_color(palette.muted).child(text);
         InputBase::new(self.id)
             .h(px(ROW_HEIGHT))
             .px(px(SPACE_3))
@@ -59,14 +70,8 @@ impl RenderOnce for TextField {
             .accessibility_label(self.label)
             .focused(focused)
             .styles(|styles| styles.focused(|style| style.border_color(palette.accent)))
-            .when_some(prefix, |this, prefix| {
-                this.child(
-                    div()
-                        .flex_shrink_0()
-                        .text_color(palette.muted)
-                        .child(prefix),
-                )
-            })
+            .when_some(prefix, |this, prefix| this.child(symbol(prefix)))
             .child(div().flex_1().min_w(px(0.0)).child(Input::new(&self.state)))
+            .when_some(suffix, |this, suffix| this.child(symbol(suffix)))
     }
 }

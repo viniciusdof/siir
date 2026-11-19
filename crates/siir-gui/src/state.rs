@@ -4,6 +4,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
+use siir_save::config;
 use siir_save::profiles::{self, Profile};
 use siir_save::{Command, Error, Game, Origin, Session, Skills};
 
@@ -150,6 +151,7 @@ pub struct Open {
     session: Session,
     view: SaveView,
     profile: Option<ProfileFile>,
+    currency: usize,
 }
 
 /// The owning profile's `profile.sii`, edited beside the save.
@@ -179,6 +181,14 @@ impl Open {
         &self.view
     }
 
+    /// The profile's display currency, an index into the catalog's list.
+    ///
+    /// A profile without a readable `g_currency` shows the first one, which is
+    /// the game's own default.
+    pub fn currency(&self) -> usize {
+        self.currency
+    }
+
     /// Whether the profile file was read, so the profile can be renamed.
     pub fn has_profile(&self) -> bool {
         self.profile.is_some()
@@ -204,6 +214,13 @@ enum ViewUpdate {
     Experience(u64),
     /// Written to the player skill levels.
     Skills(Skills),
+    /// Written to one used-market listing's asking price.
+    UsedPrice {
+        /// Listing unit id.
+        id: String,
+        /// Asking price.
+        price: i64,
+    },
 }
 
 /// Why a write action did not finish.
@@ -381,6 +398,10 @@ impl State {
                 return;
             }
         };
+        let currency = profile_dir
+            .as_ref()
+            .and_then(|dir| config::currency(&dir.join("config.cfg")).ok())
+            .unwrap_or(0);
         // An unreadable profile file only disables the rename; the save stays usable.
         let profile = profile_dir.and_then(|dir| {
             let path = profiles::profile_path(&dir);
@@ -393,6 +414,7 @@ impl State {
             session,
             view,
             profile,
+            currency,
         });
         self.notice = None;
         self.saved_backup = None;
@@ -417,8 +439,12 @@ impl State {
         }
         let update = match &command {
             Command::SetMoney(value) => Some(ViewUpdate::Money(*value)),
-            Command::SetExperience(value) => Some(ViewUpdate::Experience(*value)),
+            Command::SetExperience(value) => Some(ViewUpdate::Experience(u64::from(*value))),
             Command::SetSkills(skills) => Some(ViewUpdate::Skills(*skills)),
+            Command::SetUsedTruckPrice { id, price } => Some(ViewUpdate::UsedPrice {
+                id: id.clone(),
+                price: *price,
+            }),
             _ => None,
         };
         let result = open.session.apply(command);
@@ -426,6 +452,17 @@ impl State {
             (Ok(()), Some(ViewUpdate::Money(value))) => open.view.money = Some(value),
             (Ok(()), Some(ViewUpdate::Experience(value))) => open.view.experience = value,
             (Ok(()), Some(ViewUpdate::Skills(skills))) => open.view.skills = skills,
+            (Ok(()), Some(ViewUpdate::UsedPrice { id, price })) => {
+                if let Some(listing) = open
+                    .view
+                    .vehicles
+                    .iter_mut()
+                    .filter_map(|row| row.listing.as_mut())
+                    .find(|listing| listing.id == id)
+                {
+                    listing.price = price;
+                }
+            }
             (Ok(()), None) | (Err(_), _) => open.refresh(),
         }
         self.saved_backup = None;

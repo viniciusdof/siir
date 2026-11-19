@@ -21,7 +21,7 @@ impl AppView {
         let game = self.state.game();
         let money = view
             .money
-            .map(|money| format::money(money, game))
+            .map(|money| format::money(money, &self.currency(), game))
             .unwrap_or_else(|| "—".to_owned());
         let vehicle = self.vehicle_name(view.current_vehicle.as_deref());
         let adr = ADR_CLASSES
@@ -33,7 +33,14 @@ impl AppView {
             .join(", ");
         let adr = if adr.is_empty() { t("adr.none") } else { adr };
         let money_focus = self.money.read(cx).focus_handle(cx);
-        let experience_focus = self.experience.read(cx).focus_handle(cx);
+        let level = self.levels().map(|levels| {
+            let level = levels.level(view.experience);
+            let number = format::number(u64::from(level), game);
+            match levels.title(level, i18n::current_locale().as_ref()) {
+                Some(title) => format!("{number} · {title}"),
+                None => number,
+            }
+        });
         let economy = |field: &'static str, value: String, target: FocusHandle| -> AnyElement {
             let label = t(field);
             ui::link(
@@ -92,34 +99,25 @@ impl AppView {
                             .pb(px(tokens::SPACE_6))
                             .border_b_1()
                             .border_color(palette.border)
-                            .child(
-                                div()
-                                    .flex()
-                                    .flex_wrap()
-                                    .items_end()
-                                    .gap(px(tokens::SPACE_6))
-                                    .child(stat(
-                                        t("field.money"),
-                                        economy("field.money", money, money_focus),
-                                        tokens::TEXT_TITLE * 1.6,
-                                        None,
-                                    ))
-                                    .child(stat(
-                                        t("field.experience"),
-                                        economy(
-                                            "field.experience",
-                                            format::number(view.experience, game),
-                                            experience_focus,
-                                        ),
-                                        tokens::TEXT_TITLE * 1.1,
-                                        None,
-                                    )),
-                            )
+                            .child(stat(
+                                t("field.money"),
+                                economy("field.money", money, money_focus),
+                                tokens::TEXT_TITLE * 1.6,
+                                None,
+                            ))
                             .child(
                                 div()
                                     .flex()
                                     .flex_wrap()
                                     .gap(px(tokens::SPACE_6))
+                                    .when_some(level, |this, level| {
+                                        this.child(stat(
+                                            t("field.level"),
+                                            economy("field.level", level, self.level_focus.clone()),
+                                            tokens::TEXT_BODY,
+                                            Some(360.0),
+                                        ))
+                                    })
                                     .child(stat(
                                         t("field.headquarters"),
                                         view.hq_city.clone(),

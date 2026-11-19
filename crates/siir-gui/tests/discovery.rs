@@ -115,7 +115,13 @@ fn opens_a_fixture_save() {
     let view = open.view();
     assert_eq!(view.money, Some(2000));
     assert_eq!(view.hq_city, "prague");
-    assert_eq!(view.counts.vehicles, 3);
+    // One vehicle sits in a slot; the three `my_vehicles` slots hold none.
+    assert_eq!(view.counts.vehicles, 1);
+    assert_eq!(
+        view.counts.vehicles,
+        view.vehicles.iter().filter(|vehicle| vehicle.owned).count(),
+        "the overview count matches the Vehicles screen's owned list"
+    );
     assert_eq!(view.counts.trailers, 0);
     assert_eq!(view.counts.garages, 1);
     assert_eq!(view.counts.drivers, 354);

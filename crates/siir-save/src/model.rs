@@ -83,6 +83,22 @@ impl<'a> Save<'a> {
             .find(|vehicle| vehicle.slot == Some(slot))
     }
 
+    /// Whether the player owns the vehicle `id`: it is in the player's truck,
+    /// bus, or car list, or a `player_vehicles` slot points at it. These are
+    /// the vehicles `Command::RepairAllVehicles` and `Command::FillAllVehicles`
+    /// reach.
+    pub fn owns(&self, id: &str) -> bool {
+        let listed = self.player.as_ref().is_some_and(|player| {
+            [&player.trucks, &player.buses, &player.cars]
+                .iter()
+                .any(|list| list.contains(&id))
+        });
+        listed
+            || self
+                .vehicle(id)
+                .is_some_and(|vehicle| vehicle.slot.is_some())
+    }
+
     /// A trailer by its unit id.
     pub fn trailer(&self, id: &str) -> Option<&Trailer<'a>> {
         self.trailers.iter().find(|trailer| trailer.id == id)

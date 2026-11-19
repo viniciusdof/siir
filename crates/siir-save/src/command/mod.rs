@@ -142,8 +142,8 @@ pub enum Command {
     SetCurrentTrailer(String),
     /// Sets the bank balance.
     SetMoney(i64),
-    /// Sets the player's experience points.
-    SetExperience(u64),
+    /// Sets the player's experience points; the game stores them in 32 bits.
+    SetExperience(u32),
     /// Sets the player's skill levels.
     SetSkills(Skills),
     /// Marks every city visited, or clears the visited list.

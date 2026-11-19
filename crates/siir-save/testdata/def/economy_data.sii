@@ -1,0 +1,23 @@
+﻿SiiNunit
+{
+economy_data : economy.data.storage
+{
+	fixed_revenue: 600
+
+#
+#	currency format: [sign1] - [sign2] 1.234,- [sign3]
+#	default has to be first
+#
+	currency_code[]: "EUR"
+	currency_ratio[]: 1
+	currency_sign1[]: ""
+	currency_sign2[]: "€"
+	currency_sign3[]: ""
+
+	currency_code[]: "CZK"
+	currency_ratio[]: 24.4
+	currency_sign1[]: ""
+	currency_sign2[]: ""
+	currency_sign3[]: " Kč"
+}
+}

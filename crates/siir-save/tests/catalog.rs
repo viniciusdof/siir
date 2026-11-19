@@ -36,6 +36,47 @@ fn names_vehicle_models_in_every_language() {
 }
 
 #[test]
+fn reads_levels_and_titles_in_every_language() {
+    let catalog = Catalog::generate(&def(), &locale(), Game::Ets2).unwrap();
+    let levels = catalog.levels();
+    assert_eq!(levels.steps, [200, 500, 700]);
+    assert_eq!(levels.titles.len(), 2);
+    assert_eq!(levels.titles[1].from, 2);
+    assert_eq!(levels.title(0, "pt_br"), Some("Novato"));
+    assert_eq!(levels.title(2, "pt_br"), Some("Entusiasta"));
+    assert_eq!(levels.title(2, "en_us"), Some("Workhorse"));
+    assert_eq!(levels.title(2, "de_de"), Some("Workhorse"));
+}
+
+#[test]
+fn reads_currencies_in_game_order() {
+    let catalog = Catalog::generate(&def(), &locale(), Game::Ets2).unwrap();
+    let currencies = catalog.currencies();
+    assert_eq!(currencies.len(), 2);
+    assert_eq!(currencies[0].code, "EUR");
+    assert_eq!(currencies[0].ratio, 1.0);
+    assert_eq!(currencies[0].sign2, "€");
+    assert_eq!(currencies[1].code, "CZK");
+    assert_eq!(currencies[1].ratio, 24.4);
+    assert_eq!(currencies[1].sign3, " Kč");
+}
+
+#[test]
+fn reads_plate_countries_in_every_language() {
+    let catalog = Catalog::generate(&def(), &locale(), Game::Ets2).unwrap();
+    let countries = catalog.countries();
+    assert_eq!(countries.len(), 1);
+    assert_eq!(countries[0].token, "testland");
+    assert_eq!(catalog.country_name("testland", "en_us"), Some("Testland"));
+    assert_eq!(
+        catalog.country_name("testland", "pt_br"),
+        Some("Testelândia")
+    );
+    assert_eq!(catalog.country_name("testland", "xx_yy"), Some("Testland"));
+    assert_eq!(catalog.country_name("nowhere", "en_us"), None);
+}
+
+#[test]
 fn reads_trucks_parts_and_transmissions() {
     let catalog = Catalog::generate(&def(), &locale(), Game::Ets2).unwrap();
     let trucks = catalog.trucks();

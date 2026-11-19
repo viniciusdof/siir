@@ -1,0 +1,8 @@
+SiiNunit
+{
+localization_db : .localization
+{
+	key[]: "lvl_name1"
+	val[]: "Workhorse"
+}
+}

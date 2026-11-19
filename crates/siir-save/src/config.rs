@@ -55,6 +55,24 @@ pub fn read(config: &Path) -> Result<Config, Error> {
     })
 }
 
+/// The display currency `g_currency` selects: an index into
+/// [`Catalog::currencies`](crate::catalog::Catalog::currencies).
+pub fn currency(config: &Path) -> Result<usize, Error> {
+    let (_, lines) = read_lines(config)?;
+    let missing = || Error::MissingConfig {
+        key: "g_currency".to_owned(),
+    };
+    lines
+        .iter()
+        .find_map(|line| {
+            let parts: Vec<&str> = line.split_whitespace().collect();
+            (parts.len() == 3 && parts[1] == "g_currency").then(|| parts[2].trim_matches('"'))
+        })
+        .ok_or_else(missing)?
+        .parse()
+        .map_err(|_| missing())
+}
+
 /// Enables or disables developer mode and the console.
 pub fn set_developer(config: &Path, enabled: bool) -> Result<(), Error> {
     let value = if enabled { "1" } else { "0" };
@@ -177,6 +195,19 @@ mod tests {
         assert!(config.developer);
         assert!(config.console);
         assert!(!config.max_convoy);
+
+        let _ = fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[test]
+    fn reads_the_display_currency() {
+        let path = temp("currency").join("config.cfg");
+        fs::write(&path, "uset g_lang \"pt_br\"\r\nuset g_currency \"3\"\r\n").unwrap();
+        assert_eq!(currency(&path).unwrap(), 3);
+        fs::write(&path, "uset g_lang \"pt_br\"\n").unwrap();
+        assert!(currency(&path).is_err());
+        fs::write(&path, "uset g_currency \"x\"\n").unwrap();
+        assert!(currency(&path).is_err());
 
         let _ = fs::remove_dir_all(path.parent().unwrap());
     }

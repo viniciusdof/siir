@@ -4,16 +4,14 @@ use gpui_kit::assets::IconName;
 use gpui_kit::base::{Button as BaseButton, Selectable};
 use gpui_kit::prelude::*;
 use gpui_kit::{
-    AccessibleAction, App, ClickEvent, ElementId, FocusHandle, FontWeight, IntoElement, RenderOnce,
-    SharedString, Toggled, Window, px, transparent_black,
+    App, ClickEvent, ElementId, FocusHandle, FontWeight, IntoElement, RenderOnce, SharedString,
+    Toggled, Window, px, transparent_black,
 };
 
 use crate::ui::icon;
 use crate::ui::tokens::{self, RADIUS, ROW_HEIGHT, SPACE_2, SPACE_3, TEXT_BODY};
 
 type ClickHandler = Box<dyn Fn(&ClickEvent, &mut Window, &mut App) + 'static>;
-type A11yClickHandler = Box<dyn Fn(&mut Window, &mut App) + 'static>;
-
 /// How much weight an action carries.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Tone {
@@ -42,7 +40,6 @@ pub struct Button {
     width: Option<f32>,
     focus: Option<FocusHandle>,
     on_click: Option<ClickHandler>,
-    on_a11y_click: Option<A11yClickHandler>,
 }
 
 /// A labelled action in the secondary tone.
@@ -60,7 +57,6 @@ pub fn button(id: impl Into<ElementId>, label: impl Into<SharedString>) -> Butto
         width: None,
         focus: None,
         on_click: None,
-        on_a11y_click: None,
     }
 }
 
@@ -68,13 +64,6 @@ impl Button {
     /// Overrides the accessible name; the visible label stays the same.
     pub fn aria_label(mut self, label: impl Into<SharedString>) -> Self {
         self.accessible = Some(label.into());
-        self
-    }
-
-    /// Runs when assistive technology activates the button, not on a pointer
-    /// or keyboard click.
-    pub fn on_a11y_click(mut self, handler: impl Fn(&mut Window, &mut App) + 'static) -> Self {
-        self.on_a11y_click = Some(Box::new(handler));
         self
     }
 
@@ -219,12 +208,7 @@ impl RenderOnce for Button {
             .when_some(trailing, |this, name| {
                 this.child(icon(name, 16.0, foreground))
             })
-            .when_some(self.on_click, |this, handler| this.on_click(handler))
-            .when_some(self.on_a11y_click, |this, handler| {
-                this.on_a11y_action(AccessibleAction::Click, move |_, window, cx| {
-                    handler(window, cx)
-                })
-            });
+            .when_some(self.on_click, |this, handler| this.on_click(handler));
         if primary {
             base.when(!disabled, |this| {
                 this.hover(|style| style.bg(palette.accent_hover))

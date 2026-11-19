@@ -1,5 +1,6 @@
 //! Parses form text into save commands.
 
+use siir_save::catalog::{Currency, Levels};
 use siir_save::{Command, Skills};
 
 /// Why a field's text is not accepted.
@@ -30,20 +31,62 @@ pub fn profile_name(text: &str) -> Result<Command, FieldError> {
     Ok(Command::RenameProfile(name.to_owned()))
 }
 
-/// Parses a bank balance.
-pub fn money(text: &str) -> Result<Command, FieldError> {
+/// Parses a bank balance typed in `currency` into the amount the save stores.
+pub fn money(text: &str, currency: &Currency) -> Result<Command, FieldError> {
     text.trim()
         .parse()
-        .map(Command::SetMoney)
+        .map(|shown| Command::SetMoney(currency.to_native(shown)))
         .map_err(|_| FieldError::Number)
 }
 
-/// Parses total experience points.
-pub fn experience(text: &str) -> Result<Command, FieldError> {
-    text.trim()
-        .parse()
+/// Parses a used-market asking price typed in `currency` into the amount the
+/// save stores.
+pub fn used_price(id: &str, text: &str, currency: &Currency) -> Result<Command, FieldError> {
+    let shown: i64 = text.trim().parse().map_err(|_| FieldError::Number)?;
+    if shown < 0 {
+        return Err(FieldError::Number);
+    }
+    Ok(Command::SetUsedTruckPrice {
+        id: id.to_owned(),
+        price: currency.to_native(shown),
+    })
+}
+
+/// Sets the experience to the start of `level`, or `None` when the level
+/// needs more than the game's 32-bit counter holds.
+pub fn level(level: u32, levels: &Levels) -> Option<Command> {
+    levels
+        .experience(level)
+        .and_then(|experience| u32::try_from(experience).ok())
         .map(Command::SetExperience)
-        .map_err(|_| FieldError::Number)
+}
+
+/// Parses a plate's visible text; editing it drops any markup the plate had.
+pub fn plate(id: &str, text: &str) -> Result<Command, FieldError> {
+    let plate = text.trim();
+    if plate.is_empty() || plate.contains(['"', '\n', '\r']) {
+        return Err(FieldError::Name);
+    }
+    Ok(Command::SetLicensePlate {
+        id: id.to_owned(),
+        plate: plate.to_owned(),
+    })
+}
+
+/// Parses a plate country: the lowercase token written after `|`.
+pub fn plate_country(id: &str, text: &str) -> Result<Command, FieldError> {
+    let country = text.trim();
+    let valid = !country.is_empty()
+        && country
+            .chars()
+            .all(|ch| ch.is_ascii_lowercase() || ch.is_ascii_digit() || ch == '_');
+    if !valid {
+        return Err(FieldError::Name);
+    }
+    Ok(Command::SetLicensePlateCountry {
+        id: id.to_owned(),
+        country: country.to_owned(),
+    })
 }
 
 /// Parses a vehicle's odometer in whole kilometers.
@@ -124,17 +167,87 @@ mod tests {
     use super::*;
 
     #[test]
-    fn parses_money_and_experience() {
-        assert!(matches!(money(" 2000 "), Ok(Command::SetMoney(2000))));
-        assert!(matches!(money("-5"), Ok(Command::SetMoney(-5))));
-        assert!(matches!(experience("42"), Ok(Command::SetExperience(42))));
-        assert!(matches!(experience("-1"), Err(FieldError::Number)));
-        assert!(matches!(money(""), Err(FieldError::Number)));
-        assert!(matches!(money("12.5"), Err(FieldError::Number)));
+    fn parses_money_in_the_shown_currency() {
+        let euro = crate::format::native_currency(siir_save::Game::Ets2);
         assert!(matches!(
-            money("99999999999999999999"),
+            money(" 2000 ", &euro),
+            Ok(Command::SetMoney(2000))
+        ));
+        assert!(matches!(money("-5", &euro), Ok(Command::SetMoney(-5))));
+        assert!(matches!(money("", &euro), Err(FieldError::Number)));
+        assert!(matches!(money("12.5", &euro), Err(FieldError::Number)));
+        assert!(matches!(
+            money("99999999999999999999", &euro),
             Err(FieldError::Number)
         ));
+        let koruna = Currency {
+            ratio: 24.4,
+            ..euro
+        };
+        assert!(matches!(
+            money("24400", &koruna),
+            Ok(Command::SetMoney(1000))
+        ));
+    }
+
+    #[test]
+    fn parses_used_prices_in_the_shown_currency() {
+        let euro = crate::format::native_currency(siir_save::Game::Ets2);
+        assert!(matches!(
+            used_price("listing.one", " 99500 ", &euro),
+            Ok(Command::SetUsedTruckPrice { id, price: 99_500 }) if id == "listing.one"
+        ));
+        assert!(matches!(
+            used_price("l", "-1", &euro),
+            Err(FieldError::Number)
+        ));
+        assert!(matches!(
+            used_price("l", "", &euro),
+            Err(FieldError::Number)
+        ));
+    }
+
+    #[test]
+    fn sets_experience_to_the_start_of_a_level() {
+        let levels = Levels {
+            steps: vec![200, 500, 700],
+            titles: Vec::new(),
+        };
+        assert!(matches!(level(0, &levels), Some(Command::SetExperience(0))));
+        assert!(matches!(
+            level(2, &levels),
+            Some(Command::SetExperience(700))
+        ));
+        assert!(matches!(
+            level(4, &levels),
+            Some(Command::SetExperience(2100))
+        ));
+        // A level whose starting experience is beyond the 32-bit counter.
+        assert!(level(7_000_000, &levels).is_none());
+        assert!(level(1, &Levels::default()).is_none());
+    }
+
+    #[test]
+    fn parses_plates_and_countries() {
+        assert!(matches!(
+            plate("v", " AB 12 "),
+            Ok(Command::SetLicensePlate { plate, .. }) if plate == "AB 12"
+        ));
+        assert!(matches!(plate("v", ""), Err(FieldError::Name)));
+        assert!(matches!(plate("v", "a\"b"), Err(FieldError::Name)));
+        assert!(matches!(
+            plate_country("v", " germany "),
+            Ok(Command::SetLicensePlateCountry { country, .. }) if country == "germany"
+        ));
+        assert!(matches!(
+            plate_country("v", "germany_2"),
+            Ok(Command::SetLicensePlateCountry { .. })
+        ));
+        assert!(matches!(
+            plate_country("v", "Germany"),
+            Err(FieldError::Name)
+        ));
+        assert!(matches!(plate_country("v", ""), Err(FieldError::Name)));
     }
 
     #[test]

@@ -3,8 +3,9 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use siir_gui::edit;
 use siir_gui::state::State;
+use siir_gui::{edit, format};
+use siir_save::catalog::Catalog;
 use siir_save::{Command, Game, Origin, Skills};
 
 fn fixtures() -> PathBuf {
@@ -64,8 +65,9 @@ fn applies_saves_and_reopens() {
     assert_eq!(state.open().unwrap().view().money, Some(2000));
     assert!(!state.edited());
 
-    assert!(state.apply(edit::money("12345").unwrap()).is_ok());
-    assert!(state.apply(edit::experience("42").unwrap()).is_ok());
+    let euro = format::native_currency(Game::Ets2);
+    assert!(state.apply(edit::money("12345", &euro).unwrap()).is_ok());
+    assert!(state.apply(Command::SetExperience(42)).is_ok());
     assert!(
         state
             .apply(Command::SetSkills(edit::skills(
@@ -118,6 +120,154 @@ fn applies_saves_and_reopens() {
     assert_eq!(open.view().experience, 42);
     assert_eq!(open.view().skills.adr, 1);
     assert_eq!(open.view().skills.mechanical, 5);
+
+    fs::remove_dir_all(&root).unwrap();
+}
+
+#[test]
+fn sets_experience_from_a_level_and_saves_it() {
+    let root = game_folder("level");
+    let save_dir = root.join("profiles/AAA/save/1");
+    let mut state = State::with_dirs(Game::Ets2, vec![root.clone()]);
+    let ix = state
+        .saves()
+        .iter()
+        .position(|row| row.path == save_dir)
+        .expect("the copied save is listed");
+    state.open_save(ix);
+
+    let catalog = Catalog::load(Game::Ets2).unwrap();
+    let levels = catalog.levels();
+    assert!(state.apply(edit::level(50, levels).unwrap()).is_ok());
+    let experience = state.open().unwrap().view().experience;
+    assert_eq!(Some(experience), levels.experience(50));
+    assert_eq!(levels.level(experience), 50);
+    assert!(edit::level(7_000_000, levels).is_none());
+
+    assert!(state.save().is_ok());
+    state.close();
+    state.open_save(ix);
+    assert_eq!(state.open().unwrap().view().experience, experience);
+
+    fs::remove_dir_all(&root).unwrap();
+}
+
+#[test]
+fn maps_each_vehicle_to_its_used_market_listing() {
+    let root = game_folder("listing");
+    let save_dir = root.join("profiles/AAA/save/1");
+    let mut state = State::with_dirs(Game::Ets2, vec![root.clone()]);
+    let ix = state
+        .saves()
+        .iter()
+        .position(|row| row.path == save_dir)
+        .expect("the copied save is listed");
+    state.open_save(ix);
+
+    let listed: Vec<(String, String, i64)> = state
+        .open()
+        .unwrap()
+        .view()
+        .vehicles
+        .iter()
+        .filter_map(|row| {
+            row.listing
+                .as_ref()
+                .map(|listing| (row.id.clone(), listing.id.clone(), listing.price))
+        })
+        .collect();
+    assert_eq!(listed.len(), 26, "every listing is offered by one vehicle");
+    for (vehicle, listing, _) in &listed {
+        assert_ne!(vehicle, listing, "the listing id is not the vehicle id");
+    }
+    let (vehicle, listing, _) = listed[0].clone();
+    assert!(
+        state
+            .open()
+            .unwrap()
+            .view()
+            .vehicles
+            .iter()
+            .any(|row| row.id == vehicle && !row.owned),
+        "a listed vehicle is not owned"
+    );
+
+    let euro = format::native_currency(Game::Ets2);
+    assert!(
+        state
+            .apply(edit::used_price(&listing, "99500", &euro).unwrap())
+            .is_ok()
+    );
+    let after = state
+        .open()
+        .unwrap()
+        .view()
+        .vehicles
+        .iter()
+        .filter_map(|row| {
+            row.listing
+                .as_ref()
+                .map(|listing| (listing.id.clone(), listing.price))
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        after.iter().filter(|(id, _)| id == &listing).count(),
+        1,
+        "the listing is still one row"
+    );
+    assert_eq!(
+        after.iter().filter(|(_, price)| *price == 99_500).count(),
+        1,
+        "only the chosen listing changed"
+    );
+
+    fs::remove_dir_all(&root).unwrap();
+}
+
+#[test]
+fn reads_the_profile_currency_and_converts_money() {
+    let root = game_folder("currency");
+    let save_dir = root.join("profiles/AAA/save/1");
+    fs::write(
+        root.join("profiles/AAA/config.cfg"),
+        "uset g_lang \"pt_br\"\r\nuset g_currency \"2\"\r\n",
+    )
+    .unwrap();
+    let mut state = State::with_dirs(Game::Ets2, vec![root.clone()]);
+    let ix = state
+        .saves()
+        .iter()
+        .position(|row| row.path == save_dir)
+        .expect("the copied save is listed");
+    state.open_save(ix);
+    let open = state.open().unwrap();
+    assert_eq!(open.currency(), 2);
+
+    let catalog = Catalog::load(Game::Ets2).unwrap();
+    let koruna = &catalog.currencies()[open.currency()];
+    assert_eq!(koruna.code, "CZK");
+    assert_eq!(
+        format::money(2000, koruna, Game::Ets2),
+        format!("48 800{}", koruna.sign3)
+    );
+    assert!(state.apply(edit::money("24400", koruna).unwrap()).is_ok());
+    assert_eq!(state.open().unwrap().view().money, Some(1000));
+
+    fs::remove_dir_all(&root).unwrap();
+}
+
+#[test]
+fn falls_back_to_the_stored_currency_without_a_config() {
+    let root = game_folder("no-config");
+    let save_dir = root.join("profiles/AAA/save/1");
+    let mut state = State::with_dirs(Game::Ets2, vec![root.clone()]);
+    let ix = state
+        .saves()
+        .iter()
+        .position(|row| row.path == save_dir)
+        .expect("the copied save is listed");
+    state.open_save(ix);
+    assert_eq!(state.open().unwrap().currency(), 0);
 
     fs::remove_dir_all(&root).unwrap();
 }
@@ -239,7 +389,8 @@ fn asks_before_close_only_for_an_open_save_with_pending_work() {
     assert!(!state.asks_before_close(true));
     assert!(state.asks_before_close(false), "an invalid field asks");
 
-    assert!(state.apply(edit::money("12345").unwrap()).is_ok());
+    let euro = format::native_currency(Game::Ets2);
+    assert!(state.apply(edit::money("12345", &euro).unwrap()).is_ok());
     assert!(state.asks_before_close(true), "unsaved edits ask");
     assert!(state.save().is_ok());
     assert!(!state.asks_before_close(true));
@@ -305,6 +456,16 @@ fn lists_and_edits_vehicles() {
     state.open_save(ix);
     assert_eq!(row(&state, &other), (0.25, Some(4321), 0.0, true));
 
+    assert!(state.apply(edit::plate(&other, "NEW 1").unwrap()).is_ok());
+    assert!(
+        state
+            .apply(edit::plate_country(&other, "poland").unwrap())
+            .is_ok()
+    );
+    let view = state.open().unwrap().view();
+    let row = view.vehicles.iter().find(|row| row.id == other).unwrap();
+    assert_eq!(row.plate, "NEW 1");
+    assert_eq!(row.country.as_deref(), Some("poland"));
     assert!(state.apply(Command::FillAllVehicles).is_ok());
     let view = state.open().unwrap().view();
     assert!(
@@ -314,6 +475,14 @@ fn lists_and_edits_vehicles() {
             .all(|vehicle| vehicle.fuel == 1.0),
         "Fill all reaches every vehicle the screen calls owned"
     );
+
+    assert!(state.save().is_ok());
+    state.close();
+    state.open_save(ix);
+    let view = state.open().unwrap().view();
+    let saved = view.vehicles.iter().find(|row| row.id == other).unwrap();
+    assert_eq!(saved.plate, "NEW 1");
+    assert_eq!(saved.country.as_deref(), Some("poland"));
 
     fs::remove_dir_all(&root).unwrap();
 }
@@ -360,6 +529,37 @@ fn lists_and_edits_trailers() {
     state.open_save(ix);
     assert_eq!(row(&state).0, "NEW 123");
     assert_eq!(row(&state).1, 1500.0);
+
+    fs::remove_dir_all(&root).unwrap();
+}
+
+#[test]
+fn owns_every_listed_bus() {
+    let root = game_folder_with("buses", "bus");
+    let save_dir = root.join("profiles/AAA/save/bus");
+    let mut state = State::with_dirs(Game::Ets2, vec![root.clone()]);
+    let ix = state
+        .saves()
+        .iter()
+        .position(|row| row.path == save_dir)
+        .expect("the copied save is listed");
+    state.open_save(ix);
+
+    let owned_models: Vec<Option<String>> = state
+        .open()
+        .unwrap()
+        .view()
+        .vehicles
+        .iter()
+        .filter(|vehicle| vehicle.owned)
+        .map(|vehicle| vehicle.model.clone())
+        .collect();
+    for bus in ["volvo.9700_23", "man.lions_24"] {
+        assert!(
+            owned_models.contains(&Some(bus.to_owned())),
+            "{bus} is owned, slot or not"
+        );
+    }
 
     fs::remove_dir_all(&root).unwrap();
 }

@@ -1,2 +1,11 @@
 	key[]: "shared_quote"
 	val[]: "A \"quoted\" value"
+
+	key[]: "country_testland"
+	val[]: "Testland"
+
+	key[]: "lvl_name0"
+	val[]: "Newbie"
+
+	key[]: "lvl_name1"
+	val[]: "Enthusiast"

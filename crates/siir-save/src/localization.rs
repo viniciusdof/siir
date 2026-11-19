@@ -21,15 +21,23 @@ pub(crate) fn languages(locale_dir: &Path) -> Vec<String> {
     found
 }
 
-/// One language's texts, with `@include` files resolved in file order.
+/// One language's texts, with `@include` files resolved in file order, then
+/// the language's `local.override.sii` when it has one.
 ///
 /// The game numbers later definitions win, so a language file may override a
-/// key from `common.sui`.
+/// key from `common.sui`, and the override file (ATS ships one per language)
+/// overrides both.
 pub(crate) fn read(locale_dir: &Path, language: &str) -> BTreeMap<String, String> {
     let mut texts = BTreeMap::new();
     let mut seen = Vec::new();
-    let entry = locale_dir.join(language).join("local.sii");
-    load(&entry, locale_dir, &mut texts, &mut seen);
+    let folder = locale_dir.join(language);
+    load(&folder.join("local.sii"), locale_dir, &mut texts, &mut seen);
+    load(
+        &folder.join("local.override.sii"),
+        locale_dir,
+        &mut texts,
+        &mut seen,
+    );
     texts
 }
 
@@ -133,6 +141,21 @@ mod tests {
         assert_eq!(
             portuguese.get("shared_quote").map(String::as_str),
             Some("Um valor \"entre aspas\"")
+        );
+    }
+
+    #[test]
+    fn override_file_wins_over_local_texts() {
+        let english = read(&locale(), "en_us");
+        assert_eq!(
+            english.get("lvl_name1").map(String::as_str),
+            Some("Workhorse")
+        );
+        assert_eq!(english.get("lvl_name0").map(String::as_str), Some("Newbie"));
+        let portuguese = read(&locale(), "pt_br");
+        assert_eq!(
+            portuguese.get("lvl_name1").map(String::as_str),
+            Some("Entusiasta")
         );
     }
 }
