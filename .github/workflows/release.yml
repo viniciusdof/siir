@@ -107,6 +107,8 @@ jobs:
   validate:
     needs: [verify, draft]
     runs-on: ubuntu-24.04
+    permissions:
+      contents: write
     env:
       TAG: ${{ github.ref_name }}
       VERSION: ${{ needs.verify.outputs.version }}
