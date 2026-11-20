@@ -1,0 +1,44 @@
+name: after_release
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Tag of a published GitHub release
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  CODEBERG_API: https://codeberg.org/api/v1/repos/viniciusdof/siir
+
+jobs:
+  codeberg:
+    runs-on: ubuntu-24.04
+    env:
+      TAG: ${{ github.event.release.tag_name || inputs.tag }}
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          CODEBERG_TOKEN: ${{ secrets.CODEBERG_TOKEN }}
+        run: |
+          release="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json body,isDraft,isPrerelease)"
+          if [ "$(jq -r .isDraft <<< "$release")" = "true" ]; then
+            echo "::error::the GitHub release $TAG is still a draft"
+            exit 1
+          fi
+          auth=(-H "Authorization: token $CODEBERG_TOKEN")
+          id="$(curl -fsS "${auth[@]}" "$CODEBERG_API/releases?limit=50" \
+            | jq -r --arg tag "$TAG" '.[] | select(.tag_name == $tag) | .id' | head -n1)"
+          if [ -z "$id" ]; then
+            echo "::error::no Codeberg release for $TAG"
+            exit 1
+          fi
+          payload="$(jq '{body: .body, prerelease: .isPrerelease, draft: false}' <<< "$release")"
+          curl -fsS "${auth[@]}" -H "Content-Type: application/json" -X PATCH -d "$payload" \
+            "$CODEBERG_API/releases/$id" > /dev/null
+          echo "published $TAG on Codeberg"

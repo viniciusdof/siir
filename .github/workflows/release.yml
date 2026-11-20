@@ -1,0 +1,136 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+env:
+  CODEBERG_API: https://codeberg.org/api/v1/repos/viniciusdof/siir
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: version
+        run: |
+          version="$(sed -n '/^\[workspace\.package\]/,/^\[/s/^version = "\(.*\)"$/\1/p' Cargo.toml)"
+          if [ "$GITHUB_REF_NAME" != "v$version" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match the workspace version $version"
+            exit 1
+          fi
+          prerelease=false
+          if [[ "$version" == *-* ]]; then
+            prerelease=true
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
+
+  ci:
+    needs: verify
+    uses: ./.github/workflows/ci.yml
+
+  draft:
+    needs: [verify, ci]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    env:
+      TAG: ${{ github.ref_name }}
+      VERSION: ${{ needs.verify.outputs.version }}
+      PRERELEASE: ${{ needs.verify.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: jdx/mise-action@v5
+        with:
+          install_args: git-cliff
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: bundle-*
+          path: dist
+          merge-multiple: true
+      - name: Checksums
+        working-directory: dist
+        run: sha256sum -- * > SHA256SUMS && cat SHA256SUMS
+      - name: Notes
+        run: |
+          git cliff --latest --strip header > notes.md
+          sed "s/@VERSION@/$VERSION/g" packaging/release-notes.md >> notes.md
+          cat notes.md
+      - name: GitHub draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" dist/* --clobber
+          else
+            args=()
+            if [ "$PRERELEASE" = "true" ]; then
+              args+=(--prerelease)
+            fi
+            gh release create "$TAG" dist/* --draft --verify-tag \
+              --title "SIIR $VERSION" --notes-file notes.md "${args[@]}"
+          fi
+      - name: Codeberg draft
+        env:
+          CODEBERG_TOKEN: ${{ secrets.CODEBERG_TOKEN }}
+        run: |
+          auth=(-H "Authorization: token $CODEBERG_TOKEN")
+          id="$(curl -fsS "${auth[@]}" "$CODEBERG_API/releases?limit=50" \
+            | jq -r --arg tag "$TAG" '.[] | select(.tag_name == $tag) | .id' | head -n1)"
+          if [ -z "$id" ]; then
+            payload="$(jq -n --arg tag "$TAG" --arg name "SIIR $VERSION" --rawfile body notes.md \
+              --argjson prerelease "$PRERELEASE" \
+              '{tag_name: $tag, name: $name, body: $body, draft: true, prerelease: $prerelease}')"
+            id="$(curl -fsS "${auth[@]}" -H "Content-Type: application/json" -d "$payload" \
+              "$CODEBERG_API/releases" | jq -r .id)"
+          fi
+          assets="$(curl -fsS "${auth[@]}" "$CODEBERG_API/releases/$id/assets")"
+          for file in dist/*; do
+            name="$(basename "$file")"
+            old="$(jq -r --arg name "$name" '.[] | select(.name == $name) | .id' <<< "$assets")"
+            if [ -n "$old" ]; then
+              curl -fsS "${auth[@]}" -X DELETE "$CODEBERG_API/releases/$id/assets/$old"
+            fi
+            curl -fsS "${auth[@]}" -F "attachment=@$file" "$CODEBERG_API/releases/$id/assets?name=$name" > /dev/null
+            echo "uploaded $name"
+          done
+
+  validate:
+    needs: [verify, draft]
+    runs-on: ubuntu-24.04
+    env:
+      TAG: ${{ github.ref_name }}
+      VERSION: ${{ needs.verify.outputs.version }}
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          CODEBERG_TOKEN: ${{ secrets.CODEBERG_TOKEN }}
+        run: |
+          expected="$(printf '%s\n' \
+            "siir-$VERSION-macos-universal.dmg" \
+            "siir-$VERSION-windows-x86_64.exe" \
+            "siir-$VERSION-windows-aarch64.exe" \
+            "siir-$VERSION-linux-x86_64.AppImage" \
+            "siir-$VERSION-linux-aarch64.AppImage" \
+            SHA256SUMS | sort)"
+          github="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets -q '.assets[].name' | sort)"
+          codeberg="$(curl -fsS -H "Authorization: token $CODEBERG_TOKEN" "$CODEBERG_API/releases?limit=50" \
+            | jq -r --arg tag "$TAG" '.[] | select(.tag_name == $tag) | .assets[].name' | sort)"
+          status=0
+          for host in github codeberg; do
+            missing="$(comm -23 <(echo "$expected") <(echo "${!host}"))"
+            if [ -n "$missing" ]; then
+              echo "::error::$host release $TAG is missing: $(echo $missing)"
+              status=1
+            fi
+          done
+          exit "$status"
