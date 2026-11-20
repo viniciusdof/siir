@@ -10,11 +10,6 @@ their saves.
 
 It is an unofficial tool, not affiliated with or endorsed by SCS Software.
 
-## The app
-
-SIIR finds your profiles, opens a save, and edits money, level, skills, ADR,
-cities, the profile name, vehicles, and trailers.
-
 ## Download
 
 Get the latest build from the
