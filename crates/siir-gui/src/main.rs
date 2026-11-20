@@ -1,5 +1,7 @@
 //! GPUI bootstrap for the SIIR desktop front end.
 
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
 mod ui;
 mod view;
 

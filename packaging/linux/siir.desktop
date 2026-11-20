@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=SIIR
+Comment=Edit Euro Truck Simulator 2 and American Truck Simulator saves
+Exec=siir-gui
+Icon=siir
+Terminal=false
+Categories=Utility;

@@ -1,17 +1,18 @@
 [package]
 name = "siir-save"
-version = "0.1.0"
-edition = "2024"
-rust-version = "1.99.1"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
 description = "Typed save model and edits for ETS2 and ATS"
-repository = "https://codeberg.org/viniciusdof/siir"
+license.workspace = true
+repository.workspace = true
 publish = false
 
 [dependencies]
 dirs = "7.0.0"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
-siir = { path = "../siir", version = "0.1.0" }
+siir = { path = "../siir" }
 steamlocate = "2.1.1"
 zip = { version = "9.6.0", default-features = false, features = ["deflate-flate2"] }
 

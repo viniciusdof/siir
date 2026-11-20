@@ -1,0 +1,47 @@
+[changelog]
+header = """
+# Changelog
+
+All notable changes to this project are documented in this file.
+
+"""
+body = """
+{% if version %}\
+## [{{ version | trim_start_matches(pat="v") }}] - {{ timestamp | date(format="%Y-%m-%d") }}
+{% else %}\
+## [Unreleased]
+{% endif %}\
+{% for group, commits in commits | group_by(attribute="group") %}
+### {{ group | striptags | trim }}
+{% for commit in commits %}
+- {% if commit.scope %}**{{ commit.scope }}:** {% endif %}\
+{% if commit.breaking %}**Breaking:** {% endif %}\
+{{ commit.message | upper_first }} \
+([{{ commit.id | truncate(length=7, end="") }}](https://codeberg.org/viniciusdof/siir/commit/{{ commit.id }}))\
+{% endfor %}
+{% endfor %}
+"""
+trim = true
+
+[git]
+conventional_commits = true
+filter_unconventional = true
+split_commits = false
+protect_breaking_commits = true
+filter_commits = false
+tag_pattern = "v[0-9].*"
+topo_order = false
+sort_commits = "oldest"
+commit_parsers = [
+    { message = "^chore\\(release\\)", skip = true },
+    { message = "^feat", group = "<!-- 0 -->Added" },
+    { message = "^fix", group = "<!-- 1 -->Fixed" },
+    { message = "^(refactor|perf)", group = "<!-- 2 -->Changed" },
+    { message = "^docs", group = "<!-- 3 -->Documentation" },
+    { message = "^(ci|chore|style|test|build)", skip = true },
+]
+
+[bump]
+features_always_bump_minor = true
+breaking_always_bump_major = false
+initial_tag = "v0.1.0"
