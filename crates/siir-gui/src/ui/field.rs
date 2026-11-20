@@ -1,11 +1,8 @@
-//! Label, control, and inline error for one form field.
-
 use gpui_kit::prelude::*;
 use gpui_kit::{IntoElement, SharedString, div, px};
 
 use crate::ui::tokens::{self, SPACE_1, TEXT_LABEL};
 
-/// One labelled control with an optional error under it.
 pub fn field(
     label: impl Into<SharedString>,
     control: impl IntoElement,

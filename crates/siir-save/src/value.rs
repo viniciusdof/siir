@@ -1,5 +1,3 @@
-//! Decoding of the value forms a save uses.
-
 use siir::Unit;
 
 use crate::error::Error;
@@ -54,7 +52,6 @@ pub(crate) fn boolean(unit: &Unit<'_>, name: &str) -> Result<bool, Error> {
     }
 }
 
-/// An implicit-array length the unit can actually hold.
 pub(crate) fn length(unit: &Unit<'_>, name: &str) -> Result<usize, Error> {
     let count = count(unit, name)? as usize;
     if count > unit.attrs().count() {
@@ -87,7 +84,6 @@ pub(crate) fn array<'a>(unit: &'a Unit<'_>, name: &str) -> Result<Vec<&'a str>, 
     Ok(values)
 }
 
-/// An implicit array, empty when the save has no such attribute.
 pub(crate) fn optional_array<'a>(unit: &'a Unit<'_>, name: &str) -> Result<Vec<&'a str>, Error> {
     match unit.get(name) {
         None => Ok(Vec::new()),

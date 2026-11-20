@@ -1,5 +1,3 @@
-//! The overview of the open save.
-
 use gpui_kit::assets::IconName;
 use gpui_kit::prelude::*;
 use gpui_kit::{AnyElement, Context, FocusHandle, Focusable, FontWeight, IntoElement, div, px};
@@ -24,6 +22,7 @@ impl AppView {
             .map(|money| format::money(money, &self.currency(), game))
             .unwrap_or_else(|| "—".to_owned());
         let vehicle = self.vehicle_name(view.current_vehicle.as_deref());
+        let hq_city = self.city_name(&view.hq_city);
         let adr = ADR_CLASSES
             .iter()
             .enumerate()
@@ -120,7 +119,7 @@ impl AppView {
                                     })
                                     .child(stat(
                                         t("field.headquarters"),
-                                        view.hq_city.clone(),
+                                        hq_city,
                                         tokens::TEXT_BODY,
                                         Some(360.0),
                                     ))
@@ -219,6 +218,14 @@ impl AppView {
                     ),
             )
             .into_any_element()
+    }
+
+    fn city_name(&self, token: &str) -> String {
+        self.catalog
+            .as_ref()
+            .and_then(|catalog| catalog.city_name(token, i18n::current_locale().as_ref()))
+            .unwrap_or(token)
+            .to_owned()
     }
 }
 

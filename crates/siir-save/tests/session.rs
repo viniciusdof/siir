@@ -159,7 +159,6 @@ fn session_is_send_and_static() {
     assert_static::<Session>();
 }
 
-/// The flow a GUI drives: discover, open, read, edit, save, reopen.
 #[test]
 fn contract_flow_discover_open_edit_save_reopen() {
     let dir = temp("contract");

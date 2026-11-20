@@ -1,5 +1,3 @@
-//! Styled single-line input frame.
-
 use gpui_kit::base::input::{Input, InputBase, InputState};
 use gpui_kit::prelude::*;
 use gpui_kit::{
@@ -8,7 +6,6 @@ use gpui_kit::{
 
 use crate::ui::tokens::{self, RADIUS, ROW_HEIGHT, SPACE_2, SPACE_3, TEXT_BODY};
 
-/// A framed input around a retained [`InputState`].
 #[derive(IntoElement)]
 pub struct TextField {
     id: ElementId,
@@ -18,7 +15,6 @@ pub struct TextField {
     suffix: Option<SharedString>,
 }
 
-/// A single-line input that reports its current value through the state.
 pub fn text_field(
     id: impl Into<ElementId>,
     state: &Entity<InputState>,
@@ -34,13 +30,11 @@ pub fn text_field(
 }
 
 impl TextField {
-    /// Shows a fixed symbol before the value, such as a currency.
     pub fn prefix(mut self, prefix: impl Into<SharedString>) -> Self {
         self.prefix = Some(prefix.into());
         self
     }
 
-    /// Shows a fixed symbol after the value, such as a currency.
     pub fn suffix(mut self, suffix: impl Into<SharedString>) -> Self {
         self.suffix = Some(suffix.into());
         self

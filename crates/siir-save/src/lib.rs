@@ -65,7 +65,6 @@ pub fn read<'a>(document: &'a Document<'_>, game: Game) -> Result<Save<'a>, Erro
         let Some(vehicle) = reference(slot, names::VEHICLE) else {
             continue;
         };
-        // Keep the assigned slot when several slots reference the same vehicle.
         if Some(slot.id()) == assigned || !slots.contains_key(vehicle) {
             slots.insert(vehicle, slot);
         }
@@ -124,9 +123,16 @@ pub fn read<'a>(document: &'a Document<'_>, game: Game) -> Result<Save<'a>, Erro
 
     let mut trailers = Vec::new();
     for unit in document.units_of_class(names::TRAILER) {
+        let definition = text(unit, names::TRAILER_DEFINITION)?;
+        let inline = units
+            .get(definition)
+            .copied()
+            .filter(|unit| unit.class() == names::TRAILER_DEF);
         trailers.push(Trailer {
             id: unit.id(),
-            definition: text(unit, names::TRAILER_DEFINITION)?,
+            definition,
+            body_type: inline.and_then(|unit| unit.get("body_type")).map(unquote),
+            source: inline.and_then(|unit| unit.get("source_name")).map(unquote),
             cargo_mass: float(unit, names::CARGO_MASS)?,
             license_plate: string(unit, names::LICENSE_PLATE)?,
             slave_trailer: reference(unit, names::SLAVE_TRAILER),
@@ -234,9 +240,6 @@ pub fn read<'a>(document: &'a Document<'_>, game: Game) -> Result<Save<'a>, Erro
         });
     }
 
-    // shortcut: bus, car, and log units are parsed strictly, so one malformed
-    // unit fails the whole read; skip malformed units when older or modded
-    // saves are supported.
     let mut bus_stops = Vec::new();
     for unit in document.units_of_class(names::BUS_STOP) {
         let city = unit
@@ -447,7 +450,6 @@ fn fines(unit: &Unit<'_>, name: &str) -> Result<Vec<i64>, Error> {
         .collect()
 }
 
-/// The vehicle's accessory units, in `accessories[]` order.
 fn accessories<'d>(
     unit: &Unit<'d>,
     units: &HashMap<&str, &'d Unit<'d>>,
@@ -474,7 +476,6 @@ fn slot(path: &str) -> Option<&str> {
     (!slot.is_empty()).then_some(slot)
 }
 
-/// The part paths selected by the accessory list.
 fn parts<'a>(accessories: &[Accessory<'a>]) -> Parts<'a> {
     let mut data_path = None;
     let mut engine = None;
@@ -610,11 +611,27 @@ mod tests {
         let trailer = save.current_trailer().unwrap();
         assert_eq!(trailer.id, "trailer.one");
         assert_eq!(trailer.definition, "trailer_def.test");
+        assert_eq!(
+            trailer.body_type, None,
+            "a catalog definition is not stored in the save"
+        );
+        assert_eq!(trailer.source, None);
         assert_eq!(trailer.cargo_mass, 1000.0);
         assert_eq!(trailer.license_plate, "TEST");
         assert_eq!(trailer.slave_trailer, None);
         assert_eq!(trailer.body_wear, 1.0);
         assert_eq!(trailer.chassis_wear, 0.5);
+        let owned = save
+            .trailers
+            .iter()
+            .find(|trailer| trailer.id == "trailer.two")
+            .unwrap();
+        assert_eq!(owned.definition, "_nameless.0000.0001.0002");
+        assert_eq!(owned.body_type, Some("curtainside"));
+        assert_eq!(
+            owned.source,
+            Some("trailer_def.krone.profiliner.single_3sa.curtain")
+        );
         assert_eq!(save.garages[0].status, 2);
         assert_eq!(save.drivers[0].experience_points, 10);
         let driver = &save.drivers[0];

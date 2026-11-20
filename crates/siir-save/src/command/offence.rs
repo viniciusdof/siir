@@ -1,5 +1,3 @@
-//! Police offence log edits.
-
 use siir::{Document, Value};
 
 use crate::error::Error;

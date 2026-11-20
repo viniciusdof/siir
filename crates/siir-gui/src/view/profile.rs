@@ -1,5 +1,3 @@
-//! The profile form: the name stored in `profile.sii`.
-
 use gpui_kit::assets::IconName;
 use gpui_kit::prelude::*;
 use gpui_kit::{IntoElement, div, px};

@@ -1,5 +1,3 @@
-//! Open a whole SII file and write it back as plain `SiiNunit` text.
-
 use self_cell::self_cell;
 
 use crate::container::{self, Origin};

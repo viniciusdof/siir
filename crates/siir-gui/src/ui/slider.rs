@@ -1,5 +1,3 @@
-//! Styled discrete slider.
-
 use gpui_kit::base::slider::SliderState;
 use gpui_kit::base::{Slider as BaseSlider, SliderIndicator, SliderThumb, SliderTrack};
 use gpui_kit::prelude::*;
@@ -10,7 +8,6 @@ use gpui_kit::{
 
 use crate::ui::tokens::{self, RADIUS};
 
-/// A single-value slider in the application colours.
 #[derive(IntoElement)]
 pub struct Slider {
     state: Entity<SliderState>,
@@ -18,7 +15,6 @@ pub struct Slider {
     label: SharedString,
 }
 
-/// A slider around a retained [`SliderState`].
 pub fn slider(
     state: &Entity<SliderState>,
     focus: &FocusHandle,

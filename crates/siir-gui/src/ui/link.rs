@@ -1,5 +1,3 @@
-//! In-app link from a shown value to the screen that edits it.
-
 use gpui_kit::base::Link;
 use gpui_kit::prelude::*;
 use gpui_kit::{
@@ -8,8 +6,6 @@ use gpui_kit::{
 
 use crate::ui::tokens::{self, RADIUS, SPACE_1};
 
-/// `content` underlined on hover and focus, so it does not read as a link by
-/// colour alone.
 pub fn link(
     id: impl Into<ElementId>,
     accessible: impl Into<SharedString>,

@@ -1,5 +1,3 @@
-//! Freight market offer edits.
-
 use siir::{Document, Value};
 
 use crate::error::Error;

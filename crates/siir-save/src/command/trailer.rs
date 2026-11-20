@@ -1,5 +1,3 @@
-//! Trailer commands.
-
 use siir::{Document, Unit, Value};
 
 use crate::error::Error;
@@ -14,7 +12,6 @@ const WEAR: [&str; 4] = [
 ];
 const WHEELS: [&str; 2] = ["wheels_wear", "wheels_wear_unfixable"];
 
-/// Bounds a corrupt slave chain; the game chains only a few trailers.
 const CHAIN_LIMIT: usize = 20;
 
 pub(super) fn repair_trailer(document: &mut Document<'_>, id: &str) -> Result<(), Error> {

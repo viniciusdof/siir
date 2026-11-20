@@ -1,0 +1,9 @@
+SiiNunit
+{
+accessory_engine_data : 300.test.bus.engine
+{
+	name: "Bus 300"
+	torque: 1500
+	info[]: " 300 @@hp@@ (221@@kw@@)"
+}
+}

@@ -1,5 +1,3 @@
-//! Player position commands.
-
 use siir::{Document, Value};
 
 use crate::error::Error;

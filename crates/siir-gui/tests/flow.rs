@@ -25,12 +25,10 @@ fn copy_tree(from: &Path, to: &Path) {
     }
 }
 
-/// A temp game folder with one profile and one copied save.
 fn game_folder(name: &str) -> PathBuf {
     game_folder_with(name, "1")
 }
 
-/// A temp game folder with one profile and the ETS2 fixture save `save`.
 fn game_folder_with(name: &str, save: &str) -> PathBuf {
     let root = std::env::temp_dir().join(format!("siir-gui-flow-{name}-{}", std::process::id()));
     let _ = fs::remove_dir_all(&root);
@@ -466,6 +464,20 @@ fn lists_and_edits_vehicles() {
     let row = view.vehicles.iter().find(|row| row.id == other).unwrap();
     assert_eq!(row.plate, "NEW 1");
     assert_eq!(row.country.as_deref(), Some("poland"));
+    assert!(
+        state
+            .apply(Command::SetEngine {
+                id: other.clone(),
+                path: "/def/vehicle/truck/daf.2021/engine/mx11_270.sii".into(),
+            })
+            .is_ok()
+    );
+    let view = state.open().unwrap().view();
+    let row = view.vehicles.iter().find(|row| row.id == other).unwrap();
+    assert_eq!(
+        row.engine.as_deref(),
+        Some("/def/vehicle/truck/daf.2021/engine/mx11_270.sii")
+    );
     assert!(state.apply(Command::FillAllVehicles).is_ok());
     let view = state.open().unwrap().view();
     assert!(
@@ -483,6 +495,10 @@ fn lists_and_edits_vehicles() {
     let saved = view.vehicles.iter().find(|row| row.id == other).unwrap();
     assert_eq!(saved.plate, "NEW 1");
     assert_eq!(saved.country.as_deref(), Some("poland"));
+    assert_eq!(
+        saved.engine.as_deref(),
+        Some("/def/vehicle/truck/daf.2021/engine/mx11_270.sii")
+    );
 
     fs::remove_dir_all(&root).unwrap();
 }

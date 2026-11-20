@@ -1,5 +1,3 @@
-//! The presentational pieces the views compose.
-
 pub mod button;
 pub mod checkbox;
 pub mod dialog;

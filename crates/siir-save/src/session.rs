@@ -1,5 +1,3 @@
-//! One save file open for reading, editing, and saving.
-
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -43,7 +41,6 @@ impl Session {
     /// Applies one command, marking the session edited.
     pub fn apply(&mut self, command: Command) -> Result<(), Error> {
         let game = self.game;
-        // A command can change the document before it fails; stay dirty.
         self.edited = true;
         self.file
             .with_document_mut(|document| apply(document, game, command))

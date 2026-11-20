@@ -1,5 +1,3 @@
-//! `SiiNunit` text parser.
-
 use crate::error::Error;
 use crate::model::{Attr, Document, Index, Unit};
 
@@ -201,7 +199,6 @@ impl<'a> Parser<'a> {
         })
     }
 
-    /// No nesting: values are flat groups.
     fn group(&mut self) -> Result<(), Error> {
         self.expect(b'(', "`(`")?;
         while let Some(byte) = self.peek() {

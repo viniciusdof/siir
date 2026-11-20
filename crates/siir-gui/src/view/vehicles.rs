@@ -1,12 +1,10 @@
-//! The Vehicles screen: the vehicle list and the selected vehicle's detail.
-
 use gpui_kit::assets::IconName;
 use gpui_kit::base::Button as BaseButton;
 use gpui_kit::base::Popover;
 use gpui_kit::prelude::*;
 use gpui_kit::{
-    Anchor, AnyElement, Context, ElementId, FontWeight, IntoElement, SharedString, div, px,
-    transparent_black,
+    Anchor, AnyElement, Context, ElementId, FocusHandle, FontWeight, IntoElement, SharedString,
+    div, px, transparent_black,
 };
 
 use siir_gui::format;
@@ -17,8 +15,11 @@ use siir_save::{Command, Game};
 use crate::ui::{self, Tone, tokens};
 use crate::view::AppView;
 
-/// Width of the vehicle list column.
 const LIST_WIDTH: f32 = 300.0;
+
+const PART_CELL: f32 = (tokens::FORM_WIDTH - 2.0 * tokens::SPACE_6 - tokens::SPACE_4) / 2.0;
+
+pub(super) const PART_COUNT: usize = PartKind::ALL.len();
 
 impl AppView {
     pub(crate) fn render_vehicles(&self, cx: &mut Context<'_, Self>) -> impl IntoElement {
@@ -76,8 +77,6 @@ impl AppView {
                     .py(px(tokens::SPACE_2))
                     .border_b_1()
                     .border_color(palette.border)
-                    // The bulk actions reach every owned vehicle, so they only
-                    // show while the owned list is on screen.
                     .when(!self.show_used_market, |this| {
                         this.child(
                             ui::button("repair-all", t("vehicles.repair_all"))
@@ -122,7 +121,6 @@ impl AppView {
             .into_any_element()
     }
 
-    /// One list row: the model's game name, its plate, and a Current tag.
     fn vehicle_row(
         &self,
         vehicle: &VehicleRow,
@@ -202,13 +200,27 @@ impl AppView {
         )
     }
 
-    /// The selected vehicle: odometer, fuel, wear, and its actions.
     fn vehicle_detail(&self, vehicle: &VehicleRow, cx: &mut Context<'_, Self>) -> AnyElement {
         let palette = tokens::palette();
         let fuel = self.fuel.read(cx).value().end().round();
         let country = self.country_menu(cx);
+        let parts = (vehicle.listing.is_none() && self.has_parts(vehicle)).then(|| {
+            div()
+                .flex()
+                .flex_col()
+                .gap(px(tokens::SPACE_2))
+                .child(ui::section_title(t("vehicles.parts")))
+                .child(div().flex().flex_wrap().gap(px(tokens::SPACE_4)).children(
+                    PartKind::ALL.into_iter().enumerate().map(|(ix, kind)| {
+                        div().w(px(PART_CELL)).child(ui::field(
+                            t(kind.key()),
+                            self.part_menu(kind, vehicle, &self.parts_focus[ix], cx),
+                            None,
+                        ))
+                    }),
+                ))
+        });
         let id = vehicle.id.clone();
-        // `Command` is not `Clone`, so each click builds its command from the id.
         let action = |key: &'static str, icon: IconName, command: fn(String) -> Command| {
             let id = id.clone();
             ui::button(SharedString::from(format!("vehicle-{key}")), t(key))
@@ -249,7 +261,6 @@ impl AppView {
                                     }),
                             ),
                     )
-                    // A listing has no plate of its own; it shows its price instead.
                     .when(vehicle.listing.is_none(), |this| {
                         this.child(
                             div()
@@ -350,6 +361,7 @@ impl AppView {
                                 format::percent(vehicle.cabin_wear),
                             )),
                     )
+                    .when_some(parts, |this, parts| this.child(parts))
                     .when(vehicle.listing.is_none(), |this| {
                         this.child(
                             div()
@@ -388,9 +400,6 @@ impl AppView {
             .into_any_element()
     }
 
-    /// The plate country: the current one on a trigger, and the catalog's
-    /// countries in the UI language on a menu that opens above it, so the
-    /// page does not shift.
     fn country_menu(&self, cx: &mut Context<'_, Self>) -> impl IntoElement + use<> {
         let palette = tokens::palette();
         let language = i18n::current_locale().into_owned();
@@ -421,7 +430,6 @@ impl AppView {
         countries.sort_by(|left, right| left.1.cmp(&right.1));
         let view = cx.entity().downgrade();
         Popover::new("plate-country-menu")
-            // The menu hangs above the trigger instead of pushing the page down.
             .anchor(Anchor::BottomLeft)
             .trigger(
                 ui::select_field("plate-country-trigger", label, accessible)
@@ -464,7 +472,6 @@ impl AppView {
             })
     }
 
-    /// The label of the plate country: ATS plates name a state.
     fn plate_country_label(&self) -> String {
         match self.state.game() {
             Game::Ets2 => t("field.plate_country"),
@@ -472,11 +479,204 @@ impl AppView {
         }
     }
 
-    /// The catalog's name for a plate country token.
     fn catalog_country_name(&self, token: &str, language: &str) -> Option<String> {
         self.catalog
             .as_ref()
             .and_then(|catalog| catalog.country_name(token, language))
             .map(str::to_owned)
+    }
+
+    fn has_parts(&self, vehicle: &VehicleRow) -> bool {
+        vehicle
+            .model
+            .as_deref()
+            .and_then(|token| self.model(token))
+            .is_some_and(|model| !model.engines.is_empty())
+    }
+
+    fn part_menu(
+        &self,
+        part: PartKind,
+        vehicle: &VehicleRow,
+        focus: &FocusHandle,
+        cx: &mut Context<'_, Self>,
+    ) -> impl IntoElement + use<> {
+        let palette = tokens::palette();
+        let key = part.key();
+        let current = part.current(vehicle).map(str::to_owned);
+        let options = self.part_options(part, vehicle.model.as_deref());
+        let label = current
+            .as_deref()
+            .map(|path| {
+                options
+                    .iter()
+                    .find(|(option, _)| option == path)
+                    .map(|(_, name)| name.clone())
+                    .unwrap_or_else(|| part_label(path))
+            })
+            .unwrap_or_else(|| t("part.none"));
+        let accessible = format!("{}: {label}", t(key));
+        let id = vehicle.id.clone();
+        let view = cx.entity().downgrade();
+        Popover::new(format!("{key}-menu"))
+            .anchor(Anchor::BottomLeft)
+            .trigger(
+                ui::select_field(format!("{key}-trigger"), label, accessible).track_focus(focus),
+            )
+            .content(move |_, _, cx| {
+                let popover = cx.entity();
+                let mut menu = div()
+                    .id(format!("{key}-list"))
+                    .flex()
+                    .flex_col()
+                    .items_start()
+                    .gap(px(tokens::SPACE_1))
+                    .p(px(tokens::SPACE_1))
+                    .max_h(px(260.0))
+                    .overflow_y_scroll()
+                    .on_scroll(|_, _, cx| cx.stop_propagation())
+                    .bg(palette.panel)
+                    .border_1()
+                    .border_color(palette.border)
+                    .rounded(px(tokens::RADIUS));
+                for (path, name) in &options {
+                    let selected = current.as_deref() == Some(path.as_str());
+                    let path = path.clone();
+                    let id = id.clone();
+                    let view = view.clone();
+                    let popover = popover.clone();
+                    menu = menu.child(
+                        ui::button(format!("{key}-option-{path}"), name.clone())
+                            .tone(Tone::Quiet)
+                            .selected(selected)
+                            .on_click(move |_, window, cx| {
+                                if !selected {
+                                    view.update(cx, |view, cx| {
+                                        view.apply(
+                                            part.command(id.clone(), path.clone()),
+                                            |_| {},
+                                            cx,
+                                        )
+                                    })
+                                    .ok();
+                                }
+                                popover.update(cx, |state, cx| state.dismiss(window, cx));
+                            }),
+                    );
+                }
+                menu.into_any_element()
+            })
+    }
+
+    fn part_options(&self, part: PartKind, model: Option<&str>) -> Vec<(String, String)> {
+        let Some(truck) = model.and_then(|token| self.model(token)) else {
+            return Vec::new();
+        };
+        let language = i18n::current_locale();
+        let mut options = Vec::new();
+        let mut add = |path: &str, name: Option<&str>| {
+            let name = name.map(str::to_owned).unwrap_or_else(|| part_label(path));
+            options.push((path.to_owned(), name));
+        };
+        match part {
+            PartKind::Engine => truck
+                .engines
+                .iter()
+                .for_each(|part| add(&part.path, part.name(&language))),
+            PartKind::Transmission => truck
+                .transmissions
+                .iter()
+                .for_each(|part| add(&part.path, part.name(&language))),
+            PartKind::Cabin => truck
+                .cabins
+                .iter()
+                .for_each(|part| add(&part.path, part.name(&language))),
+            PartKind::Chassis => truck
+                .chassis
+                .iter()
+                .for_each(|part| add(&part.path, part.name(&language))),
+        }
+        disambiguate(&mut options);
+        options
+    }
+
+    fn model(&self, token: &str) -> Option<&siir_save::catalog::VehicleModel> {
+        self.catalog.as_ref()?.vehicle(token)
+    }
+}
+
+fn part_label(path: &str) -> String {
+    path.rsplit('/')
+        .next()
+        .unwrap_or(path)
+        .trim_end_matches(".sii")
+        .to_owned()
+}
+
+fn disambiguate(options: &mut [(String, String)]) {
+    let repeated: Vec<bool> = options
+        .iter()
+        .map(|(_, name)| options.iter().filter(|(_, other)| other == name).count() > 1)
+        .collect();
+    for ((path, name), repeated) in options.iter_mut().zip(repeated) {
+        if repeated {
+            *name = format!("{name} ({})", part_label(path));
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+enum PartKind {
+    Engine,
+    Transmission,
+    Cabin,
+    Chassis,
+}
+
+impl PartKind {
+    const ALL: [Self; 4] = [Self::Engine, Self::Transmission, Self::Cabin, Self::Chassis];
+
+    fn key(self) -> &'static str {
+        match self {
+            Self::Engine => "field.engine",
+            Self::Transmission => "field.transmission",
+            Self::Cabin => "field.cabin",
+            Self::Chassis => "field.chassis",
+        }
+    }
+
+    fn current(self, vehicle: &VehicleRow) -> Option<&str> {
+        match self {
+            Self::Engine => vehicle.engine.as_deref(),
+            Self::Transmission => vehicle.transmission.as_deref(),
+            Self::Cabin => vehicle.cabin.as_deref(),
+            Self::Chassis => vehicle.chassis.as_deref(),
+        }
+    }
+
+    fn command(self, id: String, path: String) -> Command {
+        match self {
+            Self::Engine => Command::SetEngine { id, path },
+            Self::Transmission => Command::SetTransmission { id, path },
+            Self::Cabin => Command::SetCabin { id, path },
+            Self::Chassis => Command::SetChassis { id, path },
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::disambiguate;
+
+    #[test]
+    fn adds_the_file_stem_only_to_repeated_names() {
+        let mut options = vec![
+            ("/def/cabin/l2h3.sii".to_owned(), "XXL".to_owned()),
+            ("/def/cabin/l2h3_aero.sii".to_owned(), "XXL".to_owned()),
+            ("/def/cabin/l2h1.sii".to_owned(), "Sleeper".to_owned()),
+        ];
+        disambiguate(&mut options);
+        let names: Vec<&str> = options.iter().map(|(_, name)| name.as_str()).collect();
+        assert_eq!(names, ["XXL (l2h3)", "XXL (l2h3_aero)", "Sleeper"]);
     }
 }

@@ -79,27 +79,32 @@ fn reads_plate_countries_in_every_language() {
 #[test]
 fn reads_trucks_parts_and_transmissions() {
     let catalog = Catalog::generate(&def(), &locale(), Game::Ets2).unwrap();
-    let trucks = catalog.trucks();
-    assert_eq!(trucks.len(), 1);
+    assert_eq!(catalog.vehicles().len(), 2);
+    let bus = catalog.vehicle("test.bus").unwrap();
+    assert_eq!(bus.engines.len(), 1, "a bus carries parts too");
 
-    let truck = &trucks[0];
-    assert_eq!(truck.brand, "test");
-    assert_eq!(truck.model, "model");
+    let truck = catalog.vehicle("test.model").unwrap();
 
     assert_eq!(truck.engines.len(), 2, "the broken file is skipped");
-    assert_eq!(truck.engines[0].name, "Test 100");
+    assert_eq!(truck.engines[0].name("en_us"), Some("Test 100"));
     assert_eq!(truck.engines[0].power_hp, 136);
     assert_eq!(truck.engines[0].torque_nm, 500);
     assert_eq!(
         truck.engines[0].path,
         "/def/vehicle/truck/test.model/engine/100.sii"
     );
+    assert_eq!(truck.engines[1].name("en_us"), Some("200 hp"));
+    assert_eq!(
+        truck.engines[1].name("pt_br"),
+        Some("200 hp"),
+        "a missing language falls back to English"
+    );
     assert_eq!(truck.engines[1].power_hp, 272);
     assert_eq!(truck.engines[1].torque_nm, 1200);
 
     assert_eq!(truck.transmissions.len(), 2);
     let twelve = &truck.transmissions[0];
-    assert_eq!(twelve.name, "Twelve");
+    assert_eq!(twelve.name("en_us"), Some("Twelve"));
     assert_eq!(twelve.ratios.len(), 12);
     assert_eq!(twelve.ratios[0], 12.0);
     assert_eq!(twelve.ratios[11], 0.7);
@@ -112,13 +117,16 @@ fn reads_trucks_parts_and_transmissions() {
     assert_eq!(six.ratios.len(), 6);
     assert!(!six.retarder);
 
-    assert_eq!(truck.cabins[0].name, "Space");
+    assert_eq!(truck.cabins[0].name("en_us"), Some("Space"));
     assert_eq!(
         truck.cabins[0].path,
         "/def/vehicle/truck/test.model/cabin/space.sii"
     );
-    assert_eq!(truck.chassis[0].name, "4x2");
-    assert_eq!(truck.paint_jobs[0].name, "Red");
+    assert_eq!(truck.chassis[0].name("en_us"), Some("4x2"));
+    assert!(
+        truck.paint_jobs[0].names.is_empty(),
+        "paint jobs keep no names until a screen offers them"
+    );
     assert_eq!(
         truck.paint_jobs[0].path,
         "/def/vehicle/truck/test.model/paint_job/color1.sii"
@@ -140,6 +148,44 @@ fn reads_trucks_parts_and_transmissions() {
     assert_eq!(trailer.id, "trailer_def.test.single_3");
     assert_eq!(trailer.body_type, "curtainside");
     assert_eq!(trailer.chain_type, "single");
+    assert_eq!(
+        catalog
+            .trailer("trailer_def.test.single_3")
+            .map(|trailer| trailer.body_type.as_str()),
+        Some("curtainside")
+    );
+    assert!(catalog.trailer("trailer_def.test.missing").is_none());
+    assert_eq!(
+        catalog.body_type_name("curtainside", "en_us"),
+        Some("Curtainsider")
+    );
+    assert_eq!(
+        catalog.body_type_name("curtainside", "pt_br"),
+        Some("Cortina")
+    );
+    assert_eq!(
+        catalog.body_type_name("curtainside", "xx_yy"),
+        Some("Curtainsider"),
+        "a missing language falls back to English"
+    );
+    assert_eq!(catalog.body_type_name("unknown", "en_us"), None);
+
+    assert_eq!(catalog.brand_name("krone", "en_us"), Some("Krone"));
+    assert_eq!(
+        catalog.brand_name("krone", "pt_br"),
+        Some("Krone"),
+        "a brand shared by every language falls back to English"
+    );
+    assert_eq!(catalog.brand_name("unknown", "en_us"), None);
+
+    assert_eq!(catalog.city_name("testville", "en_us"), Some("Testville"));
+    assert_eq!(catalog.city_name("testville", "pt_br"), Some("Testvila"));
+    assert_eq!(
+        catalog.city_name("testville", "xx_yy"),
+        Some("Testville"),
+        "a missing language falls back to English"
+    );
+    assert_eq!(catalog.city_name("nowhere", "en_us"), None);
     assert_eq!(trailer.volume, 87.0);
     assert_eq!(trailer.gross_weight_limit, 35_000);
     assert_eq!(trailer.chassis_mass, 6461);

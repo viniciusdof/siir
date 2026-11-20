@@ -1,6 +1,3 @@
-//! The economy form: money, level and experience, skills, ADR classes,
-//! cities, and dealerships.
-
 use gpui_kit::prelude::*;
 use gpui_kit::{Context, Div, FontWeight, IntoElement, SharedString, div, px};
 
@@ -12,7 +9,6 @@ use siir_save::Command;
 use crate::ui::{self, Tone, tokens};
 use crate::view::AppView;
 
-/// The five skills that are levels from 0 to 6, in command order.
 const SKILLS: [&str; 5] = [
     "skill.long_dist",
     "skill.heavy",
@@ -21,9 +17,7 @@ const SKILLS: [&str; 5] = [
     "skill.mechanical",
 ];
 
-/// Cell width in the two-column skill grid.
 const SKILL_CELL: f32 = (tokens::FORM_WIDTH - 2.0 * tokens::SPACE_6 - tokens::SPACE_4) / 2.0;
-/// Cell width in the three-column ADR grid.
 const ADR_CELL: f32 = (tokens::FORM_WIDTH - 2.0 * tokens::SPACE_6 - 2.0 * tokens::SPACE_2) / 3.0;
 
 impl AppView {
@@ -100,7 +94,6 @@ impl AppView {
             )
     }
 
-    /// The balance in the profile's currency, with the game's signs around it.
     fn money_field(&self) -> impl IntoElement {
         let currency = self.currency();
         let before = format!("{}{}", currency.sign1, currency.sign2);
@@ -115,8 +108,6 @@ impl AppView {
         )
     }
 
-    /// The level slider with its title, and the experience it stands for,
-    /// shown but not edited. Without a level table only the experience shows.
     fn level_row(&self, cx: &mut Context<'_, Self>) -> Div {
         let palette = tokens::palette();
         let game = self.state.game();
@@ -185,8 +176,6 @@ impl AppView {
             )
     }
 
-    /// One all-or-nothing list: its size, the action that fills it, and the
-    /// action that empties it.
     fn world_row(
         id: &'static str,
         label: String,
@@ -221,9 +210,6 @@ impl AppView {
                     .child(count.to_string()),
             )
             .child(
-                // shortcut: the fill command is idempotent but always re-applies,
-                // so a second click still marks the save edited; skip it once the
-                // read model exposes the city total.
                 ui::button(
                     SharedString::from(format!("{id}-discover")),
                     discover.clone(),
@@ -243,7 +229,6 @@ impl AppView {
             )
     }
 
-    /// Two sliders per row, each with its label and level.
     fn skill_grid(&self, cx: &mut Context<'_, Self>) -> Div {
         let mut cells: Vec<Div> = Vec::with_capacity(SKILLS.len());
         for (ix, key) in SKILLS.iter().enumerate() {
@@ -285,7 +270,6 @@ impl AppView {
             .child(ui::slider(&self.skills[ix], &self.skill_focus[ix], t(key)))
     }
 
-    /// The six ADR classes as independent checkboxes, three per row.
     fn adr_grid(&self, cx: &mut Context<'_, Self>) -> Div {
         let mut cells: Vec<Div> = Vec::with_capacity(ADR_CLASSES.len());
         for (ix, key) in ADR_CLASSES.iter().enumerate() {

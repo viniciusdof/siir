@@ -9,3 +9,12 @@
 
 	key[]: "lvl_name1"
 	val[]: "Enthusiast"
+
+	key[]: "engine_200"
+	val[]: "200 hp"
+
+	key[]: "curtainside"
+	val[]: "Curtainsider"
+
+	key[]: "city_testville"
+	val[]: "Testville"

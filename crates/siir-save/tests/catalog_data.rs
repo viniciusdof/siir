@@ -19,9 +19,9 @@ fn snapshot(game: &str) -> Value {
 
 fn assert_snapshot(game: &str, name: &str) {
     let data = snapshot(game);
-    assert_eq!(data["format"], 4, "{name}");
+    assert_eq!(data["game"], game, "{name}");
     assert!(
-        !data["countries"].as_array().unwrap().is_empty(),
+        !data["country_names"].as_array().unwrap().is_empty(),
         "{name}: no countries"
     );
     let steps = data["levels"]["steps"].as_array().unwrap();
@@ -32,32 +32,38 @@ fn assert_snapshot(game: &str, name: &str) {
             .all(|step| step.as_u64().is_some_and(|step| step > 0)),
         "{name}: a level step is not positive"
     );
-    assert_eq!(data["game"], game, "{name}");
-    for section in ["trucks", "cargo", "companies", "trailers", "models"] {
+    for section in [
+        "vehicles",
+        "cargo",
+        "companies",
+        "trailers",
+        "trailer_body_types",
+        "trailer_brands",
+        "cities",
+    ] {
         let items = data[section].as_array().unwrap_or_else(|| {
             panic!("{name}: {section} is not an array");
         });
         assert!(!items.is_empty(), "{name}: no {section}");
     }
-    let trucks = data["trucks"].as_array().unwrap();
+    let vehicles = data["vehicles"].as_array().unwrap();
     assert!(
-        trucks.iter().any(|truck| {
-            truck["engines"]
+        vehicles.iter().any(|vehicle| {
+            vehicle["engines"]
                 .as_array()
                 .is_some_and(|engines| !engines.is_empty())
         }),
         "{name}: no truck has an engine"
     );
-    for truck in trucks {
-        let brand = truck["brand"].as_str().unwrap();
-        let model = truck["model"].as_str().unwrap();
-        assert!(!brand.is_empty() && !model.is_empty(), "{name}");
-        for engine in truck["engines"].as_array().unwrap() {
+    for vehicle in vehicles {
+        let token = vehicle["token"].as_str().unwrap();
+        assert!(token.contains('.'), "{name}: {token}");
+        for engine in vehicle["engines"].as_array().into_iter().flatten() {
             assert!(
                 engine["path"]
                     .as_str()
                     .unwrap()
-                    .starts_with("/def/vehicle/truck/"),
+                    .starts_with("/def/vehicle/"),
                 "{name}"
             );
         }
@@ -68,7 +74,7 @@ fn assert_load(game: Game, name: &str) {
     let data = snapshot(name);
     let catalog = Catalog::load(game).unwrap_or_else(|error| panic!("{name}: {error}"));
     for (section, len) in [
-        ("trucks", catalog.trucks().len()),
+        ("vehicles", catalog.vehicles().len()),
         ("cargo", catalog.cargo().len()),
         ("companies", catalog.companies().len()),
         ("trailers", catalog.trailers().len()),
@@ -81,19 +87,20 @@ fn assert_load(game: Game, name: &str) {
         );
     }
 
-    assert_eq!(
-        catalog.vehicle_names().len(),
-        data["models"].as_array().unwrap().len(),
-        "{name}: models"
-    );
-
-    let truck = &catalog.trucks()[0];
-    let json = &data["trucks"][0];
-    assert_eq!(truck.brand, json["brand"].as_str().unwrap(), "{name}");
-    assert_eq!(truck.model, json["model"].as_str().unwrap(), "{name}");
+    let ix = catalog
+        .vehicles()
+        .iter()
+        .position(|vehicle| !vehicle.engines.is_empty())
+        .unwrap();
+    let truck = &catalog.vehicles()[ix];
+    let json = &data["vehicles"][ix];
+    assert_eq!(truck.token, json["token"].as_str().unwrap(), "{name}");
     let engine = &truck.engines[0];
     let json = &json["engines"][0];
-    assert_eq!(engine.name, json["name"].as_str().unwrap(), "{name}");
+    let english = json["names"]["en_us"]
+        .as_str()
+        .unwrap_or_else(|| panic!("{name}: an engine has no English name"));
+    assert_eq!(engine.name("en_us"), Some(english), "{name}");
     assert_eq!(
         engine.power_hp as u64,
         json["power_hp"].as_u64().unwrap(),
@@ -166,6 +173,45 @@ fn assert_load(game: Game, name: &str) {
         json["length"].as_f64().unwrap() as f32,
         "{name}"
     );
+
+    let found = catalog
+        .vehicle(&truck.token)
+        .expect("the model token resolves");
+    assert_eq!(found.engines.len(), truck.engines.len(), "{name}");
+    assert_eq!(found.cabins.len(), truck.cabins.len(), "{name}");
+    assert!(catalog.vehicle("no.such_model").is_none(), "{name}");
+
+    let body_type = &catalog.body_types()[0];
+    let json = &data["trailer_body_types"][0];
+    assert_eq!(body_type.token, json["token"].as_str().unwrap(), "{name}");
+    let english = json["names"]["en_us"]
+        .as_str()
+        .unwrap_or_else(|| panic!("{name}: a body type has no English name"));
+    assert_eq!(
+        catalog.body_type_name(&body_type.token, "en_us"),
+        Some(english),
+        "{name}"
+    );
+
+    for (token, section, resolved) in [
+        (
+            catalog.brands()[0].token.as_str(),
+            "trailer_brands",
+            catalog.brand_name(&catalog.brands()[0].token, "en_us"),
+        ),
+        (
+            catalog.cities()[0].token.as_str(),
+            "cities",
+            catalog.city_name(&catalog.cities()[0].token, "en_us"),
+        ),
+    ] {
+        let json = &data[section][0];
+        assert_eq!(json["token"].as_str(), Some(token), "{name}");
+        let english = json["names"]["en_us"]
+            .as_str()
+            .unwrap_or_else(|| panic!("{name}: {section} has no English name"));
+        assert_eq!(resolved, Some(english), "{name}");
+    }
 }
 
 #[test]

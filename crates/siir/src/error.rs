@@ -1,5 +1,3 @@
-//! Errors raised while reading or editing SII data.
-
 use std::fmt;
 
 /// A typed SIIR failure with the byte offset where it was detected.

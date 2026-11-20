@@ -222,7 +222,6 @@ mod tests {
             level(4, &levels),
             Some(Command::SetExperience(2100))
         ));
-        // A level whose starting experience is beyond the 32-bit counter.
         assert!(level(7_000_000, &levels).is_none());
         assert!(level(1, &Levels::default()).is_none());
     }

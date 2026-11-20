@@ -1,5 +1,3 @@
-//! The one window: the save list, the editor shell, and the save flow.
-
 mod discovery;
 mod economy;
 mod overview;
@@ -30,12 +28,8 @@ use siir_save::{Command, Game};
 
 use crate::ui::{self, Tone, tokens};
 
-/// Highest level the slider offers. The game defines no cap: this is a product
-/// choice, the level of the last title, far below what the 32-bit experience
-/// counter holds.
 const LEVEL_SLIDER_MAX: u32 = 100;
 
-/// A whole-level slider from 0 to `max`.
 fn level_slider(max: u32) -> SliderState {
     SliderState::new()
         .min(0.0)
@@ -44,7 +38,6 @@ fn level_slider(max: u32) -> SliderState {
         .default_value(0.0)
 }
 
-/// One section of the editor shell.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Section {
     Overview,
@@ -54,7 +47,6 @@ enum Section {
     Trailers,
 }
 
-/// The application window.
 pub struct AppView {
     state: State,
     settings: Settings,
@@ -64,6 +56,7 @@ pub struct AppView {
     level: Entity<SliderState>,
     level_focus: FocusHandle,
     country_focus: FocusHandle,
+    parts_focus: Vec<FocusHandle>,
     locale_focus: FocusHandle,
     profile_name: Entity<InputState>,
     skills: Vec<Entity<SliderState>>,
@@ -103,7 +96,6 @@ pub struct AppView {
 }
 
 impl AppView {
-    /// Discovers saves for the remembered game and folders.
     pub fn new(mut dirs: Vec<PathBuf>, window: &mut Window, cx: &mut Context<'_, Self>) -> Self {
         let settings = Settings::load();
         if let Some(locale) = settings.locale() {
@@ -196,8 +188,6 @@ impl AppView {
             &used_price,
             window,
             |this, _, event: &InputEvent, window, cx| {
-                // `Some(false)` means the typed amount converts back to the
-                // stored one, so the field would keep a value nobody saved.
                 if matches!(event, InputEvent::Change)
                     && this.apply_used_price_text(cx) == Some(false)
                 {
@@ -292,9 +282,6 @@ impl AppView {
             }));
         }
 
-        // The window is the whole app, so closing it quits instead of
-        // destroying the window: on Touch Bar Macs, AppKit aborts when a GPUI
-        // window is torn down (AccessKit#823), while quitting exits cleanly.
         let close = cx.entity().downgrade();
         window.on_window_should_close(cx, move |window, cx| {
             let asked = close
@@ -324,6 +311,9 @@ impl AppView {
             level,
             level_focus,
             country_focus: cx.focus_handle().tab_stop(true),
+            parts_focus: (0..vehicles::PART_COUNT)
+                .map(|_| cx.focus_handle().tab_stop(true))
+                .collect(),
             locale_focus: cx.focus_handle().tab_stop(true),
             profile_name,
             skills,
@@ -367,7 +357,6 @@ impl AppView {
         cx.new(|cx| InputState::new(window, cx))
     }
 
-    /// A whole-number field; `negative` also accepts a leading minus.
     fn number_input(
         window: &mut Window,
         cx: &mut Context<'_, Self>,
@@ -397,7 +386,6 @@ impl AppView {
         cx.notify();
     }
 
-    /// Writes the settings; a failure shows the banner.
     fn save_settings(&mut self) {
         if self.settings.save().is_err() {
             self.action_error = Some("error.settings");
@@ -411,8 +399,6 @@ impl AppView {
         cx.notify();
     }
 
-    /// Opens `section` with focus on the control a link pointed at, since the
-    /// link itself is no longer drawn.
     fn follow_link(
         &mut self,
         section: Section,
@@ -454,7 +440,6 @@ impl AppView {
         self.close_save(window, cx);
     }
 
-    /// Opens the unsaved-changes dialog with focus on the safe choice.
     fn ask_leave(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
         self.action_error = None;
         self.confirm_leave = true;
@@ -462,7 +447,6 @@ impl AppView {
         cx.notify();
     }
 
-    /// Leaves the open save without writing it.
     fn discard(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
         let closes = self.close_after_discard;
         self.close_save(window, cx);
@@ -471,7 +455,6 @@ impl AppView {
         }
     }
 
-    /// Closes the dialog and returns focus to the Switch save trigger.
     fn keep_editing(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
         self.confirm_leave = false;
         self.close_after_discard = false;
@@ -480,8 +463,6 @@ impl AppView {
         cx.notify();
     }
 
-    /// Returns to the save list with focus on its search field, since the
-    /// control that closed the save is gone.
     fn close_save(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
         if let Some(ix) = self.state.selected_save()
             && let Some(row) = self.state.saves().get(ix)
@@ -538,7 +519,6 @@ impl AppView {
         cx.notify();
     }
 
-    /// Applies the text of every form field and reports whether all parse.
     fn commit_fields(&mut self, cx: &mut Context<'_, Self>) -> bool {
         self.commit_money(cx);
         self.commit_profile_name(cx);
@@ -558,7 +538,6 @@ impl AppView {
             && self.cargo_mass_error.is_none()
     }
 
-    /// Puts the stored balance into its field, converted to the shown currency.
     fn sync_money(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
         let game = self.state.game();
         let Some(money) = self.state.open().and_then(|open| open.view().money) else {
@@ -570,8 +549,6 @@ impl AppView {
         });
     }
 
-    /// Puts the selected listing's stored asking price into its field, in the
-    /// shown currency.
     fn sync_used_price(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
         let game = self.state.game();
         let Some(price) = self
@@ -587,12 +564,6 @@ impl AppView {
         });
     }
 
-    /// Applies the money text. `None` means it does not parse, `Some(true)`
-    /// that the balance changed, `Some(false)` that the typed amount is the
-    /// amount already stored once converted back.
-    ///
-    /// The text is in the profile's currency. Leaving it as shown never
-    /// rewrites the balance, even when the conversion rounds.
     fn apply_money_text(&mut self, cx: &mut Context<'_, Self>) -> Option<bool> {
         let text = self.money.read(cx).unmask_value().to_string();
         let currency = self.currency();
@@ -609,8 +580,6 @@ impl AppView {
         Some(true)
     }
 
-    /// Moves the experience to the start of the slider's level, unless it
-    /// already sits inside that level.
     fn apply_level(&mut self, cx: &mut Context<'_, Self>) {
         let level = self.level.read(cx).value().end().round().max(0.0) as u32;
         let Some(levels) = self.levels() else {
@@ -627,7 +596,6 @@ impl AppView {
         }
     }
 
-    /// The level table, when the catalog has one.
     fn levels(&self) -> Option<&Levels> {
         self.catalog
             .as_ref()
@@ -635,8 +603,6 @@ impl AppView {
             .filter(|levels| !levels.steps.is_empty())
     }
 
-    /// The profile's display currency; the save's own currency when the
-    /// catalog does not list the profile's choice.
     fn currency(&self) -> Currency {
         let index = self.state.open().map(|open| open.currency()).unwrap_or(0);
         self.catalog
@@ -646,10 +612,8 @@ impl AppView {
             .unwrap_or_else(|| format::native_currency(self.state.game()))
     }
 
-    /// Applies the profile name once it is valid; reports whether it was.
     fn apply_profile_name_text(&mut self, cx: &mut Context<'_, Self>) -> bool {
         let Some(open) = self.state.open().filter(|open| open.has_profile()) else {
-            // Without a profile file the field is not shown, so nothing to check.
             return true;
         };
         let current = open.view().profile_name.clone();
@@ -678,13 +642,11 @@ impl AppView {
         }
     }
 
-    /// Applies the plate text once it is valid; reports whether it was.
     fn apply_plate_text(&mut self, cx: &mut Context<'_, Self>) -> bool {
         let Some((id, plate)) = self
             .selected_row()
             .map(|row| (row.id.clone(), row.plate.clone()))
         else {
-            // Without a selected vehicle the field is not shown.
             return true;
         };
         let text = self.plate.read(cx).value().to_string();
@@ -695,8 +657,6 @@ impl AppView {
         self.plate_error = None;
         if next != plate {
             self.apply(edit::plate(&id, &text).expect("parsed above"), |_| {}, cx);
-            // The plate text replaces the raw text, country included, so put
-            // back the country the dropdown still shows.
             if let Some(country) = country {
                 self.set_plate_country(&country, cx);
             }
@@ -704,15 +664,12 @@ impl AppView {
         true
     }
 
-    /// Applies the asking price of the selected listing once it parses;
-    /// reports whether it did.
     fn apply_used_price_text(&mut self, cx: &mut Context<'_, Self>) -> Option<bool> {
         let Some((listing, price)) = self
             .selected_row()
             .and_then(|row| row.listing.as_ref())
             .map(|listing| (listing.id.clone(), listing.price))
         else {
-            // Without a listing the field is not shown.
             return Some(false);
         };
         let text = self.used_price.read(cx).unmask_value().to_string();
@@ -744,7 +701,6 @@ impl AppView {
         }
     }
 
-    /// Applies the plate country the dropdown names.
     fn set_plate_country(&mut self, country: &str, cx: &mut Context<'_, Self>) {
         let Some((id, current)) = self
             .selected_row()
@@ -767,7 +723,6 @@ impl AppView {
         }
     }
 
-    /// The selected vehicle's row in the owned view.
     fn selected_row(&self) -> Option<&siir_gui::view_data::VehicleRow> {
         let id = self.selected_vehicle.as_ref()?;
         self.state
@@ -778,8 +733,6 @@ impl AppView {
             .find(|vehicle| &vehicle.id == id)
     }
 
-    /// The game's name for a model folder, or the folder when the catalog
-    /// does not know it.
     fn vehicle_name(&self, model: Option<&str>) -> String {
         model
             .map(|token| {
@@ -800,7 +753,6 @@ impl AppView {
         cx.notify();
     }
 
-    /// Switches the list between the owned vehicles and the used market.
     fn toggle_used_market(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
         self.show_used_market = !self.show_used_market;
         let listed = self
@@ -813,8 +765,6 @@ impl AppView {
         cx.notify();
     }
 
-    /// The first vehicle of the shown list, preferring the current truck when
-    /// the list holds it.
     fn default_vehicle(&self) -> Option<String> {
         let vehicles = &self.state.open()?.view().vehicles;
         let listed =
@@ -827,7 +777,6 @@ impl AppView {
             .map(|vehicle| vehicle.id.clone())
     }
 
-    /// Puts the selected vehicle's odometer and fuel into their controls.
     fn sync_vehicle(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
         let game = self.state.game();
         let Some((odometer, fuel)) = self.selected_row().map(|row| (row.odometer, row.fuel)) else {
@@ -881,13 +830,11 @@ impl AppView {
         self.syncing = false;
     }
 
-    /// Applies the odometer text once it parses; reports whether it did.
     fn apply_odometer_text(&mut self, cx: &mut Context<'_, Self>) -> bool {
         let Some((id, Some(current))) = self
             .selected_row()
             .map(|row| (row.id.clone(), row.odometer))
         else {
-            // Without a stored odometer the field is not shown.
             return true;
         };
         let text = self.odometer.read(cx).unmask_value().to_string();
@@ -918,7 +865,6 @@ impl AppView {
         }
     }
 
-    /// Applies a vehicle action, then refreshes the controls it can change.
     fn vehicle_command(
         &mut self,
         command: Command,
@@ -929,7 +875,6 @@ impl AppView {
         self.sync_vehicle(window, cx);
     }
 
-    /// The selected trailer's row in the owned view.
     fn selected_trailer_row(&self) -> Option<&siir_gui::view_data::TrailerRow> {
         let id = self.selected_trailer.as_ref()?;
         self.state
@@ -946,7 +891,6 @@ impl AppView {
         cx.notify();
     }
 
-    /// The attached trailer, else the first one.
     fn default_trailer(&self) -> Option<String> {
         let trailers = &self.state.open()?.view().trailers;
         trailers
@@ -956,7 +900,6 @@ impl AppView {
             .map(|trailer| trailer.id.clone())
     }
 
-    /// Puts the selected trailer's plate and cargo mass into their fields.
     fn sync_trailer(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
         let game = self.state.game();
         let Some((plate, mass)) = self
@@ -987,13 +930,11 @@ impl AppView {
         });
     }
 
-    /// Applies the plate text once it is valid; reports whether it was.
     fn apply_trailer_plate_text(&mut self, cx: &mut Context<'_, Self>) -> bool {
         let Some((id, plate)) = self
             .selected_trailer_row()
             .map(|row| (row.id.clone(), row.plate.clone()))
         else {
-            // Without a selected trailer the field is not shown.
             return true;
         };
         let text = self.trailer_plate.read(cx).value().to_string();
@@ -1013,7 +954,6 @@ impl AppView {
         true
     }
 
-    /// Applies the cargo mass once it parses; reports whether it did.
     fn apply_cargo_mass_text(&mut self, cx: &mut Context<'_, Self>) -> bool {
         let Some((id, mass)) = self
             .selected_trailer_row()
@@ -1056,7 +996,6 @@ impl AppView {
         }
     }
 
-    /// Applies a trailer action, then refreshes the fields it can change.
     fn trailer_command(
         &mut self,
         command: Command,
@@ -1159,8 +1098,6 @@ impl AppView {
             .unwrap_or_default();
         self.syncing = true;
         self.level.update(cx, |state, cx| {
-            // A save already past the slider's range widens it instead of
-            // showing a lower level than it has.
             *state = level_slider(LEVEL_SLIDER_MAX.max(level));
             state.set_value(level as f32, window, cx);
         });
@@ -1217,7 +1154,6 @@ impl AppView {
         .detach();
     }
 
-    /// The language dropdown over every shipped locale.
     fn locale_menu(&self, cx: &mut Context<'_, Self>) -> impl IntoElement {
         let palette = tokens::palette();
         let current = i18n::current_locale();
@@ -1530,7 +1466,6 @@ impl AppView {
     }
 }
 
-/// Shows `path` in the file manager of the running OS.
 fn reveal(path: &Path) -> std::io::Result<()> {
     let mut command = match std::env::consts::OS {
         "macos" => {
@@ -1543,7 +1478,6 @@ fn reveal(path: &Path) -> std::io::Result<()> {
             command.arg(format!("/select,{}", path.display()));
             command
         }
-        // Linux file managers have no standard "select this file" argument.
         _ => {
             let mut command = std::process::Command::new("xdg-open");
             command.arg(path.parent().unwrap_or(path));

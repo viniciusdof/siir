@@ -1,5 +1,3 @@
-//! The save tree and the error banner.
-
 use gpui_kit::assets::IconName;
 use gpui_kit::base::Button as BaseButton;
 use gpui_kit::prelude::*;

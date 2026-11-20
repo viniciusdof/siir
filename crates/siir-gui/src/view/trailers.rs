@@ -1,5 +1,3 @@
-//! The Trailers screen: the trailer list and the selected trailer's detail.
-
 use gpui_kit::assets::IconName;
 use gpui_kit::base::Button as BaseButton;
 use gpui_kit::prelude::*;
@@ -9,14 +7,13 @@ use gpui_kit::{
 };
 
 use siir_gui::format;
-use siir_gui::i18n::t;
+use siir_gui::i18n::{self, t};
 use siir_gui::view_data::TrailerRow;
 use siir_save::Command;
 
 use crate::ui::{self, tokens};
 use crate::view::AppView;
 
-/// Width of the trailer list column.
 const LIST_WIDTH: f32 = 300.0;
 
 impl AppView {
@@ -88,7 +85,6 @@ impl AppView {
             .into_any_element()
     }
 
-    /// One list row: definition, plate, and a Current tag.
     fn trailer_row(
         &self,
         trailer: &TrailerRow,
@@ -97,7 +93,8 @@ impl AppView {
     ) -> impl IntoElement {
         let palette = tokens::palette();
         let selected = self.selected_trailer.as_ref() == Some(&trailer.id);
-        let mut label = format!("{}, {}", trailer.definition, trailer.plate);
+        let name = self.trailer_name(trailer);
+        let mut label = format!("{}, {}", name, trailer.plate);
         if trailer.current {
             label.push_str(&format!(", {}", t("vehicles.current")));
         }
@@ -142,7 +139,7 @@ impl AppView {
                             FontWeight::NORMAL
                         })
                         .text_color(palette.text)
-                        .child(trailer.definition.clone()),
+                        .child(name),
                 )
                 .child(
                     div()
@@ -167,7 +164,6 @@ impl AppView {
         )
     }
 
-    /// The selected trailer: plate, cargo mass, wear, and its actions.
     fn trailer_detail(&self, trailer: &TrailerRow, cx: &mut Context<'_, Self>) -> AnyElement {
         let palette = tokens::palette();
         let id = trailer.id.clone();
@@ -197,12 +193,17 @@ impl AppView {
                             .flex()
                             .flex_col()
                             .gap(px(tokens::SPACE_1))
-                            .child(ui::section_title(trailer.definition.clone()))
+                            .child(ui::section_title(self.trailer_name(trailer)))
                             .child(
                                 div()
                                     .text_size(px(tokens::TEXT_BODY))
                                     .text_color(palette.muted)
-                                    .child(trailer.id.clone()),
+                                    .child(
+                                        trailer
+                                            .source
+                                            .clone()
+                                            .unwrap_or_else(|| trailer.definition.clone()),
+                                    ),
                             ),
                     )
                     .child(
@@ -269,5 +270,74 @@ impl AppView {
                     ),
             )
             .into_any_element()
+    }
+
+    fn trailer_name(&self, trailer: &TrailerRow) -> String {
+        let body_type = match trailer.body_type.as_deref() {
+            Some(body_type) => Some(body_type),
+            None => self
+                .catalog
+                .as_ref()
+                .and_then(|catalog| catalog.trailer(&trailer.definition))
+                .map(|definition| definition.body_type.as_str()),
+        };
+        let Some(body_type) = body_type else {
+            return trailer.definition.clone();
+        };
+        let name = self
+            .catalog
+            .as_ref()
+            .and_then(|catalog| catalog.body_type_name(body_type, i18n::current_locale().as_ref()))
+            .unwrap_or(body_type);
+        let id = trailer.source.as_deref().unwrap_or(&trailer.definition);
+        let brand = trailer_brand(id).map(|token| {
+            self.catalog
+                .as_ref()
+                .and_then(|catalog| catalog.brand_name(token, i18n::current_locale().as_ref()))
+                .map(str::to_owned)
+                .unwrap_or_else(|| brand_label(token))
+        });
+        match brand {
+            Some(brand) => format!("{brand} · {name}"),
+            None => name.to_owned(),
+        }
+    }
+}
+
+fn trailer_brand(id: &str) -> Option<&str> {
+    id.strip_prefix("trailer_def.")?.split('.').next()
+}
+
+fn brand_label(brand: &str) -> String {
+    if brand == "scs" {
+        return "SCS".to_owned();
+    }
+    let mut chars = brand.chars();
+    match chars.next() {
+        Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
+        None => String::new(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{brand_label, trailer_brand};
+
+    #[test]
+    fn names_the_brand_of_a_definition_id() {
+        assert_eq!(
+            trailer_brand("trailer_def.krone.profiliner.single_3sa.curtain"),
+            Some("krone")
+        );
+        assert_eq!(trailer_brand("_nameless.6000.02b1.9810"), None);
+        assert_eq!(trailer_brand("trailer_def"), None);
+    }
+
+    #[test]
+    fn capitalizes_a_brand_token() {
+        assert_eq!(brand_label("krone"), "Krone");
+        assert_eq!(brand_label("schwmuller"), "Schwmuller");
+        assert_eq!(brand_label("scs"), "SCS");
+        assert_eq!(brand_label(""), "");
     }
 }

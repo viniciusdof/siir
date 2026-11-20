@@ -1,5 +1,3 @@
-//! Checkbox with a check mark and label.
-
 use gpui_kit::assets::IconName;
 use gpui_kit::base::{Checkbox as BaseCheckbox, CheckboxIndicator, CheckboxState};
 use gpui_kit::prelude::*;
@@ -12,7 +10,6 @@ use crate::ui::{icon, tokens};
 
 type ChangeHandler = Box<dyn Fn(&bool, &mut Window, &mut App) + 'static>;
 
-/// One independent choice with a visible check mark.
 #[derive(IntoElement)]
 pub struct Checkbox {
     id: ElementId,
@@ -22,7 +19,6 @@ pub struct Checkbox {
     on_change: Option<ChangeHandler>,
 }
 
-/// A labelled checkbox.
 pub fn checkbox(
     id: impl Into<ElementId>,
     label: impl Into<SharedString>,
@@ -38,13 +34,11 @@ pub fn checkbox(
 }
 
 impl Checkbox {
-    /// Uses `handle` for focus, so the owner can move focus to the checkbox.
     pub fn track_focus(mut self, handle: &FocusHandle) -> Self {
         self.focus = Some(handle.clone());
         self
     }
 
-    /// Reports the next checked state on pointer, Space, or assistive activation.
     pub fn on_change(mut self, handler: impl Fn(&bool, &mut Window, &mut App) + 'static) -> Self {
         self.on_change = Some(Box::new(handler));
         self

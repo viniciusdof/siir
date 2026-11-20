@@ -1,5 +1,3 @@
-//! Modal confirmation over the window.
-
 use std::rc::Rc;
 
 use gpui_kit::base::{Dialog, DialogDescription, DialogPopup, DialogTitle};
@@ -13,11 +11,8 @@ use crate::ui::tokens::{self, RADIUS, SPACE_2, SPACE_3, SPACE_4, TEXT_BODY, TEXT
 
 type CancelHandler = Rc<dyn Fn(&mut Window, &mut App) + 'static>;
 
-/// Width of the dialog panel.
 const WIDTH: f32 = 440.0;
 
-/// A modal question with a title strip, one message, and actions aligned to
-/// the bottom right.
 #[derive(IntoElement)]
 pub struct Confirm {
     title: SharedString,
@@ -28,7 +23,6 @@ pub struct Confirm {
     on_cancel: Option<CancelHandler>,
 }
 
-/// A closed confirmation; `focus` keeps Escape inside the dialog.
 pub fn confirm(
     title: impl Into<SharedString>,
     message: impl Into<SharedString>,
@@ -45,19 +39,16 @@ pub fn confirm(
 }
 
 impl Confirm {
-    /// Shows the dialog.
     pub fn open(mut self, open: bool) -> Self {
         self.open = open;
         self
     }
 
-    /// Adds a button to the action row, left to right.
     pub fn action(mut self, action: impl IntoElement) -> Self {
         self.actions.push(action.into_any_element());
         self
     }
 
-    /// Runs on Escape.
     pub fn on_cancel(mut self, handler: impl Fn(&mut Window, &mut App) + 'static) -> Self {
         self.on_cancel = Some(Rc::new(handler));
         self
@@ -73,8 +64,6 @@ impl RenderOnce for Confirm {
             .focus_handle(self.focus)
             .accessibility_label(self.title.clone())
             .close_on_backdrop_press(false)
-            // Enter activates the focused button; on the panel itself it does nothing.
-            // The dialog binds Enter first, so pass the key on to the button.
             .on_ok(|_, _, cx| {
                 cx.propagate();
                 false

@@ -1,5 +1,3 @@
-//! Save commands that edit a document.
-
 use siir::{Document, Unit, Value};
 
 use crate::Game;
@@ -360,7 +358,6 @@ pub fn apply(document: &mut Document<'_>, _game: Game, command: Command) -> Resu
     }
 }
 
-/// Checks that a unit exists with the expected class.
 pub(super) fn check(document: &Document<'_>, id: &str, class: &str) -> Result<(), Error> {
     match document.units().find(|unit| unit.id() == id) {
         Some(unit) if unit.class() == class => Ok(()),
@@ -368,7 +365,6 @@ pub(super) fn check(document: &Document<'_>, id: &str, class: &str) -> Result<()
     }
 }
 
-/// Points one player attribute at a unit of the expected class.
 pub(super) fn set_player_ref(
     document: &mut Document<'_>,
     name: &str,
@@ -381,7 +377,6 @@ pub(super) fn set_player_ref(
     Ok(())
 }
 
-/// The first unit id of a class.
 pub(super) fn first_id(document: &Document<'_>, class: &str) -> Result<String, Error> {
     document
         .units_of_class(class)
@@ -392,12 +387,10 @@ pub(super) fn first_id(document: &Document<'_>, class: &str) -> Result<String, E
         })
 }
 
-/// The player unit id.
 pub(super) fn player_id(document: &Document<'_>) -> Result<String, Error> {
     first_id(document, names::PLAYER)
 }
 
-/// Adds one vehicle to an owned list after checking its plate type.
 pub(super) fn add_owned(
     document: &mut Document<'_>,
     name: &str,
@@ -424,7 +417,6 @@ pub(super) fn add_owned(
     push(unit, name, id)
 }
 
-/// Finds one editable unit by id and class.
 fn edit<'a, 'd>(
     document: &'a mut Document<'d>,
     id: &str,
@@ -436,7 +428,6 @@ fn edit<'a, 'd>(
     }
 }
 
-/// Writes the six skill attributes.
 fn write_skills(unit: &mut Unit<'_>, skills: Skills) -> Result<(), Error> {
     unit.set(names::ADR, siir::Value::UInt(skills.adr))?;
     unit.set(names::LONG_DIST, siir::Value::UInt(skills.long_dist))?;
@@ -447,7 +438,6 @@ fn write_skills(unit: &mut Unit<'_>, skills: Skills) -> Result<(), Error> {
     Ok(())
 }
 
-/// Replaces an implicit array, adding, resizing, or removing its count.
 pub(super) fn rewrite(unit: &mut Unit<'_>, name: &str, values: Vec<Value>) -> Result<(), Error> {
     let old = match unit.get(name) {
         Some(_) => length(unit, name)?,
@@ -476,7 +466,6 @@ pub(super) fn rewrite(unit: &mut Unit<'_>, name: &str, values: Vec<Value>) -> Re
     Ok(())
 }
 
-/// An implicit array as owned strings, empty when the attribute is absent.
 pub(super) fn values(unit: &Unit<'_>, name: &str) -> Result<Vec<String>, Error> {
     Ok(optional_array(unit, name)?
         .into_iter()
@@ -488,7 +477,6 @@ pub(super) fn tokens(values: Vec<String>) -> Vec<Value> {
     values.into_iter().map(Value::Token).collect()
 }
 
-/// Appends one value to an implicit array.
 pub(super) fn push(unit: &mut Unit<'_>, name: &str, value: &str) -> Result<(), Error> {
     let mut list = values(unit, name)?;
     list.push(value.to_owned());

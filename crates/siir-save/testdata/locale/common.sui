@@ -9,6 +9,9 @@ localization_db : .localization
 	key[]: "series_test_truck"
 	val[]: "T 900"
 
+	key[]: "brand_krone"
+	val[]: "Krone"
+
 	@include "/locale/nested.sui"
 }
 }

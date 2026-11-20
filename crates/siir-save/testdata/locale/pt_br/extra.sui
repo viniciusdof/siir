@@ -9,3 +9,9 @@
 
 	key[]: "lvl_name1"
 	val[]: "Entusiasta"
+
+	key[]: "curtainside"
+	val[]: "Cortina"
+
+	key[]: "city_testville"
+	val[]: "Testvila"

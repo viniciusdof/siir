@@ -1,5 +1,3 @@
-//! Economy, skills, cities, dealerships, and garages.
-
 use std::collections::BTreeMap;
 
 use siir::{Document, Unit, Value};
@@ -24,8 +22,6 @@ pub(super) fn set_skills(document: &mut Document<'_>, skills: Skills) -> Result<
     super::write_skills(first(document, names::ECONOMY)?, skills)
 }
 
-/// Filling keeps every city already visited and its visit count; a new city
-/// counts one visit.
 pub(super) fn set_visited_cities(document: &mut Document<'_>, all: bool) -> Result<(), Error> {
     let mut visits: BTreeMap<String, i64> = BTreeMap::new();
     if all {

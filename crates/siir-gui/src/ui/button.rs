@@ -1,5 +1,3 @@
-//! Action button and primary action.
-
 use gpui_kit::assets::IconName;
 use gpui_kit::base::{Button as BaseButton, Selectable};
 use gpui_kit::prelude::*;
@@ -12,20 +10,14 @@ use crate::ui::icon;
 use crate::ui::tokens::{self, RADIUS, ROW_HEIGHT, SPACE_2, SPACE_3, TEXT_BODY};
 
 type ClickHandler = Box<dyn Fn(&ClickEvent, &mut Window, &mut App) + 'static>;
-/// How much weight an action carries.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Tone {
-    /// Ordinary actions.
     Secondary,
-    /// The one commit on the screen.
     Primary,
-    /// A quiet choice in a group, such as the game switch.
     Quiet,
-    /// An action that throws work away.
     Danger,
 }
 
-/// A labelled action with an optional leading icon.
 #[derive(IntoElement)]
 pub struct Button {
     id: ElementId,
@@ -42,7 +34,6 @@ pub struct Button {
     on_click: Option<ClickHandler>,
 }
 
-/// A labelled action in the secondary tone.
 pub fn button(id: impl Into<ElementId>, label: impl Into<SharedString>) -> Button {
     Button {
         id: id.into(),
@@ -61,61 +52,51 @@ pub fn button(id: impl Into<ElementId>, label: impl Into<SharedString>) -> Butto
 }
 
 impl Button {
-    /// Overrides the accessible name; the visible label stays the same.
     pub fn aria_label(mut self, label: impl Into<SharedString>) -> Self {
         self.accessible = Some(label.into());
         self
     }
 
-    /// Shows a leading Lucide icon.
     pub fn icon(mut self, name: IconName) -> Self {
         self.icon = Some(name);
         self
     }
 
-    /// Shows a Lucide icon after the label, such as a dropdown caret.
     pub fn trailing_icon(mut self, name: IconName) -> Self {
         self.trailing = Some(name);
         self
     }
 
-    /// Sets the weight of the action.
     pub fn tone(mut self, tone: Tone) -> Self {
         self.tone = tone;
         self
     }
 
-    /// Marks this control as the persistent selection.
     pub fn selected(mut self, selected: bool) -> Self {
         self.selected = selected;
         self
     }
 
-    /// Marks the control as a toggle button and exposes its on/off state.
     pub fn toggled(mut self, toggled: bool) -> Self {
         self.toggled = Some(toggled);
         self
     }
 
-    /// Prevents activation and removes the control from Tab traversal.
     pub fn disabled(mut self, disabled: bool) -> Self {
         self.disabled = disabled;
         self
     }
 
-    /// Fixes the width so a changing label does not move its neighbours.
     pub fn width(mut self, width: f32) -> Self {
         self.width = Some(width);
         self
     }
 
-    /// Uses `handle` for focus, so the owner can move focus to the button.
     pub fn track_focus(mut self, handle: &FocusHandle) -> Self {
         self.focus = Some(handle.clone());
         self
     }
 
-    /// Runs on pointer click, Enter, and Space.
     pub fn on_click(
         mut self,
         handler: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
@@ -125,8 +106,6 @@ impl Button {
     }
 }
 
-/// Lets a [`Button`] act as a popover trigger, which marks it open while the
-/// menu shows.
 impl Selectable for Button {
     fn selected(mut self, selected: bool) -> Self {
         self.selected = selected;

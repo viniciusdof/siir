@@ -44,6 +44,10 @@ pub struct TrailerRow {
     pub current: bool,
     /// Cargo mass in kilograms.
     pub cargo_mass: f32,
+    /// `body_type` of a definition stored in the save.
+    pub body_type: Option<String>,
+    /// `source_name` of that definition.
+    pub source: Option<String>,
     /// Body wear, from 0 to 1.
     pub body_wear: f32,
     /// Chassis wear, from 0 to 1.
@@ -56,6 +60,14 @@ pub struct VehicleRow {
     pub id: String,
     /// Model folder, for the catalog's game name.
     pub model: Option<String>,
+    /// Engine `data_path`.
+    pub engine: Option<String>,
+    /// Transmission `data_path`.
+    pub transmission: Option<String>,
+    /// Cabin `data_path`.
+    pub cabin: Option<String>,
+    /// Chassis `data_path`.
+    pub chassis: Option<String>,
     /// Plate text without markup or country.
     pub plate: String,
     /// Country after `|`, when the plate names one.
@@ -94,6 +106,10 @@ impl VehicleRow {
         Self {
             id: vehicle.id.to_owned(),
             model: vehicle.model.map(str::to_owned),
+            engine: vehicle.engine.map(str::to_owned),
+            transmission: vehicle.transmission.map(str::to_owned),
+            cabin: vehicle.cabin.map(str::to_owned),
+            chassis: vehicle.chassis.map(str::to_owned),
             plate: plate.text,
             country: plate.country.map(str::to_owned),
             owned,
@@ -134,7 +150,6 @@ impl SaveView {
         let player = save.player.as_ref();
         let current = save.current_vehicle().map(|vehicle| vehicle.id);
         let current_trailer = save.current_trailer().map(|trailer| trailer.id);
-        // One pass over the listings instead of a search per vehicle.
         let listings: BTreeMap<&str, &UsedTruck<'_>> = save
             .used_trucks
             .iter()
@@ -195,9 +210,11 @@ impl SaveView {
                 .map(|trailer| TrailerRow {
                     id: trailer.id.to_owned(),
                     definition: trailer.definition.to_owned(),
+                    cargo_mass: trailer.cargo_mass,
+                    body_type: trailer.body_type.map(str::to_owned),
+                    source: trailer.source.map(str::to_owned),
                     plate: LicensePlate::parse(trailer.license_plate).text,
                     current: current_trailer == Some(trailer.id),
-                    cargo_mass: trailer.cargo_mass,
                     body_wear: trailer.body_wear,
                     chassis_wear: trailer.chassis_wear,
                 })

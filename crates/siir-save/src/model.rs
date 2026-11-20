@@ -1,5 +1,3 @@
-//! Typed, read-only view of a save.
-
 use crate::names;
 
 /// The game a save belongs to.
@@ -129,7 +127,6 @@ impl Accessory<'_> {
     }
 }
 
-/// Front and side badges use a `badge` or `*_badge` path segment.
 pub(crate) fn is_badge(path: &str) -> bool {
     path.split('/')
         .any(|part| part == names::BADGE || part.ends_with(names::BADGE_SUFFIX))
@@ -182,6 +179,10 @@ pub struct Trailer<'a> {
     pub id: &'a str,
     /// Trailer definition the unit uses.
     pub definition: &'a str,
+    /// `body_type` of a definition stored in the save, which the catalog lacks.
+    pub body_type: Option<&'a str>,
+    /// `source_name` of that definition.
+    pub source: Option<&'a str>,
     /// Cargo mass in kilograms.
     pub cargo_mass: f32,
     /// Raw license plate text.

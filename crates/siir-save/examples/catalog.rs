@@ -9,27 +9,28 @@ use std::path::PathBuf;
 use serde::Serialize;
 use siir_save::Game;
 use siir_save::catalog::{
-    Cargo, Catalog, Company, Engine, Part, TrailerDefinition, Transmission, TruckModel,
+    Cargo, Catalog, Company, Engine, Part, TrailerDefinition, Transmission, VehicleModel,
 };
 
 const USAGE: &str = "usage: catalog <def-dir> <locale-dir> <out.json> <ets2|ats>";
 
 #[derive(Serialize)]
 struct Snapshot<'a> {
-    format: u32,
     game: &'a str,
-    trucks: Vec<TruckData<'a>>,
+    levels: LevelsData<'a>,
+    currencies: Vec<CurrencyData<'a>>,
+    trailer_body_types: Vec<NamedData<'a>>,
+    trailer_brands: Vec<NamedData<'a>>,
+    cities: Vec<NamedData<'a>>,
+    country_names: Vec<NamedData<'a>>,
     cargo: Vec<CargoData<'a>>,
     companies: Vec<CompanyData<'a>>,
     trailers: Vec<TrailerData<'a>>,
-    models: Vec<ModelData<'a>>,
-    levels: LevelsData<'a>,
-    currencies: Vec<CurrencyData<'a>>,
-    countries: Vec<CountryData<'a>>,
+    vehicles: Vec<VehicleData<'a>>,
 }
 
 #[derive(Serialize)]
-struct CountryData<'a> {
+struct NamedData<'a> {
     token: &'a str,
     names: &'a BTreeMap<String, String>,
 }
@@ -56,25 +57,24 @@ struct LevelTitleData<'a> {
 }
 
 #[derive(Serialize)]
-struct ModelData<'a> {
+struct VehicleData<'a> {
     token: &'a str,
     names: &'a BTreeMap<String, String>,
-}
-
-#[derive(Serialize)]
-struct TruckData<'a> {
-    brand: &'a str,
-    model: &'a str,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     engines: Vec<EngineData<'a>>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     transmissions: Vec<TransmissionData<'a>>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     cabins: Vec<PartData<'a>>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     chassis: Vec<PartData<'a>>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     paint_jobs: Vec<PartData<'a>>,
 }
 
 #[derive(Serialize)]
 struct EngineData<'a> {
-    name: &'a str,
+    names: &'a BTreeMap<String, String>,
     power_hp: u32,
     torque_nm: u32,
     path: &'a str,
@@ -82,7 +82,7 @@ struct EngineData<'a> {
 
 #[derive(Serialize)]
 struct TransmissionData<'a> {
-    name: &'a str,
+    names: &'a BTreeMap<String, String>,
     ratios: &'a [f32],
     retarder: bool,
     path: &'a str,
@@ -90,7 +90,7 @@ struct TransmissionData<'a> {
 
 #[derive(Serialize)]
 struct PartData<'a> {
-    name: &'a str,
+    names: &'a BTreeMap<String, String>,
     path: &'a str,
 }
 
@@ -122,11 +122,11 @@ struct TrailerData<'a> {
     length: f32,
 }
 
-impl<'a> From<&'a TruckModel> for TruckData<'a> {
-    fn from(truck: &'a TruckModel) -> Self {
+impl<'a> From<&'a VehicleModel> for VehicleData<'a> {
+    fn from(truck: &'a VehicleModel) -> Self {
         Self {
-            brand: &truck.brand,
-            model: &truck.model,
+            token: &truck.token,
+            names: &truck.names,
             engines: truck.engines.iter().map(EngineData::from).collect(),
             transmissions: truck
                 .transmissions
@@ -143,7 +143,7 @@ impl<'a> From<&'a TruckModel> for TruckData<'a> {
 impl<'a> From<&'a Engine> for EngineData<'a> {
     fn from(engine: &'a Engine) -> Self {
         Self {
-            name: &engine.name,
+            names: &engine.names,
             power_hp: engine.power_hp,
             torque_nm: engine.torque_nm,
             path: &engine.path,
@@ -154,7 +154,7 @@ impl<'a> From<&'a Engine> for EngineData<'a> {
 impl<'a> From<&'a Transmission> for TransmissionData<'a> {
     fn from(transmission: &'a Transmission) -> Self {
         Self {
-            name: &transmission.name,
+            names: &transmission.names,
             ratios: &transmission.ratios,
             retarder: transmission.retarder,
             path: &transmission.path,
@@ -165,7 +165,7 @@ impl<'a> From<&'a Transmission> for TransmissionData<'a> {
 impl<'a> From<&'a Part> for PartData<'a> {
     fn from(part: &'a Part) -> Self {
         Self {
-            name: &part.name,
+            names: &part.names,
             path: &part.path,
         }
     }
@@ -221,20 +221,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let catalog = Catalog::generate(&def, &locale, game)?;
     let snapshot = Snapshot {
-        format: 4,
         game: name,
-        trucks: catalog.trucks().iter().map(TruckData::from).collect(),
-        cargo: catalog.cargo().iter().map(CargoData::from).collect(),
-        companies: catalog.companies().iter().map(CompanyData::from).collect(),
-        trailers: catalog.trailers().iter().map(TrailerData::from).collect(),
-        models: catalog
-            .vehicle_names()
-            .iter()
-            .map(|name| ModelData {
-                token: &name.token,
-                names: &name.names,
-            })
-            .collect(),
         levels: LevelsData {
             steps: &catalog.levels().steps,
             titles: catalog
@@ -258,19 +245,47 @@ fn main() -> Result<(), Box<dyn Error>> {
                 sign3: &currency.sign3,
             })
             .collect(),
-        countries: catalog
+        trailer_body_types: catalog
+            .body_types()
+            .iter()
+            .map(|body_type| NamedData {
+                token: &body_type.token,
+                names: &body_type.names,
+            })
+            .collect(),
+        trailer_brands: catalog
+            .brands()
+            .iter()
+            .map(|brand| NamedData {
+                token: &brand.token,
+                names: &brand.names,
+            })
+            .collect(),
+        cities: catalog
+            .cities()
+            .iter()
+            .map(|city| NamedData {
+                token: &city.token,
+                names: &city.names,
+            })
+            .collect(),
+        country_names: catalog
             .countries()
             .iter()
-            .map(|country| CountryData {
+            .map(|country| NamedData {
                 token: &country.token,
                 names: &country.names,
             })
             .collect(),
+        cargo: catalog.cargo().iter().map(CargoData::from).collect(),
+        companies: catalog.companies().iter().map(CompanyData::from).collect(),
+        trailers: catalog.trailers().iter().map(TrailerData::from).collect(),
+        vehicles: catalog.vehicles().iter().map(VehicleData::from).collect(),
     };
     if snapshot.levels.steps.is_empty() {
         return Err(format!("no levels in {}", def.join("economy_data_xp.sii").display()).into());
     }
-    if snapshot.countries.is_empty() {
+    if snapshot.country_names.is_empty() {
         return Err(format!("no countries in {}", def.join("country").display()).into());
     }
     if snapshot.currencies.is_empty() {
@@ -288,15 +303,16 @@ fn main() -> Result<(), Box<dyn Error>> {
     serde_json::to_writer_pretty(&mut file, &snapshot)?;
     writeln!(&mut file)?;
     println!(
-        "wrote {} trucks, {} cargoes, {} companies, {} trailers, {} vehicle names, {} level steps, {} currencies, and {} countries to {}",
-        snapshot.trucks.len(),
+        "wrote {} vehicles, {} cargoes, {} companies, {} trailers, {} level steps, {} currencies, {} countries, {} brands, and {} cities to {}",
+        snapshot.vehicles.len(),
         snapshot.cargo.len(),
         snapshot.companies.len(),
         snapshot.trailers.len(),
-        snapshot.models.len(),
         snapshot.levels.steps.len(),
         snapshot.currencies.len(),
-        snapshot.countries.len(),
+        snapshot.country_names.len(),
+        snapshot.trailer_brands.len(),
+        snapshot.cities.len(),
         output.display()
     );
     Ok(())

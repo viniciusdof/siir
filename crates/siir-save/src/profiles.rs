@@ -14,12 +14,9 @@ use crate::error::Error;
 use crate::names;
 use crate::value::{array, count, string, unquote};
 
-/// Largest single entry a restored archive may contain.
 const MAX_ENTRY: u64 = 512 * 1024 * 1024;
-/// Largest total a restored archive may extract.
 const MAX_TOTAL: u64 = 2 * 1024 * 1024 * 1024;
 
-/// Replaces `dest` with `tmp`, keeping the old file until the new one is complete.
 pub(crate) fn replace_file(tmp: &Path, dest: &Path) -> std::io::Result<()> {
     #[cfg(windows)]
     if dest.exists() {
@@ -307,8 +304,6 @@ pub fn backup(profile: &Path, archive: &Path) -> Result<(), Error> {
     let _ = fs::remove_file(&tmp);
     let entries = walk(profile)?;
     let exclude = fs::canonicalize(archive).ok();
-    // shortcut: archives are stored without compression; enable zip deflate
-    // and allow the zlib license when backup size matters.
     let result = (|| -> Result<(), Error> {
         let file = fs::File::create(&tmp)?;
         let mut zip = ZipWriter::new(file);
@@ -462,8 +457,6 @@ fn walk(root: &Path) -> Result<Vec<Entry>, Error> {
                 .next()
                 .is_some_and(|part| part.as_os_str().to_string_lossy().as_ref() == names::ALBUM_DIR)
             {
-                // shortcut: album photos are skipped; include them when a full
-                // profile copy is required.
                 continue;
             }
             let file_type = entry.file_type()?;

@@ -219,6 +219,9 @@ vehicles.current:
 vehicles.wear:
   en_us: Wear
   pt_br: Desgaste
+vehicles.parts:
+  en_us: Parts
+  pt_br: Peças
 vehicles.repair:
   en_us: Repair
   pt_br: Reparar
@@ -264,6 +267,21 @@ field.odometer:
 field.fuel:
   en_us: Fuel
   pt_br: Combustível
+field.engine:
+  en_us: Engine
+  pt_br: Motor
+field.transmission:
+  en_us: Transmission
+  pt_br: Transmissão
+field.cabin:
+  en_us: Cabin
+  pt_br: Cabine
+field.chassis:
+  en_us: Chassis
+  pt_br: Chassi
+part.none:
+  en_us: None
+  pt_br: Nenhuma
 empty.no_vehicles:
   en_us: No vehicle selected
   pt_br: Nenhum veículo selecionado

@@ -1,5 +1,3 @@
-//! Used-truck market commands.
-
 use siir::{Document, Value};
 
 use crate::error::Error;

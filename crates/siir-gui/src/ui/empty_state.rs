@@ -1,5 +1,3 @@
-//! Centred placeholder for a region with nothing to show.
-
 use gpui_kit::assets::IconName;
 use gpui_kit::prelude::*;
 use gpui_kit::{IntoElement, SharedString, TextAlign, div, px};
@@ -7,7 +5,6 @@ use gpui_kit::{IntoElement, SharedString, TextAlign, div, px};
 use crate::ui::icon;
 use crate::ui::tokens::{self, SPACE_2, SPACE_3, TEXT_BODY, TEXT_SECTION};
 
-/// Icon, title, and one line explaining what to do next.
 pub fn empty_state(
     name: IconName,
     title: impl Into<SharedString>,

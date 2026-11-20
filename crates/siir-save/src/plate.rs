@@ -1,5 +1,3 @@
-//! License plate text and country.
-
 /// A plate split into visible text and its `|country` suffix.
 pub struct LicensePlate<'a> {
     /// Characters shown on the plate, markup tags removed.

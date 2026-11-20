@@ -1,8 +1,3 @@
-//! BSII binary decoder.
-//!
-//! Field names, types, and string tables come from the structure blocks in the
-//! file itself.
-
 use std::collections::HashMap;
 
 use crate::error::Error;
@@ -55,7 +50,6 @@ struct Structure {
     id: u32,
     name: String,
     fields: Vec<Field>,
-    /// First ordinal table, kept for experimental type 0x38.
     ordinals: Option<HashMap<u32, String>>,
 }
 
@@ -65,7 +59,6 @@ struct Field {
     ordinals: Option<HashMap<u32, String>>,
 }
 
-/// Decodes a `BSII` payload into `SiiNunit` text.
 pub(crate) fn decode(data: &[u8]) -> Result<String, Error> {
     let mut cursor = Cursor { data, pos: 0 };
     cursor.take(4)?;
@@ -110,8 +103,6 @@ pub(crate) fn decode(data: &[u8]) -> Result<String, Error> {
         out.push_str(&id);
         out.push_str(" {\n");
         for field in &structure.fields {
-            // shortcut: 0x38 has no documented table; reuse the structure's
-            // first ordinal table until a real file shows otherwise.
             let ordinals = if field.kind == T_ARR_ORDINAL {
                 structure.ordinals.as_ref()
             } else {

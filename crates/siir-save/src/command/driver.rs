@@ -1,5 +1,3 @@
-//! AI driver edits.
-
 use siir::{Document, Unit, Value};
 
 use super::{first_id, push, tokens, values};
@@ -200,7 +198,6 @@ fn unit_of<'a, 'd>(document: &'a Document<'d>, id: &str) -> Result<&'a Unit<'d>,
         .ok_or_else(|| Error::MissingUnit { id: id.to_owned() })
 }
 
-/// The garage holding the driver and the driver slot index.
 fn driver_garage(document: &Document<'_>, id: &str) -> Result<Option<(String, usize)>, Error> {
     for unit in document.units_of_class(names::GARAGE) {
         if let Some(slot) = values(unit, names::DRIVERS)?
@@ -213,7 +210,6 @@ fn driver_garage(document: &Document<'_>, id: &str) -> Result<Option<(String, us
     Ok(None)
 }
 
-/// Whether the driver is on a job that has not finished.
 fn active_job(document: &Document<'_>, id: &str) -> Result<bool, Error> {
     let driver = unit_of(document, id)?;
     let Some(job) = driver
@@ -228,7 +224,6 @@ fn active_job(document: &Document<'_>, id: &str) -> Result<bool, Error> {
     Ok(matches!(job.get("cargo"), Some(cargo) if cargo != "null" && cargo != "nil"))
 }
 
-/// Clears the fields the game resets when a driver returns to the pool.
 fn to_pool(unit: &mut Unit<'_>) -> Result<(), Error> {
     for (name, value) in [
         ("hometown", Value::string("")),

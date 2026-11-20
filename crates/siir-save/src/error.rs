@@ -1,5 +1,3 @@
-//! Errors raised while reading a save document.
-
 use std::fmt;
 
 /// A save read failure naming the unit class and attribute involved.

@@ -1,11 +1,8 @@
-//! Label and value with a hairline separator.
-
 use gpui_kit::prelude::*;
 use gpui_kit::{IntoElement, SharedString, div, px};
 
 use crate::ui::tokens::{self, ROW_HEIGHT, SPACE_2, TEXT_BODY};
 
-/// One row of read-only detail.
 pub fn info_row(label: impl Into<SharedString>, value: impl IntoElement) -> impl IntoElement {
     let palette = tokens::palette();
     div()

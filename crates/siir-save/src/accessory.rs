@@ -15,7 +15,6 @@ const PARTS: [&str; 6] = [
     "paint",
 ];
 
-/// One of the six parts a vehicle accessory set must contain.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Part {
     Data,

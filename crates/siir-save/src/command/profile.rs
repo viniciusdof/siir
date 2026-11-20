@@ -1,5 +1,3 @@
-//! Profile document commands.
-
 use siir::{Document, Value};
 
 use crate::error::Error;

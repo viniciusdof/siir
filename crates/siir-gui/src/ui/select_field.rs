@@ -1,5 +1,3 @@
-//! A framed control that shows the chosen value of a list and a chevron.
-
 use gpui_kit::assets::IconName;
 use gpui_kit::base::Selectable;
 use gpui_kit::prelude::*;
@@ -9,12 +7,6 @@ use gpui_kit::{
 
 use crate::ui::tokens::{self, RADIUS, ROW_HEIGHT, SPACE_2, SPACE_3, TEXT_BODY};
 
-/// A full-width control that looks like a text field, carries the value of a
-/// closed list, and paints an accent border while the list it opens is open.
-///
-/// It carries no click handler: it is meant as a popover's trigger, which
-/// opens on its own. The popover marks it open through [`Selectable`]. With a
-/// focus handle it is focusable, and the popover opens on the confirm key.
 #[derive(IntoElement)]
 pub struct SelectField {
     id: ElementId,
@@ -24,7 +16,6 @@ pub struct SelectField {
     open: bool,
 }
 
-/// A [`SelectField`] for `value`, named `label` for assistive technology.
 pub fn select_field(
     id: impl Into<ElementId>,
     value: impl Into<SharedString>,
@@ -40,7 +31,6 @@ pub fn select_field(
 }
 
 impl SelectField {
-    /// Uses `handle` for focus, so the keyboard can reach the list it opens.
     pub fn track_focus(mut self, handle: &FocusHandle) -> Self {
         self.focus = Some(handle.clone());
         self
@@ -48,7 +38,6 @@ impl SelectField {
 }
 
 impl Selectable for SelectField {
-    /// The popover reports its open state through `selected`.
     fn selected(mut self, selected: bool) -> Self {
         self.open = selected;
         self

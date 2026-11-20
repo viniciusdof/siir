@@ -154,15 +154,12 @@ pub struct Open {
     currency: usize,
 }
 
-/// The owning profile's `profile.sii`, edited beside the save.
 struct ProfileFile {
     path: PathBuf,
     session: Session,
 }
 
 impl Open {
-    /// Rebuilds the owned view from the document after a command that can
-    /// change any field.
     fn refresh(&mut self) {
         let save_name = self.view.save_name.clone();
         let profile_name = self.view.profile_name.clone();
@@ -206,21 +203,11 @@ impl Open {
     }
 }
 
-/// The view field a command can update without re-reading the document.
 enum ViewUpdate {
-    /// Written to the bank balance.
     Money(i64),
-    /// Written to the total experience points.
     Experience(u64),
-    /// Written to the player skill levels.
     Skills(Skills),
-    /// Written to one used-market listing's asking price.
-    UsedPrice {
-        /// Listing unit id.
-        id: String,
-        /// Asking price.
-        price: i64,
-    },
+    UsedPrice { id: String, price: i64 },
 }
 
 /// Why a write action did not finish.
@@ -402,7 +389,6 @@ impl State {
             .as_ref()
             .and_then(|dir| config::currency(&dir.join("config.cfg")).ok())
             .unwrap_or(0);
-        // An unreadable profile file only disables the rename; the save stays usable.
         let profile = profile_dir.and_then(|dir| {
             let path = profiles::profile_path(&dir);
             Session::open(self.game, &path)
@@ -475,7 +461,6 @@ impl State {
         let Some(open) = self.open.as_mut() else {
             return Err(ActionError::NoOpenSave);
         };
-        // With nothing edited the save is still rewritten, as before the profile file.
         let write_save = open.session.edited() || !open.profile_edited();
         if write_save {
             let path = open.path.clone();
@@ -529,8 +514,6 @@ impl State {
         self.saved_backup = None;
         self.saves.clear();
 
-        // shortcut: discovery scans the OS and Steam folders on the UI thread;
-        // move it to the background executor when a cold scan is felt.
         self.profiles = profiles::profiles(self.game, &self.custom_dirs)
             .into_iter()
             .map(ProfileRow::new)

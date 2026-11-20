@@ -10,7 +10,6 @@ fn fixtures() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../fixtures")
 }
 
-/// Copies fixture saves into a temp game folder with one profile.
 fn game_folder(name: &str, game: &str, saves: &[&str]) -> PathBuf {
     let root = std::env::temp_dir().join(format!("siir-gui-{name}-{}", std::process::id()));
     let _ = fs::remove_dir_all(&root);
@@ -115,7 +114,6 @@ fn opens_a_fixture_save() {
     let view = open.view();
     assert_eq!(view.money, Some(2000));
     assert_eq!(view.hq_city, "prague");
-    // One vehicle sits in a slot; the three `my_vehicles` slots hold none.
     assert_eq!(view.counts.vehicles, 1);
     assert_eq!(
         view.counts.vehicles,

@@ -1,5 +1,3 @@
-//! Game colour conversion.
-
 /// A colour with channels from 0.0 to 1.0.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Color {

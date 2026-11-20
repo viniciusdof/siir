@@ -1,5 +1,3 @@
-//! Parsed document shared by the text and binary codecs.
-
 use std::borrow::Cow;
 use std::ops::Range;
 

@@ -1,6 +1,3 @@
-//! Save schema names shared by the read model and the commands.
-
-// Classes.
 pub(crate) const ECONOMY: &str = "economy";
 pub(crate) const BANK: &str = "bank";
 pub(crate) const PLAYER: &str = "player";
@@ -26,7 +23,6 @@ pub(crate) const CAR_JOB: &str = "player_car_job";
 pub(crate) const BUS_JOB_LOG: &str = "bus_job_log";
 pub(crate) const CAR_JOB_LOG: &str = "car_job_log";
 
-// Attributes shared by the read model and the commands.
 pub(crate) const HQ_CITY: &str = "hq_city";
 pub(crate) const MY_VEHICLES: &str = "my_vehicles";
 pub(crate) const TRUCKS: &str = "trucks";
@@ -48,7 +44,6 @@ pub(crate) const TRAILER_BODY_WEAR_UNFIXABLE: &str = "trailer_body_wear_unfixabl
 pub(crate) const CHASSIS_WEAR: &str = "chassis_wear";
 pub(crate) const CHASSIS_WEAR_UNFIXABLE: &str = "chassis_wear_unfixable";
 
-// Market, job, driver, and offence attributes.
 pub(crate) const EXPIRATION_TIME: &str = "expiration_time";
 pub(crate) const EXPIRATION_GAME_TIME: &str = "expiration_game_time";
 pub(crate) const NEXT_GENERATION_GAME_TIME: &str = "next_generation_game_time";
@@ -87,7 +82,6 @@ pub(crate) const OFFENCE_TOTAL_COUNTS: &str = "offence_total_counts";
 pub(crate) const OFFENCE_TOTAL_FINES: &str = "offence_total_fines";
 pub(crate) const DETAILED_HISTORY_ENTRIES: &str = "detailed_history_entries";
 
-// Economy and profile attributes.
 pub(crate) const COMPANIES: &str = "companies";
 pub(crate) const EXPERIENCE_POINTS: &str = "experience_points";
 pub(crate) const ADR: &str = "adr";
@@ -106,12 +100,8 @@ pub(crate) const STORED_TRAILER_ATTACHED: &str = "stored_trailer_attached";
 pub(crate) const USER_PROFILE: &str = "user_profile";
 pub(crate) const PROFILE_NAME: &str = "profile_name";
 
-// Paths.
-/// Truck definitions live under `/def/vehicle/truck/<brand>.<model>/`.
 pub(crate) const TRUCK_DIR: &str = "/def/vehicle/truck/";
-/// Bus definitions live under `/def/vehicle/bus/<brand>.<model>/`.
 pub(crate) const BUS_DIR: &str = "/def/vehicle/bus/";
-/// Car definitions live under `/def/vehicle/car/<brand>.<model>/`.
 pub(crate) const CAR_DIR: &str = "/def/vehicle/car/";
 pub(crate) const DATA_SUFFIX: &str = "/data.sii";
 pub(crate) const ENGINE_DIR: &str = "/engine/";
@@ -121,14 +111,11 @@ pub(crate) const CHASSIS_DIR: &str = "/chassis/";
 pub(crate) const PAINT_JOB_DIR: &str = "/paint_job/";
 pub(crate) const ACCESSORY_DIR: &str = "/accessory/";
 
-/// A garage id is `garage.<city>`.
 pub(crate) const GARAGE_PREFIX: &str = "garage.";
 
-/// Front and side badge slots use `badge` or `*_badge` path segments.
 pub(crate) const BADGE: &str = "badge";
 pub(crate) const BADGE_SUFFIX: &str = "_badge";
 
-// Profile files and directories.
 pub(crate) const PROFILES_PREFIX: &str = "profiles";
 pub(crate) const PROFILE_FILE: &str = "profile.sii";
 pub(crate) const INFO_FILE: &str = "info.sii";
@@ -137,7 +124,6 @@ pub(crate) const SAVES_DIR: &str = "save";
 pub(crate) const ALBUM_DIR: &str = "album";
 pub(crate) const SETTINGS_FILES: [&str; 3] = ["config.cfg", "config_local.cfg", "controls.sii"];
 
-/// `name[nth]`, the spelling of an indexed save attribute.
 pub(crate) fn indexed(name: &str, nth: usize) -> String {
     format!("{name}[{nth}]")
 }

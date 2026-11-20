@@ -1,5 +1,3 @@
-//! Car edits.
-
 use siir::Document;
 
 use crate::error::Error;

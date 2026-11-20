@@ -18,10 +18,8 @@ const IV_START: usize = SIGNATURE_LEN + HMAC_LEN;
 const IV_END: usize = IV_START + IV_LEN;
 const HEADER_LEN: usize = IV_END + SIZE_LEN;
 
-/// Largest payload a wrapped file may declare.
 const MAX_PAYLOAD: usize = 256 * 1024 * 1024;
 
-/// Fixed AES-256 key for `ScsC`.
 const AES_KEY: [u8; 32] = [
     0x2a, 0x5f, 0xcb, 0x17, 0x91, 0xd2, 0x2f, 0xb6, 0x02, 0x45, 0xb3, 0xd8, 0x36, 0x9e, 0xd0, 0xb2,
     0xc2, 0x73, 0x71, 0x56, 0x3f, 0xbf, 0x1f, 0x3c, 0x9e, 0xdf, 0x6b, 0x11, 0x82, 0x5a, 0x5d, 0x0a,
@@ -134,7 +132,6 @@ mod tests {
         scsc_from_compressed(&encoder.finish().unwrap(), payload.len())
     }
 
-    /// Wraps already-compressed bytes, so a test can feed invalid zlib.
     fn scsc_from_compressed(compressed: &[u8], payload_len: usize) -> Vec<u8> {
         let mut buffer = compressed.to_vec();
 

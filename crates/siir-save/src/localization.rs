@@ -1,10 +1,7 @@
-//! Reads the game's locale trees into key/text maps.
-
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-/// Every language folder with its own `local.sii`, sorted.
 pub(crate) fn languages(locale_dir: &Path) -> Vec<String> {
     let Ok(entries) = fs::read_dir(locale_dir) else {
         return Vec::new();
@@ -21,12 +18,6 @@ pub(crate) fn languages(locale_dir: &Path) -> Vec<String> {
     found
 }
 
-/// One language's texts, with `@include` files resolved in file order, then
-/// the language's `local.override.sii` when it has one.
-///
-/// The game numbers later definitions win, so a language file may override a
-/// key from `common.sui`, and the override file (ATS ships one per language)
-/// overrides both.
 pub(crate) fn read(locale_dir: &Path, language: &str) -> BTreeMap<String, String> {
     let mut texts = BTreeMap::new();
     let mut seen = Vec::new();
@@ -79,7 +70,6 @@ fn load(
     }
 }
 
-/// The text of the first double-quoted string on a line that starts with `prefix`.
 fn quoted_after(line: &str, prefix: &str) -> Option<String> {
     let rest = line.strip_prefix(prefix)?.trim_start();
     let start = rest.find('"')? + 1;
@@ -90,7 +80,6 @@ fn quoted_after(line: &str, prefix: &str) -> Option<String> {
     Some(unescape(&rest[start..end]))
 }
 
-/// Unescapes the quote and backslash escapes the game stores in strings.
 fn unescape(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
     let mut chars = text.chars();

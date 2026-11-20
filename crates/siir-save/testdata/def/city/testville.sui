@@ -1,0 +1,8 @@
+SiiNunit
+{
+city_data : city.testville
+{
+	city_name: "Testville"
+	city_name_localized: "@@city_testville@@"
+}
+}

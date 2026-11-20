@@ -1,5 +1,3 @@
-//! Icon, label, and headline value for the overview and fleet counts.
-
 use gpui_kit::assets::IconName;
 use gpui_kit::prelude::*;
 use gpui_kit::{FontWeight, IntoElement, SharedString, div, px};
@@ -7,7 +5,6 @@ use gpui_kit::{FontWeight, IntoElement, SharedString, div, px};
 use crate::ui::icon;
 use crate::ui::tokens::{self, SPACE_1, TEXT_LABEL, TEXT_METRIC};
 
-/// One labelled number.
 pub fn metric(
     name: IconName,
     label: impl Into<SharedString>,

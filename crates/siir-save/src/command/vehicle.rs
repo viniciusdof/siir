@@ -1,5 +1,3 @@
-//! Vehicle commands: wear, fuel, odometer, plate, and parts.
-
 use siir::{Document, Unit, Value};
 
 use crate::accessory::{Part, classify, write_accessories};
@@ -18,7 +16,6 @@ const WEAR: [&str; 6] = [
     "transmission_wear_unfixable",
     "cabin_wear_unfixable",
 ];
-/// Wear a mod's vehicle may omit, so it is reset only when the game wrote it.
 const OPTIONAL_WEAR: [&str; 2] = [names::CHASSIS_WEAR, names::CHASSIS_WEAR_UNFIXABLE];
 const WHEELS: [&str; 2] = ["wheels_wear", "wheels_wear_unfixable"];
 
@@ -117,8 +114,6 @@ fn owned_vehicles(document: &Document<'_>) -> Result<Vec<String>, Error> {
     let Some(player) = document.units_of_class(names::PLAYER).next() else {
         return Ok(Vec::new());
     };
-    // Same rule as `Save::owns`: the player's truck, bus, and car lists, plus
-    // any vehicle a `player_vehicles` slot points at.
     let mut vehicles = Vec::new();
     for list in [names::TRUCKS, names::BUSES, names::CARS] {
         if player.get(list).is_some() {
