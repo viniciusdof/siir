@@ -1,12 +1,15 @@
 use gpui_kit::assets::IconName;
 use gpui_kit::base::Button as BaseButton;
 use gpui_kit::base::Popover;
+use gpui_kit::base::input::{InputEvent, InputState, MaskPattern};
+use gpui_kit::base::slider::SliderState;
 use gpui_kit::prelude::*;
 use gpui_kit::{
-    Anchor, AnyElement, Context, ElementId, FocusHandle, FontWeight, IntoElement, SharedString,
-    div, px, transparent_black,
+    Anchor, AnyElement, Context, ElementId, Entity, FocusHandle, Focusable, FontWeight,
+    IntoElement, SharedString, Subscription, Window, div, px, transparent_black,
 };
 
+use siir_gui::edit;
 use siir_gui::format;
 use siir_gui::i18n::{self, t};
 use siir_gui::view_data::VehicleRow;
@@ -15,13 +18,375 @@ use siir_save::{Command, Game};
 use crate::ui::{self, Tone, tokens};
 use crate::view::AppView;
 
-const LIST_WIDTH: f32 = 300.0;
+const LIST_WIDTH: f32 = 290.0;
 
-const PART_CELL: f32 = (tokens::FORM_WIDTH - 2.0 * tokens::SPACE_6 - tokens::SPACE_4) / 2.0;
+const PART_CELL: f32 =
+    (tokens::FORM_WIDTH - 2.0 * tokens::SPACE_6 - 2.0 * tokens::SPACE_4 - tokens::SPACE_4) / 2.0;
 
-pub(super) const PART_COUNT: usize = PartKind::ALL.len();
+const PART_COUNT: usize = PartKind::ALL.len();
+
+pub(super) struct VehiclesState {
+    pub(super) selected: Option<String>,
+    pub(super) show_used_market: bool,
+    odometer: Entity<InputState>,
+    odometer_error: Option<&'static str>,
+    plate: Entity<InputState>,
+    plate_error: Option<&'static str>,
+    used_price: Entity<InputState>,
+    used_price_error: Option<&'static str>,
+    fuel: Entity<SliderState>,
+    fuel_focus: FocusHandle,
+    country_focus: FocusHandle,
+    parts_focus: Vec<FocusHandle>,
+    pub(super) list_focus: FocusHandle,
+}
+
+impl VehiclesState {
+    pub(super) fn new(
+        window: &mut Window,
+        cx: &mut Context<'_, AppView>,
+        subscriptions: &mut Vec<Subscription>,
+    ) -> Self {
+        let odometer = AppView::number_input(window, cx, false);
+        let fuel = cx.new(|_| {
+            SliderState::new()
+                .min(0.0)
+                .max(100.0)
+                .step(1.0)
+                .default_value(0.0)
+        });
+        let fuel_focus = cx.focus_handle().tab_stop(true);
+        let plate = AppView::input(window, cx);
+        let used_price = AppView::number_input(window, cx, false);
+
+        subscriptions.push(cx.observe(&odometer, |this, _, cx| {
+            this.vehicles.odometer_error = None;
+            cx.notify();
+        }));
+        subscriptions.push(cx.subscribe(&odometer, |this, _, event: &InputEvent, cx| {
+            if matches!(event, InputEvent::Change) {
+                this.apply_odometer_text(cx);
+            }
+        }));
+        let odometer_focus = odometer.read(cx).focus_handle(cx);
+        subscriptions.push(cx.on_focus(&odometer_focus, window, |_, _, cx| cx.notify()));
+        subscriptions.push(cx.on_blur(&odometer_focus, window, |this, _, cx| {
+            this.commit_odometer(cx)
+        }));
+
+        subscriptions.push(cx.observe(&fuel, |this, _, cx| {
+            if !this.syncing {
+                this.apply_fuel(cx);
+            }
+            cx.notify();
+        }));
+        subscriptions.push(cx.on_focus(&fuel_focus, window, |_, _, cx| cx.notify()));
+        subscriptions.push(cx.on_blur(&fuel_focus, window, |_, _, cx| cx.notify()));
+
+        subscriptions.push(cx.observe(&plate, |this, _, cx| {
+            this.vehicles.plate_error = None;
+            cx.notify();
+        }));
+        subscriptions.push(cx.subscribe(&plate, |this, _, event: &InputEvent, cx| {
+            if matches!(event, InputEvent::Change) {
+                this.apply_plate_text(cx);
+            }
+        }));
+        let plate_focus = plate.read(cx).focus_handle(cx);
+        subscriptions.push(cx.on_focus(&plate_focus, window, |_, _, cx| cx.notify()));
+        subscriptions.push(cx.on_blur(&plate_focus, window, |this, _, cx| this.commit_plate(cx)));
+
+        subscriptions.push(cx.observe(&used_price, |this, _, cx| {
+            this.vehicles.used_price_error = None;
+            cx.notify();
+        }));
+        subscriptions.push(cx.subscribe_in(
+            &used_price,
+            window,
+            |this, _, event: &InputEvent, window, cx| {
+                if matches!(event, InputEvent::Change)
+                    && this.apply_used_price_text(cx) == Some(false)
+                {
+                    this.sync_used_price(window, cx);
+                }
+            },
+        ));
+        let used_price_focus = used_price.read(cx).focus_handle(cx);
+        subscriptions.push(cx.on_focus(&used_price_focus, window, |_, _, cx| cx.notify()));
+        subscriptions.push(cx.on_blur(&used_price_focus, window, |this, _, cx| {
+            this.commit_used_price(cx)
+        }));
+
+        Self {
+            selected: None,
+            show_used_market: false,
+            odometer,
+            odometer_error: None,
+            plate,
+            plate_error: None,
+            used_price,
+            used_price_error: None,
+            fuel,
+            fuel_focus,
+            country_focus: cx.focus_handle().tab_stop(true),
+            parts_focus: (0..PART_COUNT)
+                .map(|_| cx.focus_handle().tab_stop(true))
+                .collect(),
+            list_focus: cx.focus_handle().tab_stop(true),
+        }
+    }
+
+    pub(super) fn clear_errors(&mut self) {
+        self.odometer_error = None;
+        self.plate_error = None;
+        self.used_price_error = None;
+    }
+
+    pub(super) fn is_valid(&self) -> bool {
+        self.odometer_error.is_none()
+            && self.plate_error.is_none()
+            && self.used_price_error.is_none()
+    }
+}
 
 impl AppView {
+    fn selected_row(&self) -> Option<&VehicleRow> {
+        let id = self.vehicles.selected.as_ref()?;
+        self.state
+            .open()?
+            .view()
+            .vehicles
+            .iter()
+            .find(|vehicle| &vehicle.id == id)
+    }
+
+    fn select_vehicle(&mut self, id: String, window: &mut Window, cx: &mut Context<'_, Self>) {
+        self.vehicles.selected = Some(id);
+        self.sync_vehicle(window, cx);
+        cx.notify();
+    }
+
+    fn toggle_used_market(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
+        self.vehicles.show_used_market = !self.vehicles.show_used_market;
+        let listed = self
+            .selected_row()
+            .is_some_and(|row| row.owned != self.vehicles.show_used_market);
+        if !listed {
+            self.vehicles.selected = self.default_vehicle();
+            self.sync_vehicle(window, cx);
+        }
+        cx.notify();
+    }
+
+    pub(super) fn default_vehicle(&self) -> Option<String> {
+        let vehicles = &self.state.open()?.view().vehicles;
+        let listed = |vehicle: &&VehicleRow| vehicle.owned != self.vehicles.show_used_market;
+        vehicles
+            .iter()
+            .filter(listed)
+            .find(|vehicle| vehicle.current)
+            .or_else(|| vehicles.iter().find(listed))
+            .map(|vehicle| vehicle.id.clone())
+    }
+
+    pub(super) fn sync_vehicle(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
+        let game = self.state.game();
+        let Some((odometer, fuel)) = self.selected_row().map(|row| (row.odometer, row.fuel)) else {
+            return;
+        };
+        self.vehicles.odometer_error = None;
+        let plate = self
+            .selected_row()
+            .map(|row| row.plate.clone())
+            .unwrap_or_default();
+        self.vehicles.plate_error = None;
+        self.vehicles.plate.update(cx, |input, cx| {
+            input.set_value(plate, window, cx);
+        });
+        self.vehicles.odometer.update(cx, |input, cx| {
+            input.set_mask_pattern(
+                MaskPattern::Number {
+                    separator: Some(format::grouping(game)),
+                    fraction: None,
+                },
+                window,
+                cx,
+            );
+            input.set_value(
+                format::number(odometer.unwrap_or_default(), game),
+                window,
+                cx,
+            );
+        });
+        self.vehicles.used_price_error = None;
+        let currency = self.currency();
+        let price = self
+            .selected_row()
+            .and_then(|row| row.listing.as_ref())
+            .map(|listing| format::amount(currency.from_native(listing.price), game))
+            .unwrap_or_default();
+        self.vehicles.used_price.update(cx, |input, cx| {
+            input.set_mask_pattern(
+                MaskPattern::Number {
+                    separator: Some(format::grouping(game)),
+                    fraction: None,
+                },
+                window,
+                cx,
+            );
+            input.set_value(price, window, cx);
+        });
+        self.syncing = true;
+        self.vehicles
+            .fuel
+            .update(cx, |state, cx| state.set_value(fuel * 100.0, window, cx));
+        self.syncing = false;
+    }
+
+    fn sync_used_price(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
+        let game = self.state.game();
+        let Some(price) = self
+            .selected_row()
+            .and_then(|row| row.listing.as_ref())
+            .map(|listing| listing.price)
+        else {
+            return;
+        };
+        let shown = format::amount(self.currency().from_native(price), game);
+        self.vehicles.used_price.update(cx, |input, cx| {
+            input.set_value(shown, window, cx);
+        });
+    }
+
+    fn apply_plate_text(&mut self, cx: &mut Context<'_, Self>) -> bool {
+        let Some((id, plate, country)) = self
+            .selected_row()
+            .filter(|row| row.listing.is_none())
+            .map(|row| (row.id.clone(), row.plate.clone(), row.country.clone()))
+        else {
+            return true;
+        };
+        let text = self.vehicles.plate.read(cx).value().to_string();
+        if text.trim() == plate {
+            self.vehicles.plate_error = None;
+            return true;
+        }
+        let Ok(command) = edit::plate(&id, &text) else {
+            return false;
+        };
+        self.vehicles.plate_error = None;
+        if matches!(&command, Command::SetLicensePlate { plate: next, .. } if next != &plate) {
+            self.apply(command, cx);
+            if let Some(country) = country {
+                self.set_plate_country(&country, cx);
+            }
+        }
+        true
+    }
+
+    pub(super) fn commit_plate(&mut self, cx: &mut Context<'_, Self>) {
+        if !self.apply_plate_text(cx) {
+            self.vehicles.plate_error = Some(edit::FieldError::Name.key());
+            cx.notify();
+        }
+    }
+
+    fn apply_used_price_text(&mut self, cx: &mut Context<'_, Self>) -> Option<bool> {
+        let Some((listing, price)) = self
+            .selected_row()
+            .and_then(|row| row.listing.as_ref())
+            .map(|listing| (listing.id.clone(), listing.price))
+        else {
+            return Some(false);
+        };
+        let text = self.vehicles.used_price.read(cx).unmask_value().to_string();
+        let currency = self.currency();
+        let Ok(Command::SetUsedTruckPrice { price: next, .. }) =
+            edit::used_price(&listing, &text, &currency)
+        else {
+            return None;
+        };
+        self.vehicles.used_price_error = None;
+        if edit::same_shown_amount(price, next, &currency) {
+            return Some(false);
+        }
+        self.apply(
+            Command::SetUsedTruckPrice {
+                id: listing,
+                price: next,
+            },
+            cx,
+        );
+        Some(true)
+    }
+
+    pub(super) fn commit_used_price(&mut self, cx: &mut Context<'_, Self>) {
+        if self.apply_used_price_text(cx).is_none() {
+            self.vehicles.used_price_error = Some(edit::FieldError::Number.key());
+            cx.notify();
+        }
+    }
+
+    fn set_plate_country(&mut self, country: &str, cx: &mut Context<'_, Self>) {
+        let Some((id, current)) = self
+            .selected_row()
+            .map(|row| (row.id.clone(), row.country.clone()))
+        else {
+            return;
+        };
+        if current.as_deref() == Some(country) {
+            return;
+        }
+        if let Ok(command) = edit::plate_country(&id, country) {
+            self.apply(command, cx);
+        }
+    }
+
+    fn apply_odometer_text(&mut self, cx: &mut Context<'_, Self>) -> bool {
+        let Some((id, Some(current))) = self
+            .selected_row()
+            .map(|row| (row.id.clone(), row.odometer))
+        else {
+            return true;
+        };
+        let text = self.vehicles.odometer.read(cx).unmask_value().to_string();
+        let Ok(command) = edit::odometer(&id, &text) else {
+            return false;
+        };
+        self.vehicles.odometer_error = None;
+        if matches!(command, Command::SetOdometer { km, .. } if km != current) {
+            self.apply(command, cx);
+        }
+        true
+    }
+
+    pub(super) fn commit_odometer(&mut self, cx: &mut Context<'_, Self>) {
+        if !self.apply_odometer_text(cx) {
+            self.vehicles.odometer_error = Some(edit::FieldError::Number.key());
+            cx.notify();
+        }
+    }
+
+    fn apply_fuel(&mut self, cx: &mut Context<'_, Self>) {
+        let percent = self.vehicles.fuel.read(cx).value().end();
+        let Some((id, current)) = self.selected_row().map(|row| (row.id.clone(), row.fuel)) else {
+            return;
+        };
+        if (current * 100.0).round() != percent.round() {
+            self.apply(edit::fuel(&id, percent), cx);
+        }
+    }
+
+    fn vehicle_command(
+        &mut self,
+        command: Command,
+        window: &mut Window,
+        cx: &mut Context<'_, Self>,
+    ) {
+        self.apply(command, cx);
+        self.sync_vehicle(window, cx);
+    }
+
     pub(crate) fn render_vehicles(&self, cx: &mut Context<'_, Self>) -> impl IntoElement {
         let palette = tokens::palette();
         let Some(open) = self.state.open() else {
@@ -31,11 +396,11 @@ impl AppView {
             .view()
             .vehicles
             .iter()
-            .filter(|vehicle| vehicle.owned != self.show_used_market)
+            .filter(|vehicle| vehicle.owned != self.vehicles.show_used_market)
             .collect();
         let selected = rows
             .iter()
-            .find(|vehicle| Some(&vehicle.id) == self.selected_vehicle.as_ref())
+            .find(|vehicle| Some(&vehicle.id) == self.vehicles.selected.as_ref())
             .copied();
         let mut list = div()
             .id("vehicle-list")
@@ -45,6 +410,8 @@ impl AppView {
             .overflow_y_scroll()
             .flex()
             .flex_col()
+            .gap(px(tokens::SPACE_1))
+            .p(px(tokens::SPACE_2))
             .border_r_1()
             .border_color(palette.border);
         for (ix, vehicle) in rows.iter().enumerate() {
@@ -77,7 +444,7 @@ impl AppView {
                     .py(px(tokens::SPACE_2))
                     .border_b_1()
                     .border_color(palette.border)
-                    .when(!self.show_used_market, |this| {
+                    .when(!self.vehicles.show_used_market, |this| {
                         this.child(
                             ui::button("repair-all", t("vehicles.repair_all"))
                                 .icon(IconName::Wrench)
@@ -97,14 +464,14 @@ impl AppView {
                     .child(
                         ui::button(
                             "toggle-used-market",
-                            t(if self.show_used_market {
+                            t(if self.vehicles.show_used_market {
                                 "vehicles.show_owned"
                             } else {
                                 "vehicles.show_used"
                             }),
                         )
                         .tone(Tone::Quiet)
-                        .selected(self.show_used_market)
+                        .selected(self.vehicles.show_used_market)
                         .on_click(
                             cx.listener(|this, _, window, cx| this.toggle_used_market(window, cx)),
                         ),
@@ -128,27 +495,36 @@ impl AppView {
         cx: &mut Context<'_, Self>,
     ) -> impl IntoElement {
         let palette = tokens::palette();
-        let selected = self.selected_vehicle.as_ref() == Some(&vehicle.id);
+        let selected = self.vehicles.selected.as_ref() == Some(&vehicle.id);
         let name = self.vehicle_name(vehicle.model.as_deref());
         let mut label = format!("{name}, {}", vehicle.plate);
         if vehicle.current {
             label.push_str(&format!(", {}", t("vehicles.current")));
         }
         let id = vehicle.id.clone();
+        let max_wear = vehicle
+            .engine_wear
+            .max(vehicle.transmission_wear)
+            .max(vehicle.cabin_wear);
         BaseButton::new((
             ElementId::from("vehicle"),
             SharedString::from(vehicle.id.clone()),
         ))
-        .when(first, |this| this.track_focus(&self.vehicles_focus))
+        .when(first, |this| this.track_focus(&self.vehicles.list_focus))
         .w_full()
         .min_h(px(tokens::SAVE_ROW_HEIGHT))
         .px(px(tokens::SPACE_3))
-        .py(px(tokens::SPACE_1))
+        .py(px(tokens::SPACE_2))
+        .rounded(px(tokens::RADIUS))
         .flex()
         .items_center()
         .gap(px(tokens::SPACE_2))
         .border_1()
-        .border_color(transparent_black())
+        .border_color(if selected {
+            palette.accent
+        } else {
+            transparent_black()
+        })
         .bg(if selected {
             palette.surface_selected
         } else {
@@ -165,36 +541,61 @@ impl AppView {
                 .min_w(px(0.0))
                 .flex()
                 .flex_col()
+                .gap(px(2.0))
                 .child(
                     div()
-                        .truncate()
-                        .text_size(px(tokens::TEXT_BODY))
-                        .font_weight(if selected {
-                            FontWeight::SEMIBOLD
-                        } else {
-                            FontWeight::NORMAL
-                        })
-                        .text_color(palette.text)
-                        .child(name),
+                        .flex()
+                        .items_center()
+                        .justify_between()
+                        .gap(px(tokens::SPACE_2))
+                        .child(
+                            div()
+                                .truncate()
+                                .text_size(px(tokens::TEXT_BODY))
+                                .font_weight(if selected {
+                                    FontWeight::SEMIBOLD
+                                } else {
+                                    FontWeight::NORMAL
+                                })
+                                .text_color(palette.text)
+                                .child(name),
+                        )
+                        .when(vehicle.current, |this| {
+                            this.child(
+                                div()
+                                    .flex_shrink_0()
+                                    .text_size(px(tokens::TEXT_LABEL))
+                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .text_color(palette.accent)
+                                    .child(t("vehicles.current")),
+                            )
+                        }),
                 )
                 .child(
                     div()
-                        .truncate()
+                        .flex()
+                        .items_center()
+                        .justify_between()
+                        .gap(px(tokens::SPACE_2))
                         .text_size(px(tokens::TEXT_LABEL))
                         .text_color(palette.muted)
-                        .child(vehicle.plate.clone()),
+                        .child(div().truncate().child(vehicle.plate.clone()))
+                        .child(
+                            div()
+                                .flex_shrink_0()
+                                .flex()
+                                .items_center()
+                                .gap(px(5.0))
+                                .child(
+                                    div()
+                                        .size(px(7.0))
+                                        .rounded(px(999.0))
+                                        .bg(tokens::wear_color(max_wear)),
+                                )
+                                .child(format::percent(vehicle.fuel)),
+                        ),
                 ),
         )
-        .when(vehicle.current, |this| {
-            this.child(
-                div()
-                    .flex_shrink_0()
-                    .text_size(px(tokens::TEXT_LABEL))
-                    .font_weight(FontWeight::SEMIBOLD)
-                    .text_color(palette.accent)
-                    .child(t("vehicles.current")),
-            )
-        })
         .on_click(
             cx.listener(move |this, _, window, cx| this.select_vehicle(id.clone(), window, cx)),
         )
@@ -202,19 +603,21 @@ impl AppView {
 
     fn vehicle_detail(&self, vehicle: &VehicleRow, cx: &mut Context<'_, Self>) -> AnyElement {
         let palette = tokens::palette();
-        let fuel = self.fuel.read(cx).value().end().round();
+        let game = self.state.game();
+        let fuel = self.vehicles.fuel.read(cx).value().end().round();
+        let live_plate = self.vehicles.plate.read(cx).value().to_string();
         let country = self.country_menu(cx);
         let parts = (vehicle.listing.is_none() && self.has_parts(vehicle)).then(|| {
-            div()
+            ui::card()
                 .flex()
                 .flex_col()
-                .gap(px(tokens::SPACE_2))
+                .gap(px(tokens::SPACE_3))
                 .child(ui::section_title(t("vehicles.parts")))
                 .child(div().flex().flex_wrap().gap(px(tokens::SPACE_4)).children(
                     PartKind::ALL.into_iter().enumerate().map(|(ix, kind)| {
                         div().w(px(PART_CELL)).child(ui::field(
                             t(kind.key()),
-                            self.part_menu(kind, vehicle, &self.parts_focus[ix], cx),
+                            self.part_menu(kind, vehicle, &self.vehicles.parts_focus[ix], cx),
                             None,
                         ))
                     }),
@@ -241,161 +644,218 @@ impl AppView {
                     .p(px(tokens::SPACE_6))
                     .flex()
                     .flex_col()
-                    .gap(px(tokens::SPACE_6))
+                    .gap(px(tokens::SPACE_4))
                     .child(
                         div()
                             .flex()
-                            .flex_col()
-                            .gap(px(tokens::SPACE_1))
-                            .child(ui::section_title(
-                                self.vehicle_name(vehicle.model.as_deref()),
-                            ))
+                            .flex_wrap()
+                            .items_center()
+                            .justify_between()
+                            .gap(px(tokens::SPACE_3))
                             .child(
                                 div()
-                                    .text_size(px(tokens::TEXT_BODY))
-                                    .text_color(palette.muted)
-                                    .child(if vehicle.listing.is_some() {
-                                        t("vehicles.used_listing")
-                                    } else {
-                                        vehicle.plate.clone()
-                                    }),
-                            ),
-                    )
-                    .when(vehicle.listing.is_none(), |this| {
-                        this.child(
-                            div()
-                                .flex()
-                                .flex_col()
-                                .gap(px(tokens::SPACE_1))
-                                .child(
-                                    div()
-                                        .flex()
-                                        .flex_col()
-                                        .gap(px(tokens::SPACE_1))
-                                        .child(ui::field(
-                                            t("field.plate"),
-                                            ui::text_field("plate", &self.plate, t("field.plate")),
-                                            self.plate_error.map(t),
-                                        ))
-                                        .child(
-                                            div()
-                                                .text_size(px(tokens::TEXT_LABEL))
-                                                .text_color(palette.muted)
-                                                .child(t("vehicles.plate_hint")),
-                                        ),
-                                )
-                                .child(ui::field(self.plate_country_label(), country, None)),
-                        )
-                    })
-                    .when(vehicle.listing.is_some(), |this| {
-                        let price = self.currency();
-                        let before = format!("{}{}", price.sign1, price.sign2);
-                        let before = before.trim();
-                        let after = price.sign3.trim();
-                        this.child(ui::field(
-                            t("field.price"),
-                            ui::text_field("used-price", &self.used_price, t("field.price"))
-                                .when(!before.is_empty(), |this| this.prefix(before.to_owned()))
-                                .when(!after.is_empty(), |this| this.suffix(after.to_owned())),
-                            self.used_price_error.map(t),
-                        ))
-                    })
-                    .child(
-                        div()
-                            .flex()
-                            .gap(px(tokens::SPACE_4))
-                            .child(div().flex_1().min_w(px(0.0)).when(
-                                vehicle.odometer.is_some(),
-                                |this| {
-                                    this.child(ui::field(
-                                        t("field.odometer"),
-                                        ui::text_field(
-                                            "odometer",
-                                            &self.odometer,
-                                            t("field.odometer"),
-                                        ),
-                                        self.odometer_error.map(t),
-                                    ))
-                                },
-                            ))
-                            .child(
-                                div()
-                                    .flex_1()
-                                    .min_w(px(0.0))
                                     .flex()
                                     .flex_col()
+                                    .items_start()
                                     .gap(px(tokens::SPACE_1))
                                     .child(
                                         div()
-                                            .flex()
-                                            .justify_between()
-                                            .text_size(px(tokens::TEXT_LABEL))
+                                            .text_size(px(tokens::TEXT_TITLE))
                                             .font_weight(FontWeight::SEMIBOLD)
-                                            .text_color(palette.muted)
-                                            .child(t("field.fuel"))
-                                            .child(format::percent(fuel / 100.0)),
+                                            .text_color(palette.text)
+                                            .child(self.vehicle_name(vehicle.model.as_deref())),
                                     )
-                                    .child(ui::slider(
-                                        &self.fuel,
-                                        &self.fuel_focus,
-                                        t("field.fuel"),
-                                    )),
+                                    .when(vehicle.listing.is_some(), |this| {
+                                        this.child(ui::pill(
+                                            None,
+                                            t("vehicles.used_listing"),
+                                            palette.accent,
+                                            palette.accent_soft,
+                                        ))
+                                    }),
+                            )
+                            .when(vehicle.listing.is_none(), |this| {
+                                this.child(ui::plate_preview(
+                                    &live_plate,
+                                    vehicle.country.as_deref(),
+                                    game,
+                                ))
+                            }),
+                    )
+                    .child(
+                        ui::card()
+                            .flex()
+                            .flex_col()
+                            .gap(px(tokens::SPACE_4))
+                            .when(vehicle.listing.is_none(), |this| {
+                                this.child(
+                                    div()
+                                        .flex()
+                                        .flex_wrap()
+                                        .gap(px(tokens::SPACE_4))
+                                        .child(
+                                            div()
+                                                .flex_1()
+                                                .min_w(px(220.0))
+                                                .flex()
+                                                .flex_col()
+                                                .gap(px(tokens::SPACE_1))
+                                                .child(ui::field(
+                                                    t("field.plate"),
+                                                    ui::text_field(
+                                                        "plate",
+                                                        &self.vehicles.plate,
+                                                        t("field.plate"),
+                                                    ),
+                                                    self.vehicles.plate_error.map(t),
+                                                ))
+                                                .child(
+                                                    div()
+                                                        .text_size(px(tokens::TEXT_LABEL))
+                                                        .text_color(palette.muted)
+                                                        .child(t("vehicles.plate_hint")),
+                                                ),
+                                        )
+                                        .child(div().flex_1().min_w(px(220.0)).child(ui::field(
+                                            self.plate_country_label(),
+                                            country,
+                                            None,
+                                        ))),
+                                )
+                            })
+                            .when(vehicle.listing.is_some(), |this| {
+                                let price = self.currency();
+                                let before = format!("{}{}", price.sign1, price.sign2);
+                                let before = before.trim();
+                                let after = price.sign3.trim();
+                                this.child(ui::field(
+                                    t("field.price"),
+                                    ui::text_field(
+                                        "used-price",
+                                        &self.vehicles.used_price,
+                                        t("field.price"),
+                                    )
+                                    .when(!before.is_empty(), |this| this.prefix(before.to_owned()))
+                                    .when(!after.is_empty(), |this| this.suffix(after.to_owned())),
+                                    self.vehicles.used_price_error.map(t),
+                                ))
+                            })
+                            .child(
+                                div()
+                                    .flex()
+                                    .flex_wrap()
+                                    .gap(px(tokens::SPACE_4))
+                                    .when(vehicle.odometer.is_some(), |this| {
+                                        this.child(div().flex_1().min_w(px(220.0)).child(
+                                            ui::field(
+                                                t("field.odometer"),
+                                                ui::text_field(
+                                                    "odometer",
+                                                    &self.vehicles.odometer,
+                                                    t("field.odometer"),
+                                                ),
+                                                self.vehicles.odometer_error.map(t),
+                                            ),
+                                        ))
+                                    })
+                                    .child(
+                                        div()
+                                            .flex_1()
+                                            .min_w(px(220.0))
+                                            .flex()
+                                            .flex_col()
+                                            .gap(px(tokens::SPACE_1))
+                                            .child(
+                                                div()
+                                                    .flex()
+                                                    .justify_between()
+                                                    .text_size(px(tokens::TEXT_LABEL))
+                                                    .font_weight(FontWeight::SEMIBOLD)
+                                                    .text_color(palette.muted)
+                                                    .child(t("field.fuel"))
+                                                    .child(
+                                                        div()
+                                                            .text_color(palette.text)
+                                                            .child(format::percent(fuel / 100.0)),
+                                                    ),
+                                            )
+                                            .child(ui::slider(
+                                                &self.vehicles.fuel,
+                                                &self.vehicles.fuel_focus,
+                                                t("field.fuel"),
+                                            ))
+                                            .child(
+                                                div()
+                                                    .flex()
+                                                    .justify_between()
+                                                    .px(px(tokens::SPACE_2))
+                                                    .text_size(px(11.0))
+                                                    .font_weight(FontWeight::SEMIBOLD)
+                                                    .text_color(palette.muted)
+                                                    .child("E")
+                                                    .child("½")
+                                                    .child("F"),
+                                            ),
+                                    ),
                             ),
                     )
                     .child(
-                        div()
+                        ui::card()
                             .flex()
                             .flex_col()
-                            .gap(px(tokens::SPACE_2))
+                            .gap(px(tokens::SPACE_3))
                             .child(ui::section_title(t("vehicles.wear")))
-                            .child(ui::info_row(
-                                t("wear.engine"),
-                                format::percent(vehicle.engine_wear),
-                            ))
-                            .child(ui::info_row(
-                                t("wear.transmission"),
-                                format::percent(vehicle.transmission_wear),
-                            ))
-                            .child(ui::info_row(
-                                t("wear.cabin"),
-                                format::percent(vehicle.cabin_wear),
-                            )),
-                    )
-                    .when_some(parts, |this, parts| this.child(parts))
-                    .when(vehicle.listing.is_none(), |this| {
-                        this.child(
-                            div()
-                                .flex()
-                                .flex_wrap()
-                                .gap(px(tokens::SPACE_2))
-                                .child(action(
-                                    "vehicles.repair",
-                                    IconName::Wrench,
-                                    Command::RepairVehicle,
-                                ))
-                                .child(action(
-                                    "vehicles.fill",
-                                    IconName::Fuel,
-                                    Command::SetInfiniteFuel,
-                                ))
-                                .child(
-                                    action(
-                                        "vehicles.remove_badges",
-                                        IconName::Eraser,
-                                        Command::RemoveBadge,
-                                    )
-                                    .disabled(!vehicle.badges),
+                            .child(
+                                div()
+                                    .flex()
+                                    .flex_wrap()
+                                    .gap(px(tokens::SPACE_3))
+                                    .child(ui::wear_bar(t("wear.engine"), vehicle.engine_wear))
+                                    .child(ui::wear_bar(
+                                        t("wear.transmission"),
+                                        vehicle.transmission_wear,
+                                    ))
+                                    .child(ui::wear_bar(t("wear.cabin"), vehicle.cabin_wear)),
+                            )
+                            .when(vehicle.listing.is_none(), |this| {
+                                this.child(
+                                    div()
+                                        .pt(px(tokens::SPACE_2))
+                                        .border_t_1()
+                                        .border_color(palette.border)
+                                        .flex()
+                                        .flex_wrap()
+                                        .gap(px(tokens::SPACE_2))
+                                        .child(action(
+                                            "vehicles.repair",
+                                            IconName::Wrench,
+                                            Command::RepairVehicle,
+                                        ))
+                                        .child(action(
+                                            "vehicles.fill",
+                                            IconName::Fuel,
+                                            Command::SetInfiniteFuel,
+                                        ))
+                                        .child(
+                                            action(
+                                                "vehicles.remove_badges",
+                                                IconName::Eraser,
+                                                Command::RemoveBadge,
+                                            )
+                                            .disabled(!vehicle.badges),
+                                        )
+                                        .child(
+                                            action(
+                                                "vehicles.set_current",
+                                                IconName::KeyRound,
+                                                Command::SetCurrentVehicle,
+                                            )
+                                            .disabled(vehicle.current || !vehicle.owned),
+                                        ),
                                 )
-                                .child(
-                                    action(
-                                        "vehicles.set_current",
-                                        IconName::KeyRound,
-                                        Command::SetCurrentVehicle,
-                                    )
-                                    .disabled(vehicle.current || !vehicle.owned),
-                                ),
-                        )
-                    }),
+                            }),
+                    )
+                    .when_some(parts, |this, parts| this.child(parts)),
             )
             .into_any_element()
     }
@@ -433,7 +893,7 @@ impl AppView {
             .anchor(Anchor::BottomLeft)
             .trigger(
                 ui::select_field("plate-country-trigger", label, accessible)
-                    .track_focus(&self.country_focus),
+                    .track_focus(&self.vehicles.country_focus),
             )
             .content(move |_, _, cx| {
                 let popover = cx.entity();
@@ -552,11 +1012,7 @@ impl AppView {
                             .on_click(move |_, window, cx| {
                                 if !selected {
                                     view.update(cx, |view, cx| {
-                                        view.apply(
-                                            part.command(id.clone(), path.clone()),
-                                            |_| {},
-                                            cx,
-                                        )
+                                        view.apply(part.command(id.clone(), path.clone()), cx)
                                     })
                                     .ok();
                                 }

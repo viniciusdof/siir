@@ -52,6 +52,11 @@ pub fn used_price(id: &str, text: &str, currency: &Currency) -> Result<Command, 
     })
 }
 
+/// Whether `next` matches `current` after rounding through `currency`.
+pub fn same_shown_amount(current: i64, next: i64, currency: &Currency) -> bool {
+    current == next || currency.to_native(currency.from_native(current)) == next
+}
+
 /// Sets the experience to the start of `level`, or `None` when the level
 /// needs more than the game's 32-bit counter holds.
 pub fn level(level: u32, levels: &Levels) -> Option<Command> {
@@ -141,6 +146,9 @@ pub const ADR_CLASSES: [&str; 6] = [
     "adr.corrosive",
 ];
 
+/// ADR class numbers matching [`ADR_CLASSES`].
+pub const ADR_CODES: [&str; 6] = ["1", "2", "3", "4", "6", "8"];
+
 /// Builds the player skills from five levels and the selected ADR classes.
 ///
 /// The low six bits of `adr` are the ADR classes; higher bits are kept
@@ -205,6 +213,19 @@ mod tests {
             used_price("l", "", &euro),
             Err(FieldError::Number)
         ));
+        let pound = Currency {
+            code: "GBP".to_owned(),
+            ratio: 0.85,
+            ..euro
+        };
+        let shown = pound.from_native(10);
+        let Command::SetUsedTruckPrice { price, .. } =
+            used_price("l", &shown.to_string(), &pound).unwrap()
+        else {
+            panic!("expected SetUsedTruckPrice");
+        };
+        assert!(same_shown_amount(10, price, &pound));
+        assert!(!same_shown_amount(10, price + 5, &pound));
     }
 
     #[test]

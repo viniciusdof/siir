@@ -1,11 +1,13 @@
 use gpui_kit::assets::IconName;
 use gpui_kit::base::Button as BaseButton;
+use gpui_kit::base::input::{InputEvent, InputState, MaskPattern};
 use gpui_kit::prelude::*;
 use gpui_kit::{
-    AnyElement, Context, ElementId, FontWeight, IntoElement, SharedString, div, px,
-    transparent_black,
+    AnyElement, Context, ElementId, Entity, FocusHandle, Focusable, FontWeight, IntoElement,
+    SharedString, Subscription, Window, div, px, transparent_black,
 };
 
+use siir_gui::edit;
 use siir_gui::format;
 use siir_gui::i18n::{self, t};
 use siir_gui::view_data::TrailerRow;
@@ -14,9 +16,205 @@ use siir_save::Command;
 use crate::ui::{self, tokens};
 use crate::view::AppView;
 
-const LIST_WIDTH: f32 = 300.0;
+const LIST_WIDTH: f32 = 290.0;
+
+pub(super) struct TrailersState {
+    pub(super) selected: Option<String>,
+    plate: Entity<InputState>,
+    plate_error: Option<&'static str>,
+    cargo_mass: Entity<InputState>,
+    cargo_mass_error: Option<&'static str>,
+    pub(super) list_focus: FocusHandle,
+}
+
+impl TrailersState {
+    pub(super) fn new(
+        window: &mut Window,
+        cx: &mut Context<'_, AppView>,
+        subscriptions: &mut Vec<Subscription>,
+    ) -> Self {
+        let plate = AppView::input(window, cx);
+        let cargo_mass = AppView::number_input(window, cx, false);
+
+        subscriptions.push(cx.observe(&plate, |this, _, cx| {
+            this.trailers.plate_error = None;
+            cx.notify();
+        }));
+        subscriptions.push(cx.subscribe(&plate, |this, _, event: &InputEvent, cx| {
+            if matches!(event, InputEvent::Change) {
+                this.apply_trailer_plate_text(cx);
+            }
+        }));
+        let plate_focus = plate.read(cx).focus_handle(cx);
+        subscriptions.push(cx.on_focus(&plate_focus, window, |_, _, cx| cx.notify()));
+        subscriptions.push(cx.on_blur(&plate_focus, window, |this, _, cx| {
+            this.commit_trailer_plate(cx)
+        }));
+
+        subscriptions.push(cx.observe(&cargo_mass, |this, _, cx| {
+            this.trailers.cargo_mass_error = None;
+            cx.notify();
+        }));
+        subscriptions.push(
+            cx.subscribe(&cargo_mass, |this, _, event: &InputEvent, cx| {
+                if matches!(event, InputEvent::Change) {
+                    this.apply_cargo_mass_text(cx);
+                }
+            }),
+        );
+        let cargo_mass_focus = cargo_mass.read(cx).focus_handle(cx);
+        subscriptions.push(cx.on_focus(&cargo_mass_focus, window, |_, _, cx| cx.notify()));
+        subscriptions.push(cx.on_blur(&cargo_mass_focus, window, |this, _, cx| {
+            this.commit_cargo_mass(cx)
+        }));
+
+        Self {
+            selected: None,
+            plate,
+            plate_error: None,
+            cargo_mass,
+            cargo_mass_error: None,
+            list_focus: cx.focus_handle().tab_stop(true),
+        }
+    }
+
+    pub(super) fn clear_errors(&mut self) {
+        self.plate_error = None;
+        self.cargo_mass_error = None;
+    }
+
+    pub(super) fn is_valid(&self) -> bool {
+        self.plate_error.is_none() && self.cargo_mass_error.is_none()
+    }
+}
 
 impl AppView {
+    fn selected_trailer_row(&self) -> Option<&TrailerRow> {
+        let id = self.trailers.selected.as_ref()?;
+        self.state
+            .open()?
+            .view()
+            .trailers
+            .iter()
+            .find(|trailer| &trailer.id == id)
+    }
+
+    fn select_trailer(&mut self, id: String, window: &mut Window, cx: &mut Context<'_, Self>) {
+        self.trailers.selected = Some(id);
+        self.sync_trailer(window, cx);
+        cx.notify();
+    }
+
+    pub(super) fn default_trailer(&self) -> Option<String> {
+        let trailers = &self.state.open()?.view().trailers;
+        trailers
+            .iter()
+            .find(|trailer| trailer.current)
+            .or_else(|| trailers.first())
+            .map(|trailer| trailer.id.clone())
+    }
+
+    pub(super) fn sync_trailer(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
+        let game = self.state.game();
+        let Some((plate, mass)) = self
+            .selected_trailer_row()
+            .map(|row| (row.plate.clone(), row.cargo_mass))
+        else {
+            return;
+        };
+        self.trailers.plate_error = None;
+        self.trailers.cargo_mass_error = None;
+        self.trailers.plate.update(cx, |input, cx| {
+            input.set_value(plate, window, cx);
+        });
+        self.trailers.cargo_mass.update(cx, |input, cx| {
+            input.set_mask_pattern(
+                MaskPattern::Number {
+                    separator: Some(format::grouping(game)),
+                    fraction: None,
+                },
+                window,
+                cx,
+            );
+            input.set_value(
+                format::number(mass.max(0.0).round() as u64, game),
+                window,
+                cx,
+            );
+        });
+    }
+
+    fn apply_trailer_plate_text(&mut self, cx: &mut Context<'_, Self>) -> bool {
+        let Some((id, plate)) = self
+            .selected_trailer_row()
+            .map(|row| (row.id.clone(), row.plate.clone()))
+        else {
+            return true;
+        };
+        let text = self.trailers.plate.read(cx).value().to_string();
+        if text.trim() == plate {
+            self.trailers.plate_error = None;
+            return true;
+        }
+        let Ok(command) = edit::trailer_plate(&id, &text) else {
+            return false;
+        };
+        self.trailers.plate_error = None;
+        if matches!(&command, Command::SetTrailerLicensePlate { plate: next, .. } if next != &plate)
+        {
+            self.apply(command, cx);
+        }
+        true
+    }
+
+    fn apply_cargo_mass_text(&mut self, cx: &mut Context<'_, Self>) -> bool {
+        let Some((id, mass)) = self
+            .selected_trailer_row()
+            .map(|row| (row.id.clone(), row.cargo_mass))
+        else {
+            return true;
+        };
+        let text = self.trailers.cargo_mass.read(cx).unmask_value().to_string();
+        let Ok(command) = edit::cargo_mass(&id, &text) else {
+            return false;
+        };
+        self.trailers.cargo_mass_error = None;
+        if matches!(&command, Command::SetCargoMass { mass: next, .. } if *next != mass) {
+            self.apply(command, cx);
+        }
+        true
+    }
+
+    pub(super) fn commit_trailer_plate(&mut self, cx: &mut Context<'_, Self>) {
+        if self.selected_trailer_row().is_none() {
+            return;
+        }
+        if !self.apply_trailer_plate_text(cx) {
+            self.trailers.plate_error = Some(edit::FieldError::Name.key());
+            cx.notify();
+        }
+    }
+
+    pub(super) fn commit_cargo_mass(&mut self, cx: &mut Context<'_, Self>) {
+        if self.selected_trailer_row().is_none() {
+            return;
+        }
+        if !self.apply_cargo_mass_text(cx) {
+            self.trailers.cargo_mass_error = Some(edit::FieldError::Number.key());
+            cx.notify();
+        }
+    }
+
+    fn trailer_command(
+        &mut self,
+        command: Command,
+        window: &mut Window,
+        cx: &mut Context<'_, Self>,
+    ) {
+        self.apply(command, cx);
+        self.sync_trailer(window, cx);
+    }
+
     pub(crate) fn render_trailers(&self, cx: &mut Context<'_, Self>) -> impl IntoElement {
         let palette = tokens::palette();
         let Some(open) = self.state.open() else {
@@ -25,7 +223,7 @@ impl AppView {
         let rows = &open.view().trailers;
         let selected = rows
             .iter()
-            .find(|trailer| Some(&trailer.id) == self.selected_trailer.as_ref());
+            .find(|trailer| Some(&trailer.id) == self.trailers.selected.as_ref());
         let mut list = div()
             .id("trailer-list")
             .w(px(LIST_WIDTH))
@@ -34,6 +232,8 @@ impl AppView {
             .overflow_y_scroll()
             .flex()
             .flex_col()
+            .gap(px(tokens::SPACE_1))
+            .p(px(tokens::SPACE_2))
             .border_r_1()
             .border_color(palette.border);
         for (ix, trailer) in rows.iter().enumerate() {
@@ -92,27 +292,33 @@ impl AppView {
         cx: &mut Context<'_, Self>,
     ) -> impl IntoElement {
         let palette = tokens::palette();
-        let selected = self.selected_trailer.as_ref() == Some(&trailer.id);
+        let selected = self.trailers.selected.as_ref() == Some(&trailer.id);
         let name = self.trailer_name(trailer);
         let mut label = format!("{}, {}", name, trailer.plate);
         if trailer.current {
             label.push_str(&format!(", {}", t("vehicles.current")));
         }
         let id = trailer.id.clone();
+        let max_wear = trailer.body_wear.max(trailer.chassis_wear);
         BaseButton::new((
             ElementId::from("trailer"),
             SharedString::from(trailer.id.clone()),
         ))
-        .when(first, |this| this.track_focus(&self.trailers_focus))
+        .when(first, |this| this.track_focus(&self.trailers.list_focus))
         .w_full()
         .min_h(px(tokens::SAVE_ROW_HEIGHT))
         .px(px(tokens::SPACE_3))
-        .py(px(tokens::SPACE_1))
+        .py(px(tokens::SPACE_2))
+        .rounded(px(tokens::RADIUS))
         .flex()
         .items_center()
         .gap(px(tokens::SPACE_2))
         .border_1()
-        .border_color(transparent_black())
+        .border_color(if selected {
+            palette.accent
+        } else {
+            transparent_black()
+        })
         .bg(if selected {
             palette.surface_selected
         } else {
@@ -129,36 +335,54 @@ impl AppView {
                 .min_w(px(0.0))
                 .flex()
                 .flex_col()
+                .gap(px(2.0))
                 .child(
                     div()
-                        .truncate()
-                        .text_size(px(tokens::TEXT_BODY))
-                        .font_weight(if selected {
-                            FontWeight::SEMIBOLD
-                        } else {
-                            FontWeight::NORMAL
-                        })
-                        .text_color(palette.text)
-                        .child(name),
+                        .flex()
+                        .items_center()
+                        .justify_between()
+                        .gap(px(tokens::SPACE_2))
+                        .child(
+                            div()
+                                .truncate()
+                                .text_size(px(tokens::TEXT_BODY))
+                                .font_weight(if selected {
+                                    FontWeight::SEMIBOLD
+                                } else {
+                                    FontWeight::NORMAL
+                                })
+                                .text_color(palette.text)
+                                .child(name),
+                        )
+                        .when(trailer.current, |this| {
+                            this.child(
+                                div()
+                                    .flex_shrink_0()
+                                    .text_size(px(tokens::TEXT_LABEL))
+                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .text_color(palette.accent)
+                                    .child(t("vehicles.current")),
+                            )
+                        }),
                 )
                 .child(
                     div()
-                        .truncate()
+                        .flex()
+                        .items_center()
+                        .justify_between()
+                        .gap(px(tokens::SPACE_2))
                         .text_size(px(tokens::TEXT_LABEL))
                         .text_color(palette.muted)
-                        .child(trailer.plate.clone()),
+                        .child(div().truncate().child(trailer.plate.clone()))
+                        .child(
+                            div()
+                                .flex_shrink_0()
+                                .size(px(7.0))
+                                .rounded(px(999.0))
+                                .bg(tokens::wear_color(max_wear)),
+                        ),
                 ),
         )
-        .when(trailer.current, |this| {
-            this.child(
-                div()
-                    .flex_shrink_0()
-                    .text_size(px(tokens::TEXT_LABEL))
-                    .font_weight(FontWeight::SEMIBOLD)
-                    .text_color(palette.accent)
-                    .child(t("vehicles.current")),
-            )
-        })
         .on_click(
             cx.listener(move |this, _, window, cx| this.select_trailer(id.clone(), window, cx)),
         )
@@ -166,6 +390,8 @@ impl AppView {
 
     fn trailer_detail(&self, trailer: &TrailerRow, cx: &mut Context<'_, Self>) -> AnyElement {
         let palette = tokens::palette();
+        let game = self.state.game();
+        let live_plate = self.trailers.plate.read(cx).value().to_string();
         let id = trailer.id.clone();
         let action = |key: &'static str, icon: IconName, command: fn(String) -> Command| {
             let id = id.clone();
@@ -187,85 +413,104 @@ impl AppView {
                     .p(px(tokens::SPACE_6))
                     .flex()
                     .flex_col()
-                    .gap(px(tokens::SPACE_6))
-                    .child(
-                        div()
-                            .flex()
-                            .flex_col()
-                            .gap(px(tokens::SPACE_1))
-                            .child(ui::section_title(self.trailer_name(trailer)))
-                            .child(
-                                div()
-                                    .text_size(px(tokens::TEXT_BODY))
-                                    .text_color(palette.muted)
-                                    .child(
-                                        trailer
-                                            .source
-                                            .clone()
-                                            .unwrap_or_else(|| trailer.definition.clone()),
-                                    ),
-                            ),
-                    )
-                    .child(
-                        div()
-                            .flex()
-                            .gap(px(tokens::SPACE_4))
-                            .child(div().flex_1().min_w(px(0.0)).child(ui::field(
-                                t("field.trailer_plate"),
-                                ui::text_field(
-                                    "trailer-plate",
-                                    &self.trailer_plate,
-                                    t("field.trailer_plate"),
-                                ),
-                                self.trailer_plate_error.map(t),
-                            )))
-                            .child(div().flex_1().min_w(px(0.0)).child(ui::field(
-                                t("field.cargo_mass"),
-                                ui::text_field(
-                                    "cargo-mass",
-                                    &self.cargo_mass,
-                                    t("field.cargo_mass"),
-                                ),
-                                self.cargo_mass_error.map(t),
-                            ))),
-                    )
-                    .child(
-                        div()
-                            .flex()
-                            .flex_col()
-                            .gap(px(tokens::SPACE_2))
-                            .child(ui::section_title(t("vehicles.wear")))
-                            .child(ui::info_row(
-                                t("wear.body"),
-                                format::percent(trailer.body_wear),
-                            ))
-                            .child(ui::info_row(
-                                t("wear.chassis"),
-                                format::percent(trailer.chassis_wear),
-                            )),
-                    )
+                    .gap(px(tokens::SPACE_4))
                     .child(
                         div()
                             .flex()
                             .flex_wrap()
-                            .gap(px(tokens::SPACE_2))
-                            .child(action(
-                                "trailers.repair",
-                                IconName::Wrench,
-                                Command::RepairTrailer,
-                            ))
-                            .child(action(
-                                "trailers.unlock",
-                                IconName::LockOpen,
-                                Command::UnlockInRestrictedAreas,
-                            ))
+                            .items_center()
+                            .justify_between()
+                            .gap(px(tokens::SPACE_3))
                             .child(
-                                action(
-                                    "trailers.attach",
-                                    IconName::Link,
-                                    Command::SetCurrentTrailer,
-                                )
-                                .disabled(trailer.current),
+                                div()
+                                    .flex()
+                                    .flex_col()
+                                    .gap(px(tokens::SPACE_1))
+                                    .child(
+                                        div()
+                                            .text_size(px(tokens::TEXT_TITLE))
+                                            .font_weight(FontWeight::SEMIBOLD)
+                                            .text_color(palette.text)
+                                            .child(self.trailer_name(trailer)),
+                                    )
+                                    .child(
+                                        div()
+                                            .text_size(px(tokens::TEXT_LABEL))
+                                            .text_color(palette.muted)
+                                            .child(
+                                                trailer
+                                                    .source
+                                                    .clone()
+                                                    .unwrap_or_else(|| trailer.definition.clone()),
+                                            ),
+                                    ),
+                            )
+                            .child(ui::plate_preview(&live_plate, None, game)),
+                    )
+                    .child(
+                        ui::card()
+                            .flex()
+                            .flex_wrap()
+                            .gap(px(tokens::SPACE_4))
+                            .child(div().flex_1().min_w(px(220.0)).child(ui::field(
+                                t("field.trailer_plate"),
+                                ui::text_field(
+                                    "trailer-plate",
+                                    &self.trailers.plate,
+                                    t("field.trailer_plate"),
+                                ),
+                                self.trailers.plate_error.map(t),
+                            )))
+                            .child(div().flex_1().min_w(px(220.0)).child(ui::field(
+                                t("field.cargo_mass"),
+                                ui::text_field(
+                                    "cargo-mass",
+                                    &self.trailers.cargo_mass,
+                                    t("field.cargo_mass"),
+                                ),
+                                self.trailers.cargo_mass_error.map(t),
+                            ))),
+                    )
+                    .child(
+                        ui::card()
+                            .flex()
+                            .flex_col()
+                            .gap(px(tokens::SPACE_3))
+                            .child(ui::section_title(t("vehicles.wear")))
+                            .child(
+                                div()
+                                    .flex()
+                                    .flex_wrap()
+                                    .gap(px(tokens::SPACE_3))
+                                    .child(ui::wear_bar(t("wear.body"), trailer.body_wear))
+                                    .child(ui::wear_bar(t("wear.chassis"), trailer.chassis_wear)),
+                            )
+                            .child(
+                                div()
+                                    .pt(px(tokens::SPACE_2))
+                                    .border_t_1()
+                                    .border_color(palette.border)
+                                    .flex()
+                                    .flex_wrap()
+                                    .gap(px(tokens::SPACE_2))
+                                    .child(action(
+                                        "trailers.repair",
+                                        IconName::Wrench,
+                                        Command::RepairTrailer,
+                                    ))
+                                    .child(action(
+                                        "trailers.unlock",
+                                        IconName::LockOpen,
+                                        Command::UnlockInRestrictedAreas,
+                                    ))
+                                    .child(
+                                        action(
+                                            "trailers.attach",
+                                            IconName::Link,
+                                            Command::SetCurrentTrailer,
+                                        )
+                                        .disabled(trailer.current),
+                                    ),
                             ),
                     ),
             )

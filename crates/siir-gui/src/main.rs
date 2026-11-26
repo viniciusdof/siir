@@ -9,6 +9,8 @@ use std::path::PathBuf;
 
 use gpui_kit::prelude::*;
 use gpui_kit::{Bounds, TitlebarOptions, WindowBounds, WindowOptions, px, size};
+use siir_gui::state::Settings;
+use siir_save::Game;
 
 use view::AppView;
 
@@ -19,7 +21,11 @@ fn main() {
         .run(move |cx| {
             gpui_kit::init(cx);
             siir_gui::i18n::init();
-            ui::tokens::install(cx);
+            let settings = Settings::load();
+            if let Some(locale) = settings.locale() {
+                siir_gui::i18n::set_locale(locale);
+            }
+            ui::tokens::apply_theme(cx, settings.game().unwrap_or(Game::Ets2));
             let bounds = Bounds::centered(None, size(px(1100.0), px(720.0)), cx);
             gpui_kit::open_window(
                 WindowOptions {
@@ -32,7 +38,7 @@ fn main() {
                     ..Default::default()
                 },
                 cx,
-                move |window, cx| cx.new(|cx| AppView::new(dirs, window, cx)),
+                move |window, cx| cx.new(|cx| AppView::new(settings, dirs, window, cx)),
             )
             .expect("open the main window");
             cx.activate(true);

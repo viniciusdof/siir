@@ -59,25 +59,25 @@ impl RenderOnce for Slider {
                             .relative()
                             .w_full()
                             .h(px(6.0))
-                            .rounded(px(3.0))
-                            .bg(palette.surface)
+                            .rounded(px(999.0))
+                            .bg(palette.surface_selected)
                             .child(
                                 div()
                                     .absolute()
                                     .h_full()
                                     .left(px(0.0))
                                     .right(relative(1.0 - percentage))
-                                    .rounded(px(3.0))
-                                    .bg(palette.muted),
+                                    .rounded(px(999.0))
+                                    .bg(palette.accent),
                             )
                             .child(
                                 SliderThumb::new(&self.state)
                                     .absolute()
-                                    .top(px(-4.0))
+                                    .top(px(-5.0))
                                     .left(relative(percentage))
-                                    .ml(px(-7.0))
-                                    .size(px(14.0))
-                                    .rounded(px(7.0))
+                                    .ml(px(-8.0))
+                                    .size(px(16.0))
+                                    .rounded(px(8.0))
                                     .bg(palette.accent)
                                     .border_2()
                                     .border_color(palette.bg),

@@ -7,7 +7,7 @@ use gpui_kit::{
     px,
 };
 
-use crate::ui::tokens::{self, RADIUS, SPACE_2, SPACE_3, SPACE_4, TEXT_BODY, TEXT_SECTION};
+use crate::ui::tokens::{self, CARD_RADIUS, SPACE_2, SPACE_3, SPACE_4, TEXT_BODY, TEXT_SECTION};
 
 type CancelHandler = Rc<dyn Fn(&mut Window, &mut App) + 'static>;
 
@@ -83,7 +83,7 @@ impl RenderOnce for Confirm {
                     .bg(palette.panel)
                     .border_1()
                     .border_color(palette.border)
-                    .rounded(px(RADIUS))
+                    .rounded(px(CARD_RADIUS))
                     .overflow_hidden()
                     .child(
                         DialogTitle::new()

@@ -69,11 +69,16 @@ impl AppView {
     ) -> impl IntoElement {
         let palette = tokens::palette();
         let active = self.section == section;
-        let color = if active { palette.text } else { palette.muted };
+        let text_color = if active { palette.text } else { palette.muted };
+        let icon_color = if active {
+            palette.accent
+        } else {
+            palette.muted
+        };
         BaseButton::new(id)
             .w_full()
-            .h(px(36.0))
-            .px(px(tokens::SPACE_2))
+            .h(px(38.0))
+            .px(px(tokens::SPACE_3))
             .gap(px(tokens::SPACE_2))
             .flex()
             .items_center()
@@ -82,7 +87,7 @@ impl AppView {
             .border_1()
             .border_color(transparent_black())
             .bg(if active {
-                palette.surface_selected
+                palette.accent_soft
             } else {
                 transparent_black()
             })
@@ -92,7 +97,7 @@ impl AppView {
             } else {
                 FontWeight::NORMAL
             })
-            .text_color(color)
+            .text_color(text_color)
             .aria_toggled(if active {
                 Toggled::True
             } else {
@@ -102,7 +107,7 @@ impl AppView {
             .hover(|style| style.bg(palette.surface_hover))
             .active(|style| style.bg(palette.surface_active))
             .focus_visible(|style| style.border_color(palette.accent))
-            .child(ui::icon(name, 16.0, color))
+            .child(ui::icon(name, 16.0, icon_color))
             .child(label)
             .on_click(cx.listener(move |this, _, _, cx| this.set_section(section, cx)))
     }

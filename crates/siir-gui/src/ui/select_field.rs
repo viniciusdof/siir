@@ -5,6 +5,7 @@ use gpui_kit::{
     App, ElementId, FocusHandle, IntoElement, RenderOnce, Role, SharedString, Window, div, px,
 };
 
+use crate::ui::icon;
 use crate::ui::tokens::{self, RADIUS, ROW_HEIGHT, SPACE_2, SPACE_3, TEXT_BODY};
 
 #[derive(IntoElement)]
@@ -75,7 +76,9 @@ impl RenderOnce for SelectField {
             .aria_label(self.label)
             .when_some(self.focus, |this, handle| this.track_focus(&handle))
             .cursor_pointer()
+            .hover(|style| style.bg(palette.surface_hover))
+            .focus_visible(|style| style.border_color(palette.accent))
             .child(div().min_w(px(0.0)).truncate().child(self.value))
-            .child(IconName::ChevronDown)
+            .child(icon(IconName::ChevronDown, 16.0, palette.muted))
     }
 }

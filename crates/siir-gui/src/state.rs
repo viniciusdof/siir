@@ -66,6 +66,15 @@ impl Settings {
         self.locale = Some(locale.to_string());
     }
 
+    /// Appends folders that are not already remembered.
+    pub fn add_dirs(&mut self, dirs: impl IntoIterator<Item = PathBuf>) {
+        for dir in dirs {
+            if !self.dirs.contains(&dir) {
+                self.dirs.push(dir);
+            }
+        }
+    }
+
     fn load_from(path: &Path) -> Self {
         fs::read_to_string(path)
             .ok()
@@ -555,7 +564,7 @@ mod tests {
         assert_eq!(missing.locale(), None);
 
         let mut settings = Settings::default();
-        settings.dirs.push(PathBuf::from("/games/ets2"));
+        settings.add_dirs([PathBuf::from("/games/ets2"), PathBuf::from("/games/ets2")]);
         settings.set_game(Game::Ats);
         settings.set_locale("pt_br");
         settings.save_to(&path).unwrap();

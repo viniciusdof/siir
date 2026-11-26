@@ -1,18 +1,63 @@
+use std::collections::HashSet;
+use std::path::PathBuf;
+
 use gpui_kit::assets::IconName;
 use gpui_kit::base::Button as BaseButton;
+use gpui_kit::base::input::InputState;
 use gpui_kit::prelude::*;
 use gpui_kit::{
-    App, ClickEvent, Context, ElementId, FontWeight, IntoElement, Role, SharedString, Window, div,
-    px, transparent_black,
+    App, ClickEvent, Context, ElementId, Entity, Focusable, FontWeight, IntoElement, Role,
+    SharedString, Subscription, Window, div, px, transparent_black,
 };
 
+use siir_gui::format;
 use siir_gui::i18n::t;
 use siir_gui::state::{ProfileRow, SaveRow};
 
 use crate::ui::{self, Tone, tokens};
 use crate::view::AppView;
 
+pub(super) struct HomeState {
+    pub(super) search: Entity<InputState>,
+    pub(super) collapsed: HashSet<PathBuf>,
+    pub(super) hide_autosaves: bool,
+}
+
+impl HomeState {
+    pub(super) fn new(
+        window: &mut Window,
+        cx: &mut Context<'_, AppView>,
+        subscriptions: &mut Vec<Subscription>,
+    ) -> Self {
+        let search = AppView::input(window, cx);
+        search.update(cx, |search, cx| {
+            search.set_placeholder(t("home.search"), window, cx)
+        });
+        subscriptions.push(cx.observe(&search, |_, _, cx| cx.notify()));
+        let search_focus = search.read(cx).focus_handle(cx);
+        subscriptions.push(cx.on_focus(&search_focus, window, |_, _, cx| cx.notify()));
+        subscriptions.push(cx.on_blur(&search_focus, window, |_, _, cx| cx.notify()));
+        Self {
+            search,
+            collapsed: HashSet::new(),
+            hide_autosaves: true,
+        }
+    }
+}
+
 impl AppView {
+    fn toggle_profile(&mut self, path: PathBuf, cx: &mut Context<'_, Self>) {
+        if !self.home.collapsed.remove(&path) {
+            self.home.collapsed.insert(path);
+        }
+        cx.notify();
+    }
+
+    fn toggle_autosaves(&mut self, cx: &mut Context<'_, Self>) {
+        self.home.hide_autosaves = !self.home.hide_autosaves;
+        cx.notify();
+    }
+
     pub(crate) fn render_home(&self, cx: &mut Context<'_, Self>) -> impl IntoElement {
         let mut page = div().flex().flex_col().gap(px(tokens::SPACE_6));
 
@@ -37,19 +82,24 @@ impl AppView {
                     ),
             );
         } else {
-            let query = self.search.read(cx).value().to_lowercase();
+            let query = self.home.search.read(cx).value().to_lowercase();
             let searching = !query.is_empty();
             let mut tree = div().flex().flex_col();
             let mut groups = 0;
 
             for (ix, profile) in self.state.profiles().iter().enumerate() {
-                let rows =
-                    visible_rows(self.state.saves(), profile, ix, &query, self.hide_autosaves);
+                let rows = visible_rows(
+                    self.state.saves(),
+                    profile,
+                    ix,
+                    &query,
+                    self.home.hide_autosaves,
+                );
                 if rows.is_empty() {
                     continue;
                 }
                 groups += 1;
-                let expanded = searching || !self.collapsed.contains(&profile.path);
+                let expanded = searching || !self.home.collapsed.contains(&profile.path);
                 tree = tree.child(group(self, profile, expanded, rows, cx));
             }
 
@@ -57,7 +107,7 @@ impl AppView {
                 .child(self.continue_block(cx))
                 .child(self.browser_toolbar(cx));
             if groups == 0 {
-                let (icon, title, hint) = empty_state_for(searching, self.hide_autosaves);
+                let (icon, title, hint) = empty_state_for(searching, self.home.hide_autosaves);
                 page = page.child(div().pt(px(tokens::SPACE_4)).child(ui::empty_state(
                     icon,
                     t(title),
@@ -86,7 +136,7 @@ impl AppView {
     }
 
     fn browser_toolbar(&self, cx: &mut Context<'_, Self>) -> impl IntoElement {
-        let (label, icon) = if self.hide_autosaves {
+        let (label, icon) = if self.home.hide_autosaves {
             (t("home.show_autosaves"), IconName::Eye)
         } else {
             (t("home.hide_autosaves"), IconName::EyeOff)
@@ -97,7 +147,7 @@ impl AppView {
             .gap(px(tokens::SPACE_2))
             .child(div().flex_1().min_w(px(0.0)).child(ui::text_field(
                 "save-search",
-                &self.search,
+                &self.home.search,
                 t("home.search"),
             )))
             .child(
@@ -118,28 +168,23 @@ impl AppView {
             .get(row.profile)
             .map(|profile| format!("{} · {}", profile.name, t(profile.kind_key)))
             .unwrap_or_default();
-        div()
+        ui::card()
             .flex()
             .items_center()
             .gap(px(tokens::SPACE_4))
-            .p(px(tokens::SPACE_4))
-            .rounded(px(tokens::RADIUS))
-            .bg(palette.panel)
-            .border_1()
-            .border_color(palette.border)
             .child(
                 div()
                     .flex()
                     .flex_col()
-                    .gap(px(2.0))
+                    .items_start()
+                    .gap(px(tokens::SPACE_1))
                     .min_w(px(0.0))
-                    .child(
-                        div()
-                            .text_size(px(tokens::TEXT_LABEL))
-                            .font_weight(FontWeight::SEMIBOLD)
-                            .text_color(palette.accent)
-                            .child(t("home.most_recent")),
-                    )
+                    .child(ui::pill(
+                        Some(IconName::Play),
+                        t("home.most_recent"),
+                        palette.accent,
+                        palette.accent_soft,
+                    ))
                     .child(
                         div()
                             .truncate()
@@ -223,7 +268,7 @@ fn group(
 ) -> impl IntoElement {
     let palette = tokens::palette();
     let path = profile.path.clone();
-    let count = rows.len();
+    let count = format::number(rows.len() as u64, view.state.game());
     let mut rows_element = div().flex().flex_col().pl(px(28.0));
     for (save_ix, name, suffix) in rows {
         let row = &view.state.saves()[save_ix];
@@ -282,7 +327,7 @@ fn group(
                 div()
                     .text_size(px(tokens::TEXT_LABEL))
                     .text_color(palette.muted)
-                    .child(count.to_string()),
+                    .child(count),
             )
             .on_click(cx.listener(move |this, _, _, cx| this.toggle_profile(path.clone(), cx))),
         )
