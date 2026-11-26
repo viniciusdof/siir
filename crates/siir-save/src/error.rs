@@ -1,7 +1,8 @@
 use std::fmt;
 
-/// A save read failure naming the unit class and attribute involved.
+/// A save read or edit failure.
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum Error {
     /// A required attribute is absent.
     MissingAttribute {

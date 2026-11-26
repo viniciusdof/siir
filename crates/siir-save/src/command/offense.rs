@@ -35,9 +35,9 @@ mod tests {
     const SOURCE: &str = include_str!("../../testdata/read.sii");
 
     #[test]
-    fn zeroes_the_counts_the_fines_and_the_history() {
+    fn zeros_the_counts_the_fines_and_the_history() {
         let mut document = Document::parse(SOURCE).unwrap();
-        apply(&mut document, Game::Ets2, Command::ClearOffences).unwrap();
+        apply(&mut document, Game::Ets2, Command::ClearOffenses).unwrap();
         let log = document.get("offences").unwrap();
         assert_eq!(log.get(OFFENCE_TOTAL_COUNTS), Some("2"));
         assert_eq!(log.get(&indexed(OFFENCE_TOTAL_COUNTS, 0)), Some("0"));

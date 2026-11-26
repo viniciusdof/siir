@@ -29,7 +29,7 @@ pub use command::{Command, apply};
 pub use error::Error;
 pub use model::{
     Accessory, Bank, BusJob, BusJobStage, BusLineOffer, BusStop, CarJob, CarOffer, Company, Driver,
-    Game, Garage, Job, JobLog, Offence, Offer, OversizeOffer, OversizeRoute, Player, Save, Skills,
+    Game, Garage, Job, JobLog, Offense, Offer, OversizeOffer, OversizeRoute, Player, Save, Skills,
     Trailer, UsedAssortment, UsedTruck, Vehicle,
 };
 pub use plate::LicensePlate;
@@ -211,8 +211,8 @@ pub fn read<'a>(document: &'a Document<'_>, game: Game) -> Result<Save<'a>, Erro
         None => None,
     };
 
-    let offence = match first(document, names::POLICE_OFFENCE_LOG) {
-        Some(unit) => Some(Offence {
+    let offense = match first(document, names::POLICE_OFFENCE_LOG) {
+        Some(unit) => Some(Offense {
             id: unit.id(),
             counts: numbers(unit, names::OFFENCE_TOTAL_COUNTS)?,
             fines: fines(unit, names::OFFENCE_TOTAL_FINES)?,
@@ -305,7 +305,7 @@ pub fn read<'a>(document: &'a Document<'_>, game: Game) -> Result<Save<'a>, Erro
             time_upper_limit: count(unit, "time_upper_limit")?,
             cargo: reference(unit, "cargo"),
             units_count: count(unit, names::UNITS_COUNT)?,
-            travelled_distance: count(unit, "travelled_distance")?,
+            traveled_distance: count(unit, "travelled_distance")?,
         }),
         None => None,
     };
@@ -352,7 +352,7 @@ pub fn read<'a>(document: &'a Document<'_>, game: Game) -> Result<Save<'a>, Erro
         offers,
         used_trucks,
         used_assortment,
-        offence,
+        offense,
         oversize_offers,
         oversize_routes,
         bus_stops,
@@ -415,7 +415,7 @@ fn bus_stage<'a>(unit: &'a Unit<'_>) -> Result<BusJobStage<'a>, Error> {
         planned_leaving_passengers: count(unit, "planned_leaving_passenger_count")?,
         departure_time: optional_count(unit, "departure_time")?,
         arrival_time: optional_count(unit, "arrival_time")?,
-        travelled_distance: count(unit, "travelled_distance")?,
+        traveled_distance: count(unit, "travelled_distance")?,
         satisfaction: float(unit, "satisfaction")?,
     })
 }
@@ -671,11 +671,11 @@ mod tests {
         assert_eq!(assortment.id, "used_assortment.one");
         assert_eq!(assortment.next_generation_game_time, 600);
         assert_eq!(assortment.trucks, ["used.one"]);
-        let offence = save.offence.as_ref().unwrap();
-        assert_eq!(offence.id, "offences");
-        assert_eq!(offence.counts, [4, 5]);
-        assert_eq!(offence.fines, [600, 700]);
-        assert_eq!(offence.history_entries, 3);
+        let offense = save.offense.as_ref().unwrap();
+        assert_eq!(offense.id, "offences");
+        assert_eq!(offense.counts, [4, 5]);
+        assert_eq!(offense.fines, [600, 700]);
+        assert_eq!(offense.history_entries, 3);
         assert_eq!(save.oversize_offers[0].id, "oversize.one");
         assert_eq!(save.oversize_offers[0].offer_data, "spec_offer.ovesize_3");
         assert_eq!(

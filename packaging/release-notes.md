@@ -12,7 +12,7 @@
 
 ## First launch
 
-The builds are not code-signed or notarised, so each system warns once:
+The builds are not code-signed or notarized, so each system warns once:
 
 - **macOS**: right-click `SIIR.app`, choose **Open**, then **Open** again. If the
   download was quarantined, `xattr -d com.apple.quarantine /Applications/SIIR.app`

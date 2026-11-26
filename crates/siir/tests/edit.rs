@@ -329,7 +329,7 @@ fn remove_attr_handles_arrays_and_inserted_units() {
 }
 
 #[test]
-fn remove_attr_keeps_neighbours_on_the_same_line() {
+fn remove_attr_keeps_neighbors_on_the_same_line() {
     let source = "SiiNunit\n{\nu : u.one {\n    a: 1 b: 2\n}\n}\n";
     let mut document = Document::parse(source).unwrap();
     document.get("u").unwrap().remove_attr("a").unwrap();

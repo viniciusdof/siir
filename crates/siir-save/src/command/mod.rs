@@ -11,7 +11,7 @@ mod car;
 mod driver;
 mod economy;
 mod job;
-mod offence;
+mod offense;
 mod offer;
 mod oversize;
 mod plate;
@@ -220,8 +220,8 @@ pub enum Command {
         /// Skill levels to write.
         skills: Skills,
     },
-    /// Zeroes the police offence counts and fines.
-    ClearOffences,
+    /// Zeros the police offense counts and fines.
+    ClearOffenses,
     /// Sets the cargo a player's current job hauls.
     SetCurrentJobCargo(String),
     /// Sets a vehicle's or trailer's license plate country.
@@ -335,7 +335,7 @@ pub fn apply(document: &mut Document<'_>, _game: Game, command: Command) -> Resu
         Command::SetOfferUrgency { id, urgency } => offer::set_urgency(document, &id, urgency),
         Command::SetOfferExpiration { id, time } => offer::set_expiration(document, &id, time),
         Command::SetDriverSkills { id, skills } => driver::set_skills(document, &id, skills),
-        Command::ClearOffences => offence::clear(document),
+        Command::ClearOffenses => offense::clear(document),
         Command::SetCurrentJobCargo(cargo) => job::set_current_cargo(document, cargo),
         Command::SetLicensePlateCountry { id, country } => {
             plate::set_country(document, &id, &country)

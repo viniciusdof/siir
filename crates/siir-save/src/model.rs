@@ -45,8 +45,8 @@ pub struct Save<'a> {
     pub used_trucks: Vec<UsedTruck<'a>>,
     /// The used-truck assortment behind the listings, when the save has one.
     pub used_assortment: Option<UsedAssortment<'a>>,
-    /// The profile's police offence log, when the save has one.
-    pub offence: Option<Offence<'a>>,
+    /// The profile's police offense log, when the save has one.
+    pub offense: Option<Offense<'a>>,
     /// Every oversize market offer.
     pub oversize_offers: Vec<OversizeOffer<'a>>,
     /// Every oversize route and the offers it holds.
@@ -293,11 +293,11 @@ pub struct UsedAssortment<'a> {
     pub trucks: Vec<&'a str>,
 }
 
-/// The profile's police offence log.
-pub struct Offence<'a> {
+/// The profile's police offense log.
+pub struct Offense<'a> {
     /// Unit id.
     pub id: &'a str,
-    /// Offence counts per category.
+    /// Offense counts per category.
     pub counts: Vec<u64>,
     /// Fines per category.
     pub fines: Vec<i64>,
@@ -403,8 +403,8 @@ pub struct BusJobStage<'a> {
     pub departure_time: Option<u64>,
     /// Actual arrival time, absent before the stage ends.
     pub arrival_time: Option<u64>,
-    /// Distance travelled so far in kilometers.
-    pub travelled_distance: u64,
+    /// Distance traveled so far in kilometers.
+    pub traveled_distance: u64,
     /// Satisfaction the game stores, `-1` while pending.
     pub satisfaction: f32,
 }
@@ -457,8 +457,8 @@ pub struct CarJob<'a> {
     pub cargo: Option<&'a str>,
     /// Number of cars hauled.
     pub units_count: u64,
-    /// Distance travelled so far in kilometers.
-    pub travelled_distance: u64,
+    /// Distance traveled so far in kilometers.
+    pub traveled_distance: u64,
 }
 
 /// A bus or car job log.
@@ -525,7 +525,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn recognises_badges_by_path_segment() {
+    fn recognizes_badges_by_path_segment() {
         let accessory = |path| Accessory {
             id: "accessory.one",
             class: "vehicle_accessory",

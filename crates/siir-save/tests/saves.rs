@@ -173,7 +173,7 @@ fn assert_case(case: &Case) {
     assert_eq!(save.offers[0].shortest_distance_km, case.distance, "{name}");
     assert_eq!(save.used_trucks.len(), case.used, "{name}");
     assert_eq!(save.used_trucks[0].price, case.price, "{name}");
-    assert!(save.offence.is_some(), "{name}");
+    assert!(save.offense.is_some(), "{name}");
     assert!(save.bus_job.is_none(), "{name}");
     assert!(save.car_job.is_none(), "{name}");
     assert!(save.car_offers.is_empty(), "{name}");
@@ -1404,7 +1404,7 @@ fn reads_a_bus_job() {
     assert_eq!(stage.planned_leaving_passengers, 18);
     assert_eq!(stage.departure_time, Some(2655));
     assert_eq!(stage.arrival_time, None);
-    assert_eq!(stage.travelled_distance, 0);
+    assert_eq!(stage.traveled_distance, 0);
     assert_eq!(stage.satisfaction, -1.0);
 
     assert_eq!(
@@ -1461,7 +1461,7 @@ fn reads_car_offers_and_a_car_job() {
     assert_eq!(job.time_upper_limit, 1100);
     assert_eq!(job.cargo, Some("car_cargo.pdoc"));
     assert_eq!(job.units_count, 1);
-    assert_eq!(job.travelled_distance, 0);
+    assert_eq!(job.traveled_distance, 0);
 
     let player = save.player.as_ref().unwrap();
     assert_eq!(player.cars.len(), 3);

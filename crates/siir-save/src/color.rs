@@ -1,4 +1,4 @@
-/// A colour with channels from 0.0 to 1.0.
+/// A color with channels from 0.0 to 1.0.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Color {
     /// Red channel.
@@ -12,7 +12,7 @@ pub struct Color {
 }
 
 impl Color {
-    /// An opaque colour.
+    /// An opaque color.
     pub fn rgb(red: f32, green: f32, blue: f32) -> Self {
         Self {
             red,
@@ -22,7 +22,7 @@ impl Color {
         }
     }
 
-    /// A colour with an explicit alpha.
+    /// A color with an explicit alpha.
     pub fn rgba(red: f32, green: f32, blue: f32, alpha: f32) -> Self {
         Self {
             red,

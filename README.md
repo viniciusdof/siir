@@ -46,9 +46,9 @@ toolchain each OS needs
 | `siir-save` | the save model, the edit commands, profiles, config, and the game catalog |
 | `siir-gui` | the desktop app, built on GPUI |
 
-## Licence
+## License
 
-SIIR is licensed under the [MIT licence](LICENSE).
+SIIR is licensed under the [MIT license](LICENSE).
 
 The app icon is the [OpenMoji](https://openmoji.org/) "articulated lorry"
 emoji by Ronja Bäurlen, licensed under
