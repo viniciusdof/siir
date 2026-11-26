@@ -40,6 +40,8 @@ pub struct TrailerRow {
     pub definition: String,
     /// Plate text without markup or country.
     pub plate: String,
+    /// Country after `|`, when the plate names one.
+    pub country: Option<String>,
     /// Attached to the player's current truck.
     pub current: bool,
     /// Cargo mass in kilograms.
@@ -48,6 +50,8 @@ pub struct TrailerRow {
     pub body_type: Option<String>,
     /// `source_name` of that definition.
     pub source: Option<String>,
+    /// Whether the inline trailer definition restricts allowed countries.
+    pub restricted: bool,
     /// Body wear, from 0 to 1.
     pub body_wear: f32,
     /// Chassis wear, from 0 to 1.
@@ -76,6 +80,8 @@ pub struct VehicleRow {
     pub owned: bool,
     /// The truck the player drives.
     pub current: bool,
+    /// Garage city holding this vehicle, when a garage lists it.
+    pub garage: Option<String>,
     /// Engine wear, from 0 to 1.
     pub engine_wear: f32,
     /// Transmission wear, from 0 to 1.
@@ -114,6 +120,7 @@ impl VehicleRow {
             country: plate.country.map(str::to_owned),
             owned,
             current,
+            garage: vehicle.garage.map(str::to_owned),
             engine_wear: vehicle.engine_wear,
             transmission_wear: vehicle.transmission_wear,
             cabin_wear: vehicle.cabin_wear,
@@ -207,16 +214,21 @@ impl SaveView {
             trailers: save
                 .trailers
                 .iter()
-                .map(|trailer| TrailerRow {
-                    id: trailer.id.to_owned(),
-                    definition: trailer.definition.to_owned(),
-                    cargo_mass: trailer.cargo_mass,
-                    body_type: trailer.body_type.map(str::to_owned),
-                    source: trailer.source.map(str::to_owned),
-                    plate: LicensePlate::parse(trailer.license_plate).text,
-                    current: current_trailer == Some(trailer.id),
-                    body_wear: trailer.body_wear,
-                    chassis_wear: trailer.chassis_wear,
+                .map(|trailer| {
+                    let plate = LicensePlate::parse(trailer.license_plate);
+                    TrailerRow {
+                        id: trailer.id.to_owned(),
+                        definition: trailer.definition.to_owned(),
+                        cargo_mass: trailer.cargo_mass,
+                        body_type: trailer.body_type.map(str::to_owned),
+                        source: trailer.source.map(str::to_owned),
+                        restricted: !trailer.country_validity.is_empty(),
+                        plate: plate.text,
+                        country: plate.country.map(str::to_owned),
+                        current: current_trailer == Some(trailer.id),
+                        body_wear: trailer.body_wear,
+                        chassis_wear: trailer.chassis_wear,
+                    }
                 })
                 .collect(),
         }

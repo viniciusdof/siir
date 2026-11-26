@@ -145,7 +145,7 @@ fn repair(document: &mut Document<'_>, id: &str) -> Result<(), Error> {
     Ok(())
 }
 
-fn chain(document: &Document<'_>, id: &str) -> Result<Vec<String>, Error> {
+pub(super) fn chain(document: &Document<'_>, id: &str) -> Result<Vec<String>, Error> {
     let mut ids = Vec::new();
     let mut current = id.to_owned();
     for _ in 0..CHAIN_LIMIT {

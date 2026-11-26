@@ -523,7 +523,7 @@ impl AppView {
             .into_any_element()
     }
 
-    fn city_name(&self, token: &str) -> String {
+    pub(super) fn city_name(&self, token: &str) -> String {
         self.catalog
             .as_ref()
             .and_then(|catalog| catalog.city_name(token, i18n::current_locale().as_ref()))

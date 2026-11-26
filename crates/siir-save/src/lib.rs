@@ -94,6 +94,18 @@ pub fn read<'a>(document: &'a Document<'_>, game: Game) -> Result<Save<'a>, Erro
         None => None,
     };
 
+    let mut vehicle_garages: HashMap<&str, &str> = HashMap::new();
+    for unit in document.units_of_class(names::GARAGE) {
+        let Some(city) = unit.id().strip_prefix(names::GARAGE_PREFIX) else {
+            continue;
+        };
+        for id in optional_array(unit, names::VEHICLES)? {
+            if !matches!(id, "null" | "nil") {
+                vehicle_garages.entry(id).or_insert(city);
+            }
+        }
+    }
+
     let mut vehicles = Vec::new();
     for unit in document.units_of_class(names::VEHICLE) {
         let slot = slots.get(unit.id()).copied();
@@ -118,6 +130,7 @@ pub fn read<'a>(document: &'a Document<'_>, game: Game) -> Result<Save<'a>, Erro
             odometer: optional_count(unit, "odometer")?,
             license_plate: string(unit, names::LICENSE_PLATE)?,
             placement: slot.and_then(|slot| slot.get(names::STORED_VEHICLE_PLACEMENT)),
+            garage: vehicle_garages.get(unit.id()).copied(),
         });
     }
 
@@ -128,11 +141,19 @@ pub fn read<'a>(document: &'a Document<'_>, game: Game) -> Result<Save<'a>, Erro
             .get(definition)
             .copied()
             .filter(|unit| unit.class() == names::TRAILER_DEF);
+        let country_validity = match inline {
+            Some(unit) => optional_array(unit, names::COUNTRY_VALIDITY)?
+                .into_iter()
+                .map(unquote)
+                .collect(),
+            None => Vec::new(),
+        };
         trailers.push(Trailer {
             id: unit.id(),
             definition,
             body_type: inline.and_then(|unit| unit.get("body_type")).map(unquote),
             source: inline.and_then(|unit| unit.get("source_name")).map(unquote),
+            country_validity,
             cargo_mass: float(unit, names::CARGO_MASS)?,
             license_plate: string(unit, names::LICENSE_PLATE)?,
             slave_trailer: reference(unit, names::SLAVE_TRAILER),
@@ -712,6 +733,32 @@ mod tests {
         assert_eq!(
             error.to_string(),
             "invalid engine_wear value \"nope\" on vehicle"
+        );
+    }
+
+    #[test]
+    fn reads_vehicle_garage_and_trailer_restrictions() {
+        let source = SOURCE
+            .replace(
+                "garage : garage.one {\n    status: 2\n}",
+                "garage : garage.prague {\n    status: 2\n    vehicles: 2\n    vehicles[0]: null\n    vehicles[1]: vehicle.one\n}",
+            )
+            .replace(
+                "    body_type: curtainside\n",
+                "    body_type: curtainside\n    country_validity: 2\n    country_validity[0]: \"czech\"\n    country_validity[1]: \"germany\"\n",
+            );
+        let document = Document::parse(&source).unwrap();
+        let save = read(&document, Game::Ets2).unwrap();
+        assert_eq!(save.vehicle("vehicle.one").unwrap().garage, Some("prague"));
+        assert_eq!(
+            save.trailer("trailer.two").unwrap().country_validity,
+            ["czech", "germany"]
+        );
+        assert!(
+            save.trailer("trailer.one")
+                .unwrap()
+                .country_validity
+                .is_empty()
         );
     }
 }

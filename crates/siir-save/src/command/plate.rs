@@ -14,21 +14,32 @@ pub(super) fn set_country(
             country: country.to_owned(),
         });
     }
-    let unit = match document.get(id) {
-        Some(unit) if matches!(unit.class(), names::VEHICLE | names::TRAILER) => unit,
+    let is_trailer = match document.units().find(|unit| unit.id() == id) {
+        Some(unit) if unit.class() == names::VEHICLE => false,
+        Some(unit) if unit.class() == names::TRAILER => true,
         _ => return Err(Error::MissingUnit { id: id.to_owned() }),
     };
-    let raw = unit
-        .get(names::LICENSE_PLATE)
-        .ok_or_else(|| Error::missing(unit.class(), names::LICENSE_PLATE))?;
-    let body = match unquote(raw).rsplit_once('|') {
-        Some((body, _)) => body.to_owned(),
-        None => unquote(raw).to_owned(),
+    let ids = if is_trailer {
+        super::trailer::chain(document, id)?
+    } else {
+        vec![id.to_owned()]
     };
-    unit.set(
-        names::LICENSE_PLATE,
-        Value::string(format!("{body}|{country}")),
-    )?;
+    for unit_id in ids {
+        let unit = document
+            .get(&unit_id)
+            .ok_or(Error::MissingUnit { id: unit_id })?;
+        let raw = unit
+            .get(names::LICENSE_PLATE)
+            .ok_or_else(|| Error::missing(unit.class(), names::LICENSE_PLATE))?;
+        let body = match unquote(raw).rsplit_once('|') {
+            Some((body, _)) => body.to_owned(),
+            None => unquote(raw).to_owned(),
+        };
+        unit.set(
+            names::LICENSE_PLATE,
+            Value::string(format!("{body}|{country}")),
+        )?;
+    }
     Ok(())
 }
 
@@ -116,5 +127,33 @@ mod tests {
         )
         .unwrap_err();
         assert_eq!(error.to_string(), "missing unit \"used.one\"");
+    }
+
+    #[test]
+    fn sets_the_country_on_the_trailer_slave_chain() {
+        let mut document = Document::parse(include_str!("../../testdata/trailer.sii")).unwrap();
+        apply(
+            &mut document,
+            Game::Ets2,
+            Command::SetLicensePlateCountry {
+                id: "trailer.one".into(),
+                country: "poland".into(),
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            document
+                .get("trailer.one")
+                .unwrap()
+                .get(names::LICENSE_PLATE),
+            Some("\"OLD|poland\"")
+        );
+        assert_eq!(
+            document
+                .get("trailer.two")
+                .unwrap()
+                .get(names::LICENSE_PLATE),
+            Some("\"OLD2|poland\"")
+        );
     }
 }

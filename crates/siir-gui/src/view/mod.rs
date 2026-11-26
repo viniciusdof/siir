@@ -13,10 +13,11 @@ use gpui_kit::base::Popover;
 use gpui_kit::base::input::InputState;
 use gpui_kit::prelude::*;
 use gpui_kit::{
-    Context, Entity, FocusHandle, Focusable, IntoElement, PathPromptOptions, Render, Role,
+    Anchor, Context, Entity, FocusHandle, Focusable, IntoElement, PathPromptOptions, Render, Role,
     SharedString, Subscription, Window, div, px,
 };
 
+use siir_gui::edit;
 use siir_gui::format;
 use siir_gui::i18n::{self, t};
 use siir_gui::state::{Settings, State};
@@ -78,6 +79,9 @@ pub struct AppView {
     leave: LeaveDialogState,
     syncing: bool,
     catalog: Option<Catalog>,
+    catalog_game: Option<Game>,
+    catalog_loading: bool,
+    catalog_epoch: u64,
     action_error: Option<&'static str>,
     _subscriptions: Vec<Subscription>,
 }
@@ -133,6 +137,9 @@ impl AppView {
             leave,
             syncing: false,
             catalog: None,
+            catalog_game: None,
+            catalog_loading: false,
+            catalog_epoch: 0,
             action_error: None,
             _subscriptions: subscriptions,
         }
@@ -168,7 +175,12 @@ impl AppView {
         self.state.set_game(game);
         self.settings.set_game(game);
         self.save_settings();
-        self.catalog = None;
+        if self.catalog_game != Some(game) {
+            self.catalog = None;
+            self.catalog_game = None;
+            self.catalog_loading = false;
+            self.catalog_epoch = self.catalog_epoch.wrapping_add(1);
+        }
         cx.notify();
     }
 
@@ -208,13 +220,50 @@ impl AppView {
 
     fn after_open(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
         if self.state.open().is_some() {
-            self.catalog = Catalog::load(self.state.game()).ok();
             self.section = Section::Overview;
             self.vehicles.show_used_market = false;
             self.clear_errors();
             self.sync_forms(window, cx);
+            self.load_catalog(window, cx);
         }
         cx.notify();
+    }
+
+    fn load_catalog(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
+        let game = self.state.game();
+        if self.catalog_game == Some(game) && (self.catalog.is_some() || self.catalog_loading) {
+            return;
+        }
+        self.catalog = None;
+        self.catalog_game = Some(game);
+        self.catalog_loading = true;
+        self.catalog_epoch = self.catalog_epoch.wrapping_add(1);
+        let epoch = self.catalog_epoch;
+        let task = cx
+            .background_executor()
+            .spawn(async move { Catalog::load(game).ok() });
+        cx.spawn_in(window, async move |view, cx| {
+            let catalog = task.await;
+            view.update_in(cx, |this, window, cx| {
+                if this.catalog_epoch != epoch || this.state.game() != game {
+                    return;
+                }
+                this.catalog = catalog;
+                this.catalog_loading = false;
+                if this.state.open().is_some() {
+                    this.sync_level(window, cx);
+                    if !this.economy.money_dirty && this.economy.is_valid() {
+                        this.sync_money(window, cx);
+                    }
+                    if !this.vehicles.used_price_dirty && this.vehicles.used_price_valid() {
+                        this.sync_used_price(window, cx);
+                    }
+                }
+                cx.notify();
+            })
+            .ok();
+        })
+        .detach();
     }
 
     fn close(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
@@ -256,7 +305,6 @@ impl AppView {
             self.home.collapsed.remove(&profile.path);
         }
         self.state.close();
-        self.catalog = None;
         self.vehicles.show_used_market = false;
         self.clear_errors();
         window.focus(&self.home.search.read(cx).focus_handle(cx), cx);
@@ -316,6 +364,112 @@ impl AppView {
             && self.profile.is_valid()
             && self.vehicles.is_valid()
             && self.trailers.is_valid()
+    }
+
+    pub(super) fn plate_country_label(&self) -> String {
+        match self.state.game() {
+            Game::Ets2 => t("field.plate_country"),
+            Game::Ats => t("field.plate_state"),
+        }
+    }
+
+    pub(super) fn set_unit_plate_country(
+        &mut self,
+        id: &str,
+        country: &str,
+        cx: &mut Context<'_, Self>,
+    ) {
+        if let Ok(command) = edit::plate_country(id, country) {
+            self.apply(command, cx);
+        }
+    }
+
+    pub(super) fn plate_country_menu(
+        &self,
+        prefix: &'static str,
+        id: String,
+        current: Option<String>,
+        focus: &FocusHandle,
+        cx: &mut Context<'_, Self>,
+    ) -> impl IntoElement + use<> {
+        let palette = tokens::palette();
+        let language = i18n::current_locale().into_owned();
+        let label = current
+            .as_deref()
+            .and_then(|token| {
+                self.catalog
+                    .as_ref()
+                    .and_then(|catalog| catalog.country_name(token, &language))
+                    .map(str::to_owned)
+            })
+            .or_else(|| current.clone())
+            .unwrap_or_else(|| t("plate.country_none"));
+        let accessible = format!("{}: {label}", self.plate_country_label());
+        let mut countries: Vec<(String, String)> = self
+            .catalog
+            .as_ref()
+            .map(|catalog| {
+                catalog
+                    .countries()
+                    .iter()
+                    .map(|country| {
+                        let name = catalog
+                            .country_name(&country.token, &language)
+                            .unwrap_or(&country.token)
+                            .to_owned();
+                        (country.token.clone(), name)
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        countries.sort_by(|left, right| left.1.cmp(&right.1));
+        let view = cx.entity().downgrade();
+        Popover::new(format!("{prefix}-country-menu"))
+            .anchor(Anchor::BottomLeft)
+            .trigger(
+                ui::select_field(format!("{prefix}-country-trigger"), label, accessible)
+                    .track_focus(focus),
+            )
+            .content(move |_, _, cx| {
+                let popover = cx.entity();
+                let mut menu = div()
+                    .id(format!("{prefix}-country-list"))
+                    .flex()
+                    .flex_col()
+                    .items_start()
+                    .gap(px(tokens::SPACE_1))
+                    .p(px(tokens::SPACE_1))
+                    .max_h(px(260.0))
+                    .overflow_y_scroll()
+                    .on_scroll(|_, _, cx| cx.stop_propagation())
+                    .bg(palette.panel)
+                    .border_1()
+                    .border_color(palette.border)
+                    .rounded(px(tokens::RADIUS));
+                for (token, name) in &countries {
+                    let selected = current.as_deref() == Some(token.as_str());
+                    let option_id = SharedString::from(format!("{prefix}-country-option-{token}"));
+                    let token = token.clone();
+                    let unit_id = id.clone();
+                    let view = view.clone();
+                    let popover = popover.clone();
+                    menu = menu.child(
+                        ui::button(option_id, name.clone())
+                            .tone(Tone::Quiet)
+                            .selected(selected)
+                            .on_click(move |_, window, cx| {
+                                if !selected {
+                                    view.update(cx, |view, cx| {
+                                        view.set_unit_plate_country(&unit_id, &token, cx)
+                                    })
+                                    .ok();
+                                }
+                                popover.update(cx, |state, cx| state.dismiss(window, cx));
+                            }),
+                    );
+                }
+                menu.into_any_element()
+            })
     }
 
     pub(super) fn levels(&self) -> Option<&Levels> {
@@ -478,6 +632,14 @@ impl AppView {
                         .font_weight(gpui_kit::FontWeight::SEMIBOLD)
                         .child(format!("{} - {}", view.profile_name, view.save_name)),
                 )
+                .when(self.catalog_loading, |this| {
+                    this.child(ui::pill(
+                        None,
+                        t("catalog.loading"),
+                        palette.muted,
+                        palette.surface,
+                    ))
+                })
                 .child(
                     div()
                         .w(px(48.0))
@@ -672,6 +834,7 @@ impl AppView {
             })
             .child(self.render_banners(cx))
             .child(self.render_leave_dialog(cx))
+            .child(self.render_unlock_trailer_dialog(cx))
             .child(
                 div()
                     .w_full()

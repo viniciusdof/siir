@@ -13,7 +13,7 @@ use siir_gui::edit;
 use siir_gui::format;
 use siir_gui::i18n::{self, t};
 use siir_gui::view_data::VehicleRow;
-use siir_save::{Command, Game};
+use siir_save::Command;
 
 use crate::ui::{self, Tone, tokens};
 use crate::view::AppView;
@@ -34,6 +34,7 @@ pub(super) struct VehiclesState {
     plate_error: Option<&'static str>,
     used_price: Entity<InputState>,
     used_price_error: Option<&'static str>,
+    pub(super) used_price_dirty: bool,
     fuel: Entity<SliderState>,
     fuel_focus: FocusHandle,
     country_focus: FocusHandle,
@@ -105,6 +106,7 @@ impl VehiclesState {
             window,
             |this, _, event: &InputEvent, window, cx| {
                 if matches!(event, InputEvent::Change)
+                    && !this.syncing
                     && this.apply_used_price_text(cx) == Some(false)
                 {
                     this.sync_used_price(window, cx);
@@ -126,6 +128,7 @@ impl VehiclesState {
             plate_error: None,
             used_price,
             used_price_error: None,
+            used_price_dirty: false,
             fuel,
             fuel_focus,
             country_focus: cx.focus_handle().tab_stop(true),
@@ -140,12 +143,17 @@ impl VehiclesState {
         self.odometer_error = None;
         self.plate_error = None;
         self.used_price_error = None;
+        self.used_price_dirty = false;
     }
 
     pub(super) fn is_valid(&self) -> bool {
         self.odometer_error.is_none()
             && self.plate_error.is_none()
             && self.used_price_error.is_none()
+    }
+
+    pub(super) fn used_price_valid(&self) -> bool {
+        self.used_price_error.is_none()
     }
 }
 
@@ -219,12 +227,14 @@ impl AppView {
             );
         });
         self.vehicles.used_price_error = None;
+        self.vehicles.used_price_dirty = false;
         let currency = self.currency();
         let price = self
             .selected_row()
             .and_then(|row| row.listing.as_ref())
             .map(|listing| format::amount(currency.from_native(listing.price), game))
             .unwrap_or_default();
+        self.syncing = true;
         self.vehicles.used_price.update(cx, |input, cx| {
             input.set_mask_pattern(
                 MaskPattern::Number {
@@ -236,14 +246,13 @@ impl AppView {
             );
             input.set_value(price, window, cx);
         });
-        self.syncing = true;
         self.vehicles
             .fuel
             .update(cx, |state, cx| state.set_value(fuel * 100.0, window, cx));
         self.syncing = false;
     }
 
-    fn sync_used_price(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
+    pub(super) fn sync_used_price(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
         let game = self.state.game();
         let Some(price) = self
             .selected_row()
@@ -253,9 +262,13 @@ impl AppView {
             return;
         };
         let shown = format::amount(self.currency().from_native(price), game);
+        self.vehicles.used_price_error = None;
+        self.vehicles.used_price_dirty = false;
+        self.syncing = true;
         self.vehicles.used_price.update(cx, |input, cx| {
             input.set_value(shown, window, cx);
         });
+        self.syncing = false;
     }
 
     fn apply_plate_text(&mut self, cx: &mut Context<'_, Self>) -> bool {
@@ -271,16 +284,11 @@ impl AppView {
             self.vehicles.plate_error = None;
             return true;
         }
-        let Ok(command) = edit::plate(&id, &text) else {
+        let Ok(command) = edit::plate(&id, &text, country.as_deref()) else {
             return false;
         };
         self.vehicles.plate_error = None;
-        if matches!(&command, Command::SetLicensePlate { plate: next, .. } if next != &plate) {
-            self.apply(command, cx);
-            if let Some(country) = country {
-                self.set_plate_country(&country, cx);
-            }
-        }
+        self.apply(command, cx);
         true
     }
 
@@ -310,6 +318,7 @@ impl AppView {
         if edit::same_shown_amount(price, next, &currency) {
             return Some(false);
         }
+        self.vehicles.used_price_dirty = true;
         self.apply(
             Command::SetUsedTruckPrice {
                 id: listing,
@@ -324,21 +333,6 @@ impl AppView {
         if self.apply_used_price_text(cx).is_none() {
             self.vehicles.used_price_error = Some(edit::FieldError::Number.key());
             cx.notify();
-        }
-    }
-
-    fn set_plate_country(&mut self, country: &str, cx: &mut Context<'_, Self>) {
-        let Some((id, current)) = self
-            .selected_row()
-            .map(|row| (row.id.clone(), row.country.clone()))
-        else {
-            return;
-        };
-        if current.as_deref() == Some(country) {
-            return;
-        }
-        if let Ok(command) = edit::plate_country(&id, country) {
-            self.apply(command, cx);
         }
     }
 
@@ -604,9 +598,21 @@ impl AppView {
     fn vehicle_detail(&self, vehicle: &VehicleRow, cx: &mut Context<'_, Self>) -> AnyElement {
         let palette = tokens::palette();
         let game = self.state.game();
+        let hq_city = self
+            .state
+            .open()
+            .map(|open| open.view().hq_city.clone())
+            .unwrap_or_default();
+        let is_hq = vehicle.garage.as_deref() == Some(hq_city.as_str()) && !hq_city.is_empty();
         let fuel = self.vehicles.fuel.read(cx).value().end().round();
         let live_plate = self.vehicles.plate.read(cx).value().to_string();
-        let country = self.country_menu(cx);
+        let country = self.plate_country_menu(
+            "plate",
+            vehicle.id.clone(),
+            vehicle.country.clone(),
+            &self.vehicles.country_focus,
+            cx,
+        );
         let parts = (vehicle.listing.is_none() && self.has_parts(vehicle)).then(|| {
             ui::card()
                 .flex()
@@ -665,13 +671,37 @@ impl AppView {
                                             .text_color(palette.text)
                                             .child(self.vehicle_name(vehicle.model.as_deref())),
                                     )
-                                    .when(vehicle.listing.is_some(), |this| {
-                                        this.child(ui::pill(
-                                            None,
-                                            t("vehicles.used_listing"),
-                                            palette.accent,
-                                            palette.accent_soft,
-                                        ))
+                                    .when(vehicle.listing.is_none(), |this| {
+                                        this.when_some(vehicle.garage.as_deref(), |this, garage| {
+                                            this.child(
+                                                div()
+                                                    .flex()
+                                                    .items_center()
+                                                    .gap(px(tokens::SPACE_2))
+                                                    .child(
+                                                        div()
+                                                            .flex()
+                                                            .items_center()
+                                                            .gap(px(tokens::SPACE_1))
+                                                            .text_size(px(tokens::TEXT_LABEL))
+                                                            .text_color(palette.muted)
+                                                            .child(ui::icon(
+                                                                IconName::MapPin,
+                                                                12.0,
+                                                                palette.muted,
+                                                            ))
+                                                            .child(self.city_name(garage)),
+                                                    )
+                                                    .when(is_hq, |this| {
+                                                        this.child(ui::pill(
+                                                            None,
+                                                            t("vehicles.hq_badge"),
+                                                            palette.accent,
+                                                            palette.accent_soft,
+                                                        ))
+                                                    }),
+                                            )
+                                        })
                                     }),
                             )
                             .when(vehicle.listing.is_none(), |this| {
@@ -851,6 +881,14 @@ impl AppView {
                                                 Command::SetCurrentVehicle,
                                             )
                                             .disabled(vehicle.current || !vehicle.owned),
+                                        )
+                                        .child(
+                                            action(
+                                                "vehicles.set_hq",
+                                                IconName::MapPin,
+                                                Command::SetHqVehicle,
+                                            )
+                                            .disabled(vehicle.garage.is_none() || is_hq),
                                         ),
                                 )
                             }),
@@ -858,92 +896,6 @@ impl AppView {
                     .when_some(parts, |this, parts| this.child(parts)),
             )
             .into_any_element()
-    }
-
-    fn country_menu(&self, cx: &mut Context<'_, Self>) -> impl IntoElement + use<> {
-        let palette = tokens::palette();
-        let language = i18n::current_locale().into_owned();
-        let current = self.selected_row().and_then(|row| row.country.clone());
-        let label = current
-            .as_deref()
-            .and_then(|token| self.catalog_country_name(token, &language))
-            .or_else(|| current.clone())
-            .unwrap_or_else(|| t("plate.country_none"));
-        let accessible = format!("{}: {label}", self.plate_country_label());
-        let mut countries: Vec<(String, String)> = self
-            .catalog
-            .as_ref()
-            .map(|catalog| {
-                catalog
-                    .countries()
-                    .iter()
-                    .map(|country| {
-                        let name = catalog
-                            .country_name(&country.token, &language)
-                            .unwrap_or(&country.token)
-                            .to_owned();
-                        (country.token.clone(), name)
-                    })
-                    .collect()
-            })
-            .unwrap_or_default();
-        countries.sort_by(|left, right| left.1.cmp(&right.1));
-        let view = cx.entity().downgrade();
-        Popover::new("plate-country-menu")
-            .anchor(Anchor::BottomLeft)
-            .trigger(
-                ui::select_field("plate-country-trigger", label, accessible)
-                    .track_focus(&self.vehicles.country_focus),
-            )
-            .content(move |_, _, cx| {
-                let popover = cx.entity();
-                let mut menu = div()
-                    .id("plate-country-list")
-                    .flex()
-                    .flex_col()
-                    .items_start()
-                    .gap(px(tokens::SPACE_1))
-                    .p(px(tokens::SPACE_1))
-                    .max_h(px(260.0))
-                    .overflow_y_scroll()
-                    .on_scroll(|_, _, cx| cx.stop_propagation())
-                    .bg(palette.panel)
-                    .border_1()
-                    .border_color(palette.border)
-                    .rounded(px(tokens::RADIUS));
-                for (token, name) in &countries {
-                    let selected = current.as_deref() == Some(token.as_str());
-                    let id = SharedString::from(format!("plate-country-option-{token}"));
-                    let token = token.clone();
-                    let view = view.clone();
-                    let popover = popover.clone();
-                    menu = menu.child(
-                        ui::button(id, name.clone())
-                            .tone(Tone::Quiet)
-                            .selected(selected)
-                            .on_click(move |_, window, cx| {
-                                view.update(cx, |view, cx| view.set_plate_country(&token, cx))
-                                    .ok();
-                                popover.update(cx, |state, cx| state.dismiss(window, cx));
-                            }),
-                    );
-                }
-                menu.into_any_element()
-            })
-    }
-
-    fn plate_country_label(&self) -> String {
-        match self.state.game() {
-            Game::Ets2 => t("field.plate_country"),
-            Game::Ats => t("field.plate_state"),
-        }
-    }
-
-    fn catalog_country_name(&self, token: &str, language: &str) -> Option<String> {
-        self.catalog
-            .as_ref()
-            .and_then(|catalog| catalog.country_name(token, language))
-            .map(str::to_owned)
     }
 
     fn has_parts(&self, vehicle: &VehicleRow) -> bool {

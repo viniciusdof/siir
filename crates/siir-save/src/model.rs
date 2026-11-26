@@ -171,6 +171,8 @@ pub struct Vehicle<'a> {
     pub license_plate: &'a str,
     /// Placement text from the owning slot, kept opaque.
     pub placement: Option<&'a str>,
+    /// Garage city holding this vehicle, when a garage lists it.
+    pub garage: Option<&'a str>,
 }
 
 /// One `trailer` unit.
@@ -183,6 +185,8 @@ pub struct Trailer<'a> {
     pub body_type: Option<&'a str>,
     /// `source_name` of that definition.
     pub source: Option<&'a str>,
+    /// Countries this trailer's inline definition restricts it to.
+    pub country_validity: Vec<&'a str>,
     /// Cargo mass in kilograms.
     pub cargo_mass: f32,
     /// Raw license plate text.

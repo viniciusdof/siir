@@ -66,15 +66,13 @@ pub fn level(level: u32, levels: &Levels) -> Option<Command> {
         .map(Command::SetExperience)
 }
 
-/// Parses a plate's visible text; editing it drops any markup the plate had.
-pub fn plate(id: &str, text: &str) -> Result<Command, FieldError> {
-    let plate = text.trim();
-    if plate.is_empty() || plate.contains(['"', '\n', '\r']) {
-        return Err(FieldError::Name);
-    }
+/// Parses a plate's visible text, preserving `country` when one is set;
+/// editing it drops any markup the plate had.
+pub fn plate(id: &str, text: &str, country: Option<&str>) -> Result<Command, FieldError> {
+    let plate = plate_with_country(text, country)?;
     Ok(Command::SetLicensePlate {
         id: id.to_owned(),
-        plate: plate.to_owned(),
+        plate,
     })
 }
 
@@ -116,15 +114,24 @@ pub fn cargo_mass(id: &str, text: &str) -> Result<Command, FieldError> {
         .map_err(|_| FieldError::Number)
 }
 
-/// Parses a trailer's plate as raw text; markup and country are dropped.
-pub fn trailer_plate(id: &str, text: &str) -> Result<Command, FieldError> {
+/// Parses a trailer's plate text, preserving `country` when one is set;
+/// editing it drops any markup the plate had.
+pub fn trailer_plate(id: &str, text: &str, country: Option<&str>) -> Result<Command, FieldError> {
+    let plate = plate_with_country(text, country)?;
+    Ok(Command::SetTrailerLicensePlate {
+        id: id.to_owned(),
+        plate,
+    })
+}
+
+fn plate_with_country(text: &str, country: Option<&str>) -> Result<String, FieldError> {
     let plate = text.trim();
     if plate.is_empty() || plate.contains(['"', '\n', '\r']) {
         return Err(FieldError::Name);
     }
-    Ok(Command::SetTrailerLicensePlate {
-        id: id.to_owned(),
-        plate: plate.to_owned(),
+    Ok(match country {
+        Some(country) if !country.is_empty() => format!("{plate}|{country}"),
+        _ => plate.to_owned(),
     })
 }
 
@@ -250,11 +257,15 @@ mod tests {
     #[test]
     fn parses_plates_and_countries() {
         assert!(matches!(
-            plate("v", " AB 12 "),
+            plate("v", " AB 12 ", None),
             Ok(Command::SetLicensePlate { plate, .. }) if plate == "AB 12"
         ));
-        assert!(matches!(plate("v", ""), Err(FieldError::Name)));
-        assert!(matches!(plate("v", "a\"b"), Err(FieldError::Name)));
+        assert!(matches!(
+            plate("v", " AB 12 ", Some("poland")),
+            Ok(Command::SetLicensePlate { plate, .. }) if plate == "AB 12|poland"
+        ));
+        assert!(matches!(plate("v", "", None), Err(FieldError::Name)));
+        assert!(matches!(plate("v", "a\"b", None), Err(FieldError::Name)));
         assert!(matches!(
             plate_country("v", " germany "),
             Ok(Command::SetLicensePlateCountry { country, .. }) if country == "germany"
@@ -295,11 +306,21 @@ mod tests {
         assert!(matches!(cargo_mass("t", "-1"), Err(FieldError::Number)));
         assert!(matches!(cargo_mass("t", "1.5"), Err(FieldError::Number)));
         assert!(matches!(
-            trailer_plate("t", " ABC 123 "),
+            trailer_plate("t", " ABC 123 ", None),
             Ok(Command::SetTrailerLicensePlate { plate, .. }) if plate == "ABC 123"
         ));
-        assert!(matches!(trailer_plate("t", ""), Err(FieldError::Name)));
-        assert!(matches!(trailer_plate("t", "a\"b"), Err(FieldError::Name)));
+        assert!(matches!(
+            trailer_plate("t", " ABC 123 ", Some("germany")),
+            Ok(Command::SetTrailerLicensePlate { plate, .. }) if plate == "ABC 123|germany"
+        ));
+        assert!(matches!(
+            trailer_plate("t", "", None),
+            Err(FieldError::Name)
+        ));
+        assert!(matches!(
+            trailer_plate("t", "a\"b", None),
+            Err(FieldError::Name)
+        ));
     }
 
     #[test]

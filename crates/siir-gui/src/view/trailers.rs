@@ -13,7 +13,7 @@ use siir_gui::i18n::{self, t};
 use siir_gui::view_data::TrailerRow;
 use siir_save::Command;
 
-use crate::ui::{self, tokens};
+use crate::ui::{self, Tone, tokens};
 use crate::view::AppView;
 
 const LIST_WIDTH: f32 = 290.0;
@@ -24,6 +24,11 @@ pub(super) struct TrailersState {
     plate_error: Option<&'static str>,
     cargo_mass: Entity<InputState>,
     cargo_mass_error: Option<&'static str>,
+    country_focus: FocusHandle,
+    unlock_target: Option<String>,
+    unlock_dialog_focus: FocusHandle,
+    unlock_cancel_focus: FocusHandle,
+    unlock_trigger_focus: FocusHandle,
     pub(super) list_focus: FocusHandle,
 }
 
@@ -74,6 +79,11 @@ impl TrailersState {
             plate_error: None,
             cargo_mass,
             cargo_mass_error: None,
+            country_focus: cx.focus_handle().tab_stop(true),
+            unlock_target: None,
+            unlock_dialog_focus: cx.focus_handle(),
+            unlock_cancel_focus: cx.focus_handle().tab_stop(true),
+            unlock_trigger_focus: cx.focus_handle().tab_stop(true),
             list_focus: cx.focus_handle().tab_stop(true),
         }
     }
@@ -81,6 +91,7 @@ impl TrailersState {
     pub(super) fn clear_errors(&mut self) {
         self.plate_error = None;
         self.cargo_mass_error = None;
+        self.unlock_target = None;
     }
 
     pub(super) fn is_valid(&self) -> bool {
@@ -145,9 +156,9 @@ impl AppView {
     }
 
     fn apply_trailer_plate_text(&mut self, cx: &mut Context<'_, Self>) -> bool {
-        let Some((id, plate)) = self
+        let Some((id, plate, country)) = self
             .selected_trailer_row()
-            .map(|row| (row.id.clone(), row.plate.clone()))
+            .map(|row| (row.id.clone(), row.plate.clone(), row.country.clone()))
         else {
             return true;
         };
@@ -156,14 +167,11 @@ impl AppView {
             self.trailers.plate_error = None;
             return true;
         }
-        let Ok(command) = edit::trailer_plate(&id, &text) else {
+        let Ok(command) = edit::trailer_plate(&id, &text, country.as_deref()) else {
             return false;
         };
         self.trailers.plate_error = None;
-        if matches!(&command, Command::SetTrailerLicensePlate { plate: next, .. } if next != &plate)
-        {
-            self.apply(command, cx);
-        }
+        self.apply(command, cx);
         true
     }
 
@@ -213,6 +221,57 @@ impl AppView {
     ) {
         self.apply(command, cx);
         self.sync_trailer(window, cx);
+    }
+
+    fn ask_unlock_trailer(&mut self, id: String, window: &mut Window, cx: &mut Context<'_, Self>) {
+        self.trailers.unlock_target = Some(id);
+        window.focus(&self.trailers.unlock_cancel_focus, cx);
+        cx.notify();
+    }
+
+    fn cancel_unlock_trailer(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
+        self.trailers.unlock_target = None;
+        window.focus(&self.trailers.unlock_trigger_focus, cx);
+        cx.notify();
+    }
+
+    fn confirm_unlock_trailer(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
+        let Some(id) = self.trailers.unlock_target.take() else {
+            return;
+        };
+        self.trailer_command(Command::UnlockInRestrictedAreas(id), window, cx);
+        window.focus(&self.trailers.unlock_trigger_focus, cx);
+    }
+
+    pub(super) fn render_unlock_trailer_dialog(
+        &self,
+        cx: &mut Context<'_, Self>,
+    ) -> impl IntoElement {
+        let view = cx.entity().downgrade();
+        ui::confirm(
+            t("trailers.unlock_title"),
+            t("trailers.unlock_message"),
+            &self.trailers.unlock_dialog_focus,
+        )
+        .open(self.trailers.unlock_target.is_some())
+        .on_cancel(move |window, cx| {
+            view.update(cx, |view, cx| view.cancel_unlock_trailer(window, cx))
+                .ok();
+        })
+        .action(
+            ui::button("confirm-unlock-trailer", t("trailers.unlock_confirm"))
+                .tone(Tone::Danger)
+                .on_click(
+                    cx.listener(|this, _, window, cx| this.confirm_unlock_trailer(window, cx)),
+                ),
+        )
+        .action(
+            ui::button("cancel-unlock-trailer", t("dialog.cancel"))
+                .track_focus(&self.trailers.unlock_cancel_focus)
+                .on_click(
+                    cx.listener(|this, _, window, cx| this.cancel_unlock_trailer(window, cx)),
+                ),
+        )
     }
 
     pub(crate) fn render_trailers(&self, cx: &mut Context<'_, Self>) -> impl IntoElement {
@@ -392,7 +451,15 @@ impl AppView {
         let palette = tokens::palette();
         let game = self.state.game();
         let live_plate = self.trailers.plate.read(cx).value().to_string();
+        let country = self.plate_country_menu(
+            "trailer-plate",
+            trailer.id.clone(),
+            trailer.country.clone(),
+            &self.trailers.country_focus,
+            cx,
+        );
         let id = trailer.id.clone();
+        let unlock_id = trailer.id.clone();
         let action = |key: &'static str, icon: IconName, command: fn(String) -> Command| {
             let id = id.clone();
             ui::button(SharedString::from(format!("trailer-{key}")), t(key))
@@ -445,23 +512,52 @@ impl AppView {
                                             ),
                                     ),
                             )
-                            .child(ui::plate_preview(&live_plate, None, game)),
+                            .child(ui::plate_preview(
+                                &live_plate,
+                                trailer.country.as_deref(),
+                                game,
+                            )),
                     )
                     .child(
                         ui::card()
                             .flex()
-                            .flex_wrap()
+                            .flex_col()
                             .gap(px(tokens::SPACE_4))
-                            .child(div().flex_1().min_w(px(220.0)).child(ui::field(
-                                t("field.trailer_plate"),
-                                ui::text_field(
-                                    "trailer-plate",
-                                    &self.trailers.plate,
-                                    t("field.trailer_plate"),
-                                ),
-                                self.trailers.plate_error.map(t),
-                            )))
-                            .child(div().flex_1().min_w(px(220.0)).child(ui::field(
+                            .child(
+                                div()
+                                    .flex()
+                                    .flex_wrap()
+                                    .gap(px(tokens::SPACE_4))
+                                    .child(
+                                        div()
+                                            .flex_1()
+                                            .min_w(px(220.0))
+                                            .flex()
+                                            .flex_col()
+                                            .gap(px(tokens::SPACE_1))
+                                            .child(ui::field(
+                                                t("field.trailer_plate"),
+                                                ui::text_field(
+                                                    "trailer-plate",
+                                                    &self.trailers.plate,
+                                                    t("field.trailer_plate"),
+                                                ),
+                                                self.trailers.plate_error.map(t),
+                                            ))
+                                            .child(
+                                                div()
+                                                    .text_size(px(tokens::TEXT_LABEL))
+                                                    .text_color(palette.muted)
+                                                    .child(t("vehicles.plate_hint")),
+                                            ),
+                                    )
+                                    .child(div().flex_1().min_w(px(220.0)).child(ui::field(
+                                        self.plate_country_label(),
+                                        country,
+                                        None,
+                                    ))),
+                            )
+                            .child(div().max_w(px(320.0)).child(ui::field(
                                 t("field.cargo_mass"),
                                 ui::text_field(
                                     "cargo-mass",
@@ -498,11 +594,19 @@ impl AppView {
                                         IconName::Wrench,
                                         Command::RepairTrailer,
                                     ))
-                                    .child(action(
-                                        "trailers.unlock",
-                                        IconName::LockOpen,
-                                        Command::UnlockInRestrictedAreas,
-                                    ))
+                                    .child(
+                                        ui::button("trailer-trailers.unlock", t("trailers.unlock"))
+                                            .icon(IconName::LockOpen)
+                                            .track_focus(&self.trailers.unlock_trigger_focus)
+                                            .disabled(!trailer.restricted)
+                                            .on_click(cx.listener(move |this, _, window, cx| {
+                                                this.ask_unlock_trailer(
+                                                    unlock_id.clone(),
+                                                    window,
+                                                    cx,
+                                                )
+                                            })),
+                                    )
                                     .child(
                                         action(
                                             "trailers.attach",

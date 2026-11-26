@@ -454,15 +454,24 @@ fn lists_and_edits_vehicles() {
     state.open_save(ix);
     assert_eq!(row(&state, &other), (0.25, Some(4321), 0.0, true));
 
-    assert!(state.apply(edit::plate(&other, "NEW 1").unwrap()).is_ok());
+    assert!(
+        state
+            .apply(edit::plate(&other, "NEW 1", None).unwrap())
+            .is_ok()
+    );
     assert!(
         state
             .apply(edit::plate_country(&other, "poland").unwrap())
             .is_ok()
     );
+    assert!(
+        state
+            .apply(edit::plate(&other, "NEW 2", Some("poland")).unwrap())
+            .is_ok()
+    );
     let view = state.open().unwrap().view();
     let row = view.vehicles.iter().find(|row| row.id == other).unwrap();
-    assert_eq!(row.plate, "NEW 1");
+    assert_eq!(row.plate, "NEW 2");
     assert_eq!(row.country.as_deref(), Some("poland"));
     assert!(
         state
@@ -493,7 +502,7 @@ fn lists_and_edits_vehicles() {
     state.open_save(ix);
     let view = state.open().unwrap().view();
     let saved = view.vehicles.iter().find(|row| row.id == other).unwrap();
-    assert_eq!(saved.plate, "NEW 1");
+    assert_eq!(saved.plate, "NEW 2");
     assert_eq!(saved.country.as_deref(), Some("poland"));
     assert_eq!(
         saved.engine.as_deref(),
@@ -530,7 +539,7 @@ fn lists_and_edits_trailers() {
     };
     assert!(
         state
-            .apply(edit::trailer_plate(&id, "NEW 123").unwrap())
+            .apply(edit::trailer_plate(&id, "NEW 123", None).unwrap())
             .is_ok()
     );
     assert!(state.apply(edit::cargo_mass(&id, "1500").unwrap()).is_ok());
@@ -545,6 +554,115 @@ fn lists_and_edits_trailers() {
     state.open_save(ix);
     assert_eq!(row(&state).0, "NEW 123");
     assert_eq!(row(&state).1, 1500.0);
+
+    assert!(
+        state
+            .apply(edit::plate_country(&id, "poland").unwrap())
+            .is_ok()
+    );
+    assert!(
+        state
+            .apply(edit::trailer_plate(&id, "NEW 456", Some("poland")).unwrap())
+            .is_ok()
+    );
+    let view = state.open().unwrap().view();
+    let saved = view.trailers.iter().find(|row| row.id == id).unwrap();
+    assert_eq!(saved.plate, "NEW 456");
+    assert_eq!(saved.country.as_deref(), Some("poland"));
+
+    assert!(state.save().is_ok());
+    state.close();
+    state.open_save(ix);
+    let view = state.open().unwrap().view();
+    let reopened = view.trailers.iter().find(|row| row.id == id).unwrap();
+    assert_eq!(reopened.plate, "NEW 456");
+    assert_eq!(reopened.country.as_deref(), Some("poland"));
+
+    fs::remove_dir_all(&root).unwrap();
+}
+
+#[test]
+fn sets_hq_vehicle() {
+    let root = game_folder_with("hq", "truck");
+    let save_dir = root.join("profiles/AAA/save/truck");
+    let mut state = State::with_dirs(Game::Ets2, vec![root.clone()]);
+    let ix = state
+        .saves()
+        .iter()
+        .position(|row| row.path == save_dir)
+        .expect("the copied save is listed");
+    state.open_save(ix);
+
+    let (vehicle_id, garage_city) = {
+        let view = state.open().unwrap().view();
+        let target = view
+            .vehicles
+            .iter()
+            .find(|row| row.garage.is_some())
+            .expect("at least one vehicle sits in a garage");
+        (target.id.clone(), target.garage.clone().unwrap())
+    };
+
+    assert!(state.apply(Command::SetHqVehicle(vehicle_id)).is_ok());
+    assert!(state.save().is_ok());
+    state.close();
+    state.open_save(ix);
+    assert_eq!(state.open().unwrap().view().hq_city, garage_city);
+
+    fs::remove_dir_all(&root).unwrap();
+}
+
+#[test]
+fn unlocks_restricted_trailer() {
+    let root =
+        std::env::temp_dir().join(format!("siir-gui-flow-restricted-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&root);
+    let save_dir = root.join("profiles/AAA/save/restricted");
+    fs::create_dir_all(&save_dir).unwrap();
+    fs::copy(
+        fixtures().join("ets2/profile.sii"),
+        root.join("profiles/AAA/profile.sii"),
+    )
+    .unwrap();
+    let source = include_str!("../../siir-save/testdata/read.sii").replace(
+        "    body_type: curtainside\n",
+        "    body_type: curtainside\n    country_validity: 2\n    country_validity[0]: \"czech\"\n    country_validity[1]: \"germany\"\n",
+    );
+    fs::write(save_dir.join("game.sii"), source).unwrap();
+
+    let mut state = State::with_dirs(Game::Ets2, vec![root.clone()]);
+    let ix = state
+        .saves()
+        .iter()
+        .position(|row| row.path == save_dir)
+        .expect("the synthetic save is listed");
+    state.open_save(ix);
+
+    let trailer = |state: &State, id: &str| {
+        state
+            .open()
+            .unwrap()
+            .view()
+            .trailers
+            .iter()
+            .find(|row| row.id == id)
+            .unwrap()
+            .restricted
+    };
+    assert!(!trailer(&state, "trailer.one"));
+    assert!(trailer(&state, "trailer.two"));
+
+    assert!(
+        state
+            .apply(Command::UnlockInRestrictedAreas("trailer.two".into()))
+            .is_ok()
+    );
+    assert!(!trailer(&state, "trailer.two"));
+
+    assert!(state.save().is_ok());
+    state.close();
+    state.open_save(ix);
+    assert!(!trailer(&state, "trailer.two"));
 
     fs::remove_dir_all(&root).unwrap();
 }

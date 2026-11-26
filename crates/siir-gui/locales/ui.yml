@@ -75,6 +75,12 @@ dialog.unsaved_title:
 dialog.unsaved_message:
   en_us: Leaving this save throws away the edits you have not saved.
   pt_br: Sair deste save descarta as edições que você não salvou.
+dialog.cancel:
+  en_us: Cancel
+  pt_br: Cancelar
+catalog.loading:
+  en_us: Loading game catalog…
+  pt_br: Carregando catálogo do jogo…
 editor.saved:
   en_us: Saved. Previous file kept at
   pt_br: Salvo. O arquivo anterior está em
@@ -210,9 +216,6 @@ vehicles.show_used:
 vehicles.show_owned:
   en_us: Show owned vehicles
   pt_br: Mostrar meus veículos
-vehicles.used_listing:
-  en_us: Used market listing
-  pt_br: Anúncio do mercado de usados
 vehicles.current:
   en_us: Current
   pt_br: Atual
@@ -234,6 +237,12 @@ vehicles.remove_badges:
 vehicles.set_current:
   en_us: Drive this vehicle
   pt_br: Dirigir este veículo
+vehicles.set_hq:
+  en_us: Set headquarters
+  pt_br: Definir como sede
+vehicles.hq_badge:
+  en_us: Headquarters
+  pt_br: Sede
 wear.engine:
   en_us: Engine
   pt_br: Motor
@@ -297,6 +306,15 @@ trailers.repair:
 trailers.unlock:
   en_us: Unlock everywhere
   pt_br: Liberar em todo lugar
+trailers.unlock_title:
+  en_us: Unlock trailer everywhere
+  pt_br: Liberar reboque em todo lugar
+trailers.unlock_message:
+  en_us: This clears the trailer's country restrictions and source definition so it can be used in every country.
+  pt_br: Isso limpa as restrições de país e a definição de origem do reboque para que ele possa ser usado em qualquer país.
+trailers.unlock_confirm:
+  en_us: Unlock
+  pt_br: Liberar
 trailers.attach:
   en_us: Attach to truck
   pt_br: Engatar no caminhão

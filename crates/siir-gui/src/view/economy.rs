@@ -41,6 +41,7 @@ fn level_slider(max: u32) -> SliderState {
 pub(super) struct EconomyState {
     pub(super) money: Entity<InputState>,
     money_error: Option<&'static str>,
+    pub(super) money_dirty: bool,
     level: Entity<SliderState>,
     pub(super) level_focus: FocusHandle,
     pub(super) skill_focus: Vec<FocusHandle>,
@@ -67,7 +68,10 @@ impl EconomyState {
             &money,
             window,
             |this, _, event: &InputEvent, window, cx| {
-                if matches!(event, InputEvent::Change) && this.apply_money_text(cx) == Some(false) {
+                if matches!(event, InputEvent::Change)
+                    && !this.syncing
+                    && this.apply_money_text(cx) == Some(false)
+                {
                     this.sync_money(window, cx);
                 }
             },
@@ -88,6 +92,7 @@ impl EconomyState {
         Self {
             money,
             money_error: None,
+            money_dirty: false,
             level,
             level_focus,
             skill_focus,
@@ -97,6 +102,7 @@ impl EconomyState {
 
     pub(super) fn clear_errors(&mut self) {
         self.money_error = None;
+        self.money_dirty = false;
     }
 
     pub(super) fn is_valid(&self) -> bool {
@@ -106,26 +112,14 @@ impl EconomyState {
 
 impl AppView {
     pub(super) fn sync_economy(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
-        let game = self.state.game();
-        let Some(open) = self.state.open() else {
+        self.sync_money(window, cx);
+        self.sync_level(window, cx);
+    }
+
+    pub(super) fn sync_level(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
+        let Some(experience) = self.state.open().map(|open| open.view().experience) else {
             return;
         };
-        let view = open.view();
-        let money = view.money.unwrap_or_default();
-        let experience = view.experience;
-        let currency = self.currency();
-        let mask = MaskPattern::Number {
-            separator: Some(format::grouping(game)),
-            fraction: None,
-        };
-        self.economy.money.update(cx, |input, cx| {
-            input.set_mask_pattern(mask, window, cx);
-            input.set_value(
-                format::amount(currency.from_native(money), game),
-                window,
-                cx,
-            );
-        });
         let level = self
             .levels()
             .map(|levels| levels.level(experience))
@@ -138,15 +132,29 @@ impl AppView {
         self.syncing = false;
     }
 
-    fn sync_money(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
+    pub(super) fn sync_money(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
         let game = self.state.game();
-        let Some(money) = self.state.open().and_then(|open| open.view().money) else {
+        let Some(open) = self.state.open() else {
             return;
         };
-        let shown = format::amount(self.currency().from_native(money), game);
+        let money = open.view().money.unwrap_or_default();
+        let currency = self.currency();
+        let mask = MaskPattern::Number {
+            separator: Some(format::grouping(game)),
+            fraction: None,
+        };
+        self.economy.money_error = None;
+        self.economy.money_dirty = false;
+        self.syncing = true;
         self.economy.money.update(cx, |input, cx| {
-            input.set_value(shown, window, cx);
+            input.set_mask_pattern(mask, window, cx);
+            input.set_value(
+                format::amount(currency.from_native(money), game),
+                window,
+                cx,
+            );
         });
+        self.syncing = false;
     }
 
     fn apply_money_text(&mut self, cx: &mut Context<'_, Self>) -> Option<bool> {
@@ -162,6 +170,7 @@ impl AppView {
         if edit::same_shown_amount(current, value, &currency) {
             return Some(false);
         }
+        self.economy.money_dirty = true;
         self.apply(Command::SetMoney(value), cx);
         Some(true)
     }
