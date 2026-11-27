@@ -2,6 +2,21 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.2.0] - 2026-11-27
+
+### Added
+
+- Redesign GUI ([243c9ad](https://codeberg.org/viniciusdof/siir/commit/243c9ad964f1d049b3d03ee57541997ba4bb1115))
+- Add vehicle HQ action, trailer plate country, unlock confirmation, and background catalog loading ([e67d84e](https://codeberg.org/viniciusdof/siir/commit/e67d84ee597fb1520f832622a59bd99e75ca14b2))
+- Add drivers, garages, and offenses screens with driver names ([fa8b799](https://codeberg.org/viniciusdof/siir/commit/fa8b799aae3db5126f10b2dc74305c98c1064fe7))
+
+### Changed
+
+- Split catalog module and mark Error non-exhaustive ([2e68510](https://codeberg.org/viniciusdof/siir/commit/2e68510b854fe46af56f5ebad54b8c583a8c017e))
+
+### Documentation
+
+- Add screenshots to the README ([78e1996](https://codeberg.org/viniciusdof/siir/commit/78e19969ace27b98aa5c8260280241bd60e50067))
 ## [0.1.0] - 2026-11-20
 
 ### Added
