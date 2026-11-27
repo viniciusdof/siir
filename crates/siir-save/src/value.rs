@@ -91,6 +91,16 @@ pub(crate) fn optional_array<'a>(unit: &'a Unit<'_>, name: &str) -> Result<Vec<&
     }
 }
 
+pub(crate) fn optional_slots<'a>(
+    unit: &'a Unit<'_>,
+    name: &str,
+) -> Result<Vec<Option<&'a str>>, Error> {
+    Ok(optional_array(unit, name)?
+        .into_iter()
+        .map(|value| (!matches!(value, "null" | "nil")).then_some(value))
+        .collect())
+}
+
 pub(crate) fn unquote(value: &str) -> &str {
     value
         .strip_prefix('"')

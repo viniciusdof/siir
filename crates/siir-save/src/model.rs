@@ -33,6 +33,8 @@ pub struct Save<'a> {
     pub garages: Vec<Garage<'a>>,
     /// Every AI driver.
     pub drivers: Vec<Driver<'a>>,
+    /// AI driver unit ids waiting in the recruitment pool.
+    pub driver_pool: Vec<&'a str>,
     /// Every company.
     pub companies: Vec<Company<'a>>,
     /// Every AI driver's current job.
@@ -205,6 +207,12 @@ pub struct Garage<'a> {
     pub id: &'a str,
     /// Garage status the game stores.
     pub status: u64,
+    /// Vehicle unit ids by garage slot, `None` for an empty slot.
+    pub vehicles: Vec<Option<&'a str>>,
+    /// Driver unit ids by garage slot, `None` for an empty slot.
+    pub drivers: Vec<Option<&'a str>>,
+    /// Trailer unit ids by garage slot, `None` for an empty slot.
+    pub trailers: Vec<Option<&'a str>>,
 }
 
 /// One AI driver.
@@ -223,6 +231,8 @@ pub struct Driver<'a> {
     pub job: Option<&'a str>,
     /// Training policy the game stores.
     pub training_policy: u64,
+    /// Driver state the game stores, when present.
+    pub state: Option<u64>,
 }
 
 /// One company.
@@ -512,6 +522,10 @@ pub struct Player<'a> {
     pub buses: Vec<&'a str>,
     /// Owned car unit ids.
     pub cars: Vec<&'a str>,
+    /// Employed driver unit ids, including the player driver.
+    pub drivers: Vec<&'a str>,
+    /// Dismissed driver unit ids waiting to finish a job or be hired back.
+    pub dismissed_drivers: Vec<&'a str>,
     /// Assigned `player_vehicles` slot id, when there is one.
     pub assigned_vehicles: Option<&'a str>,
     /// The player's current `player_job` unit id, when there is one.

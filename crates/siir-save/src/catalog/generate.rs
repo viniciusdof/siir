@@ -34,6 +34,7 @@ pub(super) fn generate(def_dir: &Path, locale_dir: &Path, _game: Game) -> Result
     let body_types = body_type_names(&trailers, &languages);
     let brands = brands(def_dir, &languages);
     let cities = cities(&def_dir.join("city"), &languages);
+    let drivers = drivers(&locale_dir.join("en_gb").join("driver_names.sii"));
     let levels = levels(&def_dir.join("economy_data_xp.sii"), &languages);
     let currencies = currencies(&def_dir.join("economy_data.sii"));
     let countries = countries(&def_dir.join("country"), &languages);
@@ -45,6 +46,7 @@ pub(super) fn generate(def_dir: &Path, locale_dir: &Path, _game: Game) -> Result
         body_types,
         brands,
         cities,
+        drivers,
         levels,
         currencies,
         countries,
@@ -93,6 +95,39 @@ fn languages(locale_dir: &Path) -> Languages {
             (language, texts)
         })
         .collect()
+}
+
+fn drivers(file: &Path) -> Vec<String> {
+    let Ok(source) = fs::read_to_string(file) else {
+        return Vec::new();
+    };
+    let source = strip_includes(source.trim_start_matches('\u{feff}')).into_owned();
+    let Ok(document) = Document::parse(&source) else {
+        return Vec::new();
+    };
+    let Some(unit) = document.units_of_class("driver_names").next() else {
+        return Vec::new();
+    };
+    let mut entries: Vec<(u32, String)> = unit
+        .attrs()
+        .filter_map(|(attribute, index, value)| match (attribute, index) {
+            ("name", Index::At(at)) => {
+                let name = unquote(value);
+                let name = name.strip_prefix('+').unwrap_or(name);
+                Some((at, name.to_owned()))
+            }
+            _ => None,
+        })
+        .collect();
+    entries.sort_by_key(|(at, _)| *at);
+    if entries
+        .iter()
+        .enumerate()
+        .any(|(ix, (at, _))| ix as u32 != *at)
+    {
+        return Vec::new();
+    }
+    entries.into_iter().map(|(_, name)| name).collect()
 }
 
 fn levels(file: &Path, languages: &Languages) -> Levels {

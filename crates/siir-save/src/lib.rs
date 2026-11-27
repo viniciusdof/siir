@@ -37,8 +37,8 @@ pub use session::Session;
 pub use siir::container::Origin;
 
 use value::{
-    array, boolean, count, float, integer, optional_array, optional_count, reference, string, text,
-    unquote,
+    array, boolean, count, float, integer, optional_array, optional_count, optional_slots,
+    reference, string, text, unquote,
 };
 
 /// Reads the typed view of a save document.
@@ -49,14 +49,15 @@ pub fn read<'a>(document: &'a Document<'_>, game: Game) -> Result<Save<'a>, Erro
     let bank = linked(economy, names::BANK, &units).or_else(|| first(document, names::BANK));
     let player = linked(economy, names::PLAYER, &units).or_else(|| first(document, names::PLAYER));
 
-    let (experience, skills, visited_cities, unlocked_dealers) = match economy {
+    let (experience, skills, visited_cities, unlocked_dealers, driver_pool) = match economy {
         Some(unit) => (
             count(unit, names::EXPERIENCE_POINTS)?,
             read_skills(unit)?,
             array(unit, names::VISITED_CITIES)?,
             array(unit, names::UNLOCKED_DEALERS)?,
+            optional_array(unit, names::DRIVER_POOL)?,
         ),
-        None => (0, Skills::default(), Vec::new(), Vec::new()),
+        None => (0, Skills::default(), Vec::new(), Vec::new(), Vec::new()),
     };
 
     let assigned = player.and_then(|unit| reference(unit, names::ASSIGNED_VEHICLES));
@@ -85,6 +86,8 @@ pub fn read<'a>(document: &'a Document<'_>, game: Game) -> Result<Save<'a>, Erro
             trailers: array(unit, names::TRAILERS)?,
             buses: optional_array(unit, names::BUSES)?,
             cars: optional_array(unit, names::CARS)?,
+            drivers: optional_array(unit, names::DRIVERS)?,
+            dismissed_drivers: optional_array(unit, names::DISMISSED_DRIVERS)?,
             assigned_vehicles: reference(unit, names::ASSIGNED_VEHICLES),
             current_job: reference(unit, "current_job"),
             current_bus_job: reference(unit, names::CURRENT_BUS_JOB),
@@ -94,16 +97,24 @@ pub fn read<'a>(document: &'a Document<'_>, game: Game) -> Result<Save<'a>, Erro
         None => None,
     };
 
+    let mut garages = Vec::new();
     let mut vehicle_garages: HashMap<&str, &str> = HashMap::new();
     for unit in document.units_of_class(names::GARAGE) {
-        let Some(city) = unit.id().strip_prefix(names::GARAGE_PREFIX) else {
-            continue;
-        };
-        for id in optional_array(unit, names::VEHICLES)? {
-            if !matches!(id, "null" | "nil") {
+        let vehicles = optional_slots(unit, names::VEHICLES)?;
+        let drivers = optional_slots(unit, names::DRIVERS)?;
+        let trailers = optional_slots(unit, names::TRAILERS)?;
+        if let Some(city) = unit.id().strip_prefix(names::GARAGE_PREFIX) {
+            for id in vehicles.iter().flatten() {
                 vehicle_garages.entry(id).or_insert(city);
             }
         }
+        garages.push(Garage {
+            id: unit.id(),
+            status: count(unit, names::STATUS)?,
+            vehicles,
+            drivers,
+            trailers,
+        });
     }
 
     let mut vehicles = Vec::new();
@@ -162,14 +173,6 @@ pub fn read<'a>(document: &'a Document<'_>, game: Game) -> Result<Save<'a>, Erro
         });
     }
 
-    let mut garages = Vec::new();
-    for unit in document.units_of_class(names::GARAGE) {
-        garages.push(Garage {
-            id: unit.id(),
-            status: count(unit, names::STATUS)?,
-        });
-    }
-
     let mut drivers = Vec::new();
     for unit in document.units_of_class(names::DRIVER_AI) {
         drivers.push(Driver {
@@ -180,6 +183,7 @@ pub fn read<'a>(document: &'a Document<'_>, game: Game) -> Result<Save<'a>, Erro
             assigned_truck: reference(unit, names::ASSIGNED_TRUCK),
             job: reference(unit, names::DRIVER_JOB),
             training_policy: count(unit, names::TRAINING_POLICY)?,
+            state: optional_count(unit, names::STATE)?,
         });
     }
 
@@ -367,6 +371,7 @@ pub fn read<'a>(document: &'a Document<'_>, game: Game) -> Result<Save<'a>, Erro
         trailers,
         garages,
         drivers,
+        driver_pool,
         companies,
         jobs,
         player_job,
@@ -760,5 +765,38 @@ mod tests {
                 .country_validity
                 .is_empty()
         );
+    }
+
+    #[test]
+    fn reads_driver_pool_dismissed_drivers_garage_slots_and_driver_state() {
+        let source = SOURCE
+            .replace(
+                "    unlocked_dealers: 0\n",
+                "    unlocked_dealers: 0\n    driver_pool: 1\n    driver_pool[0]: driver.pool\n",
+            )
+            .replace(
+                "    assigned_vehicles: slot.one\n",
+                "    assigned_vehicles: slot.one\n    drivers: 2\n    drivers[0]: driver_player.one\n    drivers[1]: driver.one\n    dismissed_drivers: 1\n    dismissed_drivers[0]: driver.dismissed\n",
+            )
+            .replace(
+                "garage : garage.one {\n    status: 2\n}",
+                "garage : garage.prague {\n    status: 2\n    vehicles: 2\n    vehicles[0]: vehicle.one\n    vehicles[1]: null\n    drivers: 2\n    drivers[0]: driver.one\n    drivers[1]: null\n    trailers: 2\n    trailers[0]: null\n    trailers[1]: trailer.one\n}",
+            )
+            .replace(
+                "    training_policy: 2\n",
+                "    training_policy: 2\n    state: 2\n",
+            );
+        let document = Document::parse(&source).unwrap();
+        let save = read(&document, Game::Ets2).unwrap();
+
+        assert_eq!(save.driver_pool, ["driver.pool"]);
+        let player = save.player.as_ref().unwrap();
+        assert_eq!(player.drivers, ["driver_player.one", "driver.one"]);
+        assert_eq!(player.dismissed_drivers, ["driver.dismissed"]);
+        let garage = &save.garages[0];
+        assert_eq!(garage.vehicles, [Some("vehicle.one"), None]);
+        assert_eq!(garage.drivers, [Some("driver.one"), None]);
+        assert_eq!(garage.trailers, [None, Some("trailer.one")]);
+        assert_eq!(save.drivers[0].state, Some(2));
     }
 }

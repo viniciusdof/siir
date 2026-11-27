@@ -4,6 +4,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use siir_gui::state::State;
+use siir_gui::view_data::DriverStatus;
 use siir_gui::{edit, format};
 use siir_save::catalog::Catalog;
 use siir_save::{Command, Game, Origin, Skills};
@@ -693,6 +694,169 @@ fn owns_every_listed_bus() {
             owned_models.contains(&Some(bus.to_owned())),
             "{bus} is owned, slot or not"
         );
+    }
+
+    fs::remove_dir_all(&root).unwrap();
+}
+
+#[test]
+fn edits_garage_hires_skills_and_fires_a_driver() {
+    let root = game_folder("m4-drivers-garages");
+    let save_dir = root.join("profiles/AAA/save/1");
+    let mut state = State::with_dirs(Game::Ets2, vec![root.clone()]);
+    let ix = state
+        .saves()
+        .iter()
+        .position(|row| row.path == save_dir)
+        .expect("the copied save is listed");
+    state.open_save(ix);
+
+    let (garage_id, driver_id, initial_garages) = {
+        let view = state.open().unwrap().view();
+        let garage = view
+            .garages
+            .iter()
+            .find(|garage| garage.status == 0 && !garage.occupied())
+            .expect("the fixture has an empty unowned garage");
+        let driver = view
+            .drivers
+            .iter()
+            .find(|driver| driver.status == DriverStatus::Available)
+            .expect("the fixture has available pool drivers");
+        (garage.id.clone(), driver.id.clone(), view.counts.garages)
+    };
+
+    assert!(
+        state
+            .apply(Command::SetGarageStatus {
+                id: garage_id.clone(),
+                status: 2,
+            })
+            .is_ok()
+    );
+    {
+        let view = state.open().unwrap().view();
+        assert_eq!(view.counts.garages, initial_garages + 1);
+        let garage = view.garages.iter().find(|g| g.id == garage_id).unwrap();
+        assert_eq!(garage.status, 2);
+        assert_eq!(garage.free_driver_slots(), 3);
+        assert!(!garage.occupied());
+    }
+
+    assert!(
+        state
+            .apply(Command::HireDriver {
+                id: driver_id.clone(),
+                garage: garage_id.clone(),
+            })
+            .is_ok()
+    );
+    let target_skills = edit::skills([6, 5, 4, 3, 2], [true, false, true, false, false, false], 0);
+    assert!(
+        state
+            .apply(Command::SetDriverSkills {
+                id: driver_id.clone(),
+                skills: target_skills,
+            })
+            .is_ok()
+    );
+
+    assert!(state.save().is_ok());
+    state.close();
+    state.open_save(ix);
+    {
+        let view = state.open().unwrap().view();
+        assert_eq!(view.counts.drivers, 1);
+        let driver = view.drivers.iter().find(|d| d.id == driver_id).unwrap();
+        assert_eq!(driver.status, DriverStatus::Employed);
+        assert_eq!(driver.garage_id.as_deref(), Some(garage_id.as_str()));
+        assert_eq!(driver.skills, target_skills);
+        let garage = view.garages.iter().find(|g| g.id == garage_id).unwrap();
+        assert!(garage.occupied());
+        assert_eq!(garage.free_driver_slots(), 2);
+    }
+
+    assert!(state.apply(Command::FireDriver(driver_id.clone())).is_ok());
+    assert!(state.save().is_ok());
+    state.close();
+    state.open_save(ix);
+    {
+        let view = state.open().unwrap().view();
+        assert_eq!(view.counts.drivers, 0);
+        let driver = view.drivers.iter().find(|d| d.id == driver_id).unwrap();
+        assert_eq!(driver.status, DriverStatus::Available);
+        assert_eq!(driver.garage_id, None);
+        let garage = view.garages.iter().find(|g| g.id == garage_id).unwrap();
+        assert!(!garage.occupied());
+        assert_eq!(garage.free_driver_slots(), 3);
+    }
+
+    fs::remove_dir_all(&root).unwrap();
+}
+
+#[test]
+fn assigns_driver_truck_and_clears_offenses() {
+    let root = std::env::temp_dir().join(format!("siir-gui-flow-m4-synth-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&root);
+    let save_dir = root.join("profiles/AAA/save/m4");
+    fs::create_dir_all(&save_dir).unwrap();
+    fs::copy(
+        fixtures().join("ets2/profile.sii"),
+        root.join("profiles/AAA/profile.sii"),
+    )
+    .unwrap();
+    let source = include_str!("../../siir-save/testdata/read.sii")
+        .replace(
+            "    assigned_vehicles: slot.one\n",
+            "    assigned_vehicles: slot.one\n    drivers: 2\n    drivers[0]: driver_player.one\n    drivers[1]: driver.one\n    dismissed_drivers: 0\n",
+        )
+        .replace(
+            "garage : garage.one {\n    status: 2\n}",
+            "garage : garage.prague {\n    status: 2\n    vehicles: 2\n    vehicles[0]: vehicle.one\n    vehicles[1]: vehicle.two\n    drivers: 2\n    drivers[0]: driver.one\n    drivers[1]: null\n    trailers: 2\n    trailers[0]: null\n    trailers[1]: null\n}",
+        )
+        .replace(
+            "vehicle : vehicle.one {",
+            "vehicle : vehicle.two {\n    accessories: 0\n    engine_wear: 0\n    transmission_wear: 0\n    cabin_wear: 0\n    fuel_relative: 1\n    license_plate: \"TWO\"\n}\nvehicle : vehicle.one {",
+        );
+    fs::write(save_dir.join("game.sii"), source).unwrap();
+
+    let mut state = State::with_dirs(Game::Ets2, vec![root.clone()]);
+    let ix = state
+        .saves()
+        .iter()
+        .position(|row| row.path == save_dir)
+        .expect("the synthetic save is listed");
+    state.open_save(ix);
+
+    {
+        let view = state.open().unwrap().view();
+        let driver = view.drivers.iter().find(|d| d.id == "driver.one").unwrap();
+        assert_eq!(driver.truck.as_deref(), Some("vehicle.one"));
+        let offense = view.offense.as_ref().unwrap();
+        assert_eq!(offense.total_count(), 9);
+        assert_eq!(offense.total_fines(), 1300);
+        assert!(!offense.is_clear());
+    }
+
+    assert!(
+        state
+            .apply(Command::SetDriverTruck {
+                id: "driver.one".into(),
+                truck: "vehicle.two".into(),
+            })
+            .is_ok()
+    );
+    assert!(state.apply(Command::ClearOffenses).is_ok());
+
+    assert!(state.save().is_ok());
+    state.close();
+    state.open_save(ix);
+    {
+        let view = state.open().unwrap().view();
+        let driver = view.drivers.iter().find(|d| d.id == "driver.one").unwrap();
+        assert_eq!(driver.truck.as_deref(), Some("vehicle.two"));
+        let offense = view.offense.as_ref().unwrap();
+        assert!(offense.is_clear());
     }
 
     fs::remove_dir_all(&root).unwrap();

@@ -22,6 +22,7 @@ struct Snapshot<'a> {
     trailer_body_types: Vec<NamedData<'a>>,
     trailer_brands: Vec<NamedData<'a>>,
     cities: Vec<NamedData<'a>>,
+    drivers: &'a [String],
     country_names: Vec<NamedData<'a>>,
     cargo: Vec<CargoData<'a>>,
     companies: Vec<CompanyData<'a>>,
@@ -269,6 +270,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 names: &city.names,
             })
             .collect(),
+        drivers: catalog.drivers(),
         country_names: catalog
             .countries()
             .iter()
@@ -288,6 +290,13 @@ fn main() -> Result<(), Box<dyn Error>> {
     if snapshot.country_names.is_empty() {
         return Err(format!("no countries in {}", def.join("country").display()).into());
     }
+    if snapshot.drivers.is_empty() {
+        return Err(format!(
+            "no drivers in {}",
+            locale.join("en_gb").join("driver_names.sii").display()
+        )
+        .into());
+    }
     if snapshot.currencies.is_empty() {
         return Err(format!(
             "no currencies in {}",
@@ -303,7 +312,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     serde_json::to_writer_pretty(&mut file, &snapshot)?;
     writeln!(&mut file)?;
     println!(
-        "wrote {} vehicles, {} cargoes, {} companies, {} trailers, {} level steps, {} currencies, {} countries, {} brands, and {} cities to {}",
+        "wrote {} vehicles, {} cargoes, {} companies, {} trailers, {} level steps, {} currencies, {} countries, {} brands, {} cities, and {} drivers to {}",
         snapshot.vehicles.len(),
         snapshot.cargo.len(),
         snapshot.companies.len(),
@@ -313,6 +322,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         snapshot.country_names.len(),
         snapshot.trailer_brands.len(),
         snapshot.cities.len(),
+        snapshot.drivers.len(),
         output.display()
     );
     Ok(())

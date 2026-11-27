@@ -20,6 +20,7 @@ pub struct Catalog {
     body_types: Vec<Named>,
     brands: Vec<Named>,
     cities: Vec<Named>,
+    drivers: Vec<String>,
     levels: Levels,
     currencies: Vec<Currency>,
     countries: Vec<Named>,
@@ -101,6 +102,17 @@ impl Catalog {
         lookup(&self.cities, token, language)
     }
 
+    /// Every AI driver name, indexed by the number in `driver.<index>`.
+    pub fn drivers(&self) -> &[String] {
+        &self.drivers
+    }
+
+    /// Display name of one AI driver by its unit id (`driver.<index>`).
+    pub fn driver_name(&self, id: &str) -> Option<&str> {
+        let index: usize = id.strip_prefix("driver.")?.parse().ok()?;
+        self.drivers.get(index).map(String::as_str)
+    }
+
     /// Display name of one model in `language`, falling back to English.
     pub fn vehicle_name(&self, token: &str, language: &str) -> Option<&str> {
         localized(&self.vehicle(token)?.names, language)
@@ -140,10 +152,10 @@ pub struct Named {
 }
 
 fn lookup<'a>(entries: &'a [Named], token: &str, language: &str) -> Option<&'a str> {
-    localized(
-        &entries.iter().find(|entry| entry.token == token)?.names,
-        language,
-    )
+    let index = entries
+        .binary_search_by(|entry| entry.token.as_str().cmp(token))
+        .ok()?;
+    localized(&entries[index].names, language)
 }
 
 /// One display currency from `def/economy_data.sii`.

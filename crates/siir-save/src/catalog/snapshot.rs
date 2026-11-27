@@ -29,6 +29,7 @@ struct Snapshot {
     trailer_body_types: Vec<NamedData>,
     trailer_brands: Vec<NamedData>,
     cities: Vec<NamedData>,
+    drivers: Vec<String>,
     country_names: Vec<NamedData>,
     cargo: Vec<CargoData>,
     companies: Vec<CompanyData>,
@@ -131,6 +132,25 @@ struct TrailerData {
 
 impl From<Snapshot> for Catalog {
     fn from(snapshot: Snapshot) -> Self {
+        let mut body_types: Vec<Named> = snapshot
+            .trailer_body_types
+            .into_iter()
+            .map(Named::from)
+            .collect();
+        let mut brands: Vec<Named> = snapshot
+            .trailer_brands
+            .into_iter()
+            .map(Named::from)
+            .collect();
+        let mut cities: Vec<Named> = snapshot.cities.into_iter().map(Named::from).collect();
+        let mut countries: Vec<Named> = snapshot
+            .country_names
+            .into_iter()
+            .map(Named::from)
+            .collect();
+        for table in [&mut body_types, &mut brands, &mut cities, &mut countries] {
+            table.sort_by(|left, right| left.token.cmp(&right.token));
+        }
         Self {
             vehicles: snapshot
                 .vehicles
@@ -144,17 +164,10 @@ impl From<Snapshot> for Catalog {
                 .into_iter()
                 .map(TrailerDefinition::from)
                 .collect(),
-            body_types: snapshot
-                .trailer_body_types
-                .into_iter()
-                .map(Named::from)
-                .collect(),
-            brands: snapshot
-                .trailer_brands
-                .into_iter()
-                .map(Named::from)
-                .collect(),
-            cities: snapshot.cities.into_iter().map(Named::from).collect(),
+            body_types,
+            brands,
+            cities,
+            drivers: snapshot.drivers,
             levels: snapshot.levels.into(),
             currencies: snapshot
                 .currencies
@@ -167,11 +180,7 @@ impl From<Snapshot> for Catalog {
                     sign3: currency.sign3,
                 })
                 .collect(),
-            countries: snapshot
-                .country_names
-                .into_iter()
-                .map(Named::from)
-                .collect(),
+            countries,
         }
     }
 }
@@ -293,7 +302,7 @@ mod tests {
 
     fn snapshot(game: &str) -> String {
         format!(
-            r#"{{"game":"{game}","levels":{{"steps":[],"titles":[]}},"currencies":[],"trailer_body_types":[],"trailer_brands":[],"cities":[],"country_names":[],"cargo":[],"companies":[],"trailers":[],"vehicles":[]}}"#
+            r#"{{"game":"{game}","levels":{{"steps":[],"titles":[]}},"currencies":[],"trailer_body_types":[],"trailer_brands":[],"cities":[],"drivers":[],"country_names":[],"cargo":[],"companies":[],"trailers":[],"vehicles":[]}}"#
         )
     }
 

@@ -1,5 +1,8 @@
 mod discovery;
+mod drivers;
 mod economy;
+mod garages;
+mod offenses;
 mod overview;
 mod profile;
 mod shell;
@@ -9,12 +12,11 @@ mod vehicles;
 use std::path::{Path, PathBuf};
 
 use gpui_kit::assets::IconName;
-use gpui_kit::base::Popover;
 use gpui_kit::base::input::InputState;
 use gpui_kit::prelude::*;
 use gpui_kit::{
     Anchor, Context, Entity, FocusHandle, Focusable, IntoElement, PathPromptOptions, Render, Role,
-    SharedString, Subscription, Window, div, px,
+    Subscription, Window, div, px,
 };
 
 use siir_gui::edit;
@@ -27,7 +29,9 @@ use siir_save::{Command, Game};
 use crate::ui::{self, Tone, tokens};
 
 use self::discovery::HomeState;
+use self::drivers::DriversState;
 use self::economy::EconomyState;
+use self::garages::GaragesState;
 use self::profile::ProfileState;
 use self::trailers::TrailersState;
 use self::vehicles::VehiclesState;
@@ -39,6 +43,9 @@ enum Section {
     Profile,
     Vehicles,
     Trailers,
+    Drivers,
+    Garages,
+    Offenses,
 }
 
 struct LeaveDialogState {
@@ -76,6 +83,8 @@ pub struct AppView {
     profile: ProfileState,
     vehicles: VehiclesState,
     trailers: TrailersState,
+    drivers: DriversState,
+    garages: GaragesState,
     leave: LeaveDialogState,
     syncing: bool,
     catalog: Option<Catalog>,
@@ -102,6 +111,8 @@ impl AppView {
         let profile = ProfileState::new(window, cx, &mut subscriptions);
         let vehicles = VehiclesState::new(window, cx, &mut subscriptions);
         let trailers = TrailersState::new(window, cx, &mut subscriptions);
+        let drivers = DriversState::new(cx);
+        let garages = GaragesState::new(window, cx, &mut subscriptions);
         let leave = LeaveDialogState::new(cx);
 
         let close = cx.entity().downgrade();
@@ -134,6 +145,8 @@ impl AppView {
             profile,
             vehicles,
             trailers,
+            drivers,
+            garages,
             leave,
             syncing: false,
             catalog: None,
@@ -166,6 +179,9 @@ impl AppView {
         self.save_settings();
         self.home.search.update(cx, |search, cx| {
             search.set_placeholder(t("home.search"), window, cx)
+        });
+        self.garages.search.update(cx, |search, cx| {
+            search.set_placeholder(t("garages.search"), window, cx)
         });
         cx.notify();
     }
@@ -222,6 +238,8 @@ impl AppView {
         if self.state.open().is_some() {
             self.section = Section::Overview;
             self.vehicles.show_used_market = false;
+            self.drivers.reset();
+            self.garages.reset(window, cx);
             self.clear_errors();
             self.sync_forms(window, cx);
             self.load_catalog(window, cx);
@@ -306,6 +324,8 @@ impl AppView {
         }
         self.state.close();
         self.vehicles.show_used_market = false;
+        self.drivers.reset();
+        self.garages.reset(window, cx);
         self.clear_errors();
         window.focus(&self.home.search.read(cx).focus_handle(cx), cx);
         cx.notify();
@@ -392,7 +412,6 @@ impl AppView {
         focus: &FocusHandle,
         cx: &mut Context<'_, Self>,
     ) -> impl IntoElement + use<> {
-        let palette = tokens::palette();
         let language = i18n::current_locale().into_owned();
         let label = current
             .as_deref()
@@ -424,52 +443,18 @@ impl AppView {
             .unwrap_or_default();
         countries.sort_by(|left, right| left.1.cmp(&right.1));
         let view = cx.entity().downgrade();
-        Popover::new(format!("{prefix}-country-menu"))
-            .anchor(Anchor::BottomLeft)
-            .trigger(
-                ui::select_field(format!("{prefix}-country-trigger"), label, accessible)
-                    .track_focus(focus),
-            )
-            .content(move |_, _, cx| {
-                let popover = cx.entity();
-                let mut menu = div()
-                    .id(format!("{prefix}-country-list"))
-                    .flex()
-                    .flex_col()
-                    .items_start()
-                    .gap(px(tokens::SPACE_1))
-                    .p(px(tokens::SPACE_1))
-                    .max_h(px(260.0))
-                    .overflow_y_scroll()
-                    .on_scroll(|_, _, cx| cx.stop_propagation())
-                    .bg(palette.panel)
-                    .border_1()
-                    .border_color(palette.border)
-                    .rounded(px(tokens::RADIUS));
-                for (token, name) in &countries {
-                    let selected = current.as_deref() == Some(token.as_str());
-                    let option_id = SharedString::from(format!("{prefix}-country-option-{token}"));
-                    let token = token.clone();
-                    let unit_id = id.clone();
-                    let view = view.clone();
-                    let popover = popover.clone();
-                    menu = menu.child(
-                        ui::button(option_id, name.clone())
-                            .tone(Tone::Quiet)
-                            .selected(selected)
-                            .on_click(move |_, window, cx| {
-                                if !selected {
-                                    view.update(cx, |view, cx| {
-                                        view.set_unit_plate_country(&unit_id, &token, cx)
-                                    })
-                                    .ok();
-                                }
-                                popover.update(cx, |state, cx| state.dismiss(window, cx));
-                            }),
-                    );
-                }
-                menu.into_any_element()
-            })
+        ui::menu_popover(
+            format!("{prefix}-country"),
+            Anchor::BottomLeft,
+            ui::select_field(format!("{prefix}-country-trigger"), label, accessible)
+                .track_focus(focus),
+            countries,
+            current,
+            move |token, _, cx| {
+                view.update(cx, |view, cx| view.set_unit_plate_country(&id, &token, cx))
+                    .ok();
+            },
+        )
     }
 
     pub(super) fn levels(&self) -> Option<&Levels> {
@@ -527,6 +512,8 @@ impl AppView {
         self.sync_vehicle(window, cx);
         self.trailers.selected = self.default_trailer();
         self.sync_trailer(window, cx);
+        self.sync_drivers();
+        self.sync_garages(cx);
     }
 
     fn add_dirs(&mut self, dirs: Vec<PathBuf>, cx: &mut Context<'_, Self>) {
@@ -555,51 +542,33 @@ impl AppView {
     }
 
     fn locale_menu(&self, cx: &mut Context<'_, Self>) -> impl IntoElement {
-        let palette = tokens::palette();
         let current = i18n::current_locale();
         let label = i18n::language_name(current.as_ref());
         let accessible = format!("{}: {label}", t("field.language"));
-        let view = cx.entity().downgrade();
-        Popover::new("locale-menu")
-            .anchor(gpui_kit::Anchor::TopRight)
-            .trigger(
-                ui::button("locale-trigger", label)
-                    .aria_label(accessible)
-                    .track_focus(&self.locale_focus)
-                    .tone(Tone::Quiet)
-                    .trailing_icon(IconName::ChevronDown),
-            )
-            .content(move |_, _window, cx| {
-                let popover = cx.entity();
-                let mut menu = div()
-                    .flex()
-                    .flex_col()
-                    .gap(px(tokens::SPACE_1))
-                    .p(px(tokens::SPACE_1))
-                    .bg(palette.panel)
-                    .border_1()
-                    .border_color(palette.border)
-                    .rounded(px(tokens::RADIUS));
-                for locale in i18n::locales() {
-                    let selected = locale.as_ref() == current.as_ref();
-                    let tag = locale.into_owned();
-                    let name = i18n::language_name(&tag);
-                    let id = SharedString::from(format!("locale-option-{tag}"));
-                    let view = view.clone();
-                    let popover = popover.clone();
-                    menu = menu.child(
-                        ui::button(id, name)
-                            .tone(Tone::Quiet)
-                            .selected(selected)
-                            .on_click(move |_, window, cx| {
-                                view.update(cx, |view, cx| view.set_locale(&tag, window, cx))
-                                    .ok();
-                                popover.update(cx, |state, cx| state.dismiss(window, cx));
-                            }),
-                    );
-                }
-                menu.into_any_element()
+        let options: Vec<(String, String)> = i18n::locales()
+            .into_iter()
+            .map(|locale| {
+                let tag = locale.into_owned();
+                let name = i18n::language_name(&tag);
+                (tag, name)
             })
+            .collect();
+        let view = cx.entity().downgrade();
+        ui::menu_popover(
+            "locale",
+            Anchor::TopRight,
+            ui::button("locale-trigger", label)
+                .aria_label(accessible)
+                .track_focus(&self.locale_focus)
+                .tone(Tone::Quiet)
+                .trailing_icon(IconName::ChevronDown),
+            options,
+            Some(current.into_owned()),
+            move |tag, window, cx| {
+                view.update(cx, |view, cx| view.set_locale(&tag, window, cx))
+                    .ok();
+            },
+        )
     }
 
     fn render_header(&self, cx: &mut Context<'_, Self>) -> impl IntoElement {
@@ -877,6 +846,9 @@ impl AppView {
             Section::Profile => self.render_profile().into_any_element(),
             Section::Vehicles => self.render_vehicles(cx).into_any_element(),
             Section::Trailers => self.render_trailers(cx).into_any_element(),
+            Section::Drivers => self.render_drivers(cx).into_any_element(),
+            Section::Garages => self.render_garages(cx).into_any_element(),
+            Section::Offenses => self.render_offenses(cx).into_any_element(),
         }
     }
 }

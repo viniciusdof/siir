@@ -48,6 +48,15 @@ nav.vehicles:
 nav.trailers:
   en_us: Trailers
   pt_br: Reboques
+nav.drivers:
+  en_us: Drivers
+  pt_br: Motoristas
+nav.garages:
+  en_us: Garages
+  pt_br: Garagens
+nav.offenses:
+  en_us: Offenses
+  pt_br: Infrações
 nav.profile:
   en_us: Profile
   pt_br: Perfil
@@ -336,6 +345,162 @@ empty.no_trailers:
 empty.no_trailers_hint:
   en_us: This save has no trailer units.
   pt_br: Este save não tem unidades de reboque.
+drivers.show_available:
+  en_us: Show available to hire
+  pt_br: Mostrar disponíveis para contratar
+drivers.show_hired:
+  en_us: Show hired drivers
+  pt_br: Mostrar motoristas contratados
+drivers.status_employed:
+  en_us: Hired
+  pt_br: Contratado
+drivers.status_dismissed:
+  en_us: Dismissed
+  pt_br: Dispensado
+drivers.status_available:
+  en_us: Available
+  pt_br: Disponível
+drivers.status_other:
+  en_us: Unassigned
+  pt_br: Sem vínculo
+drivers.on_job:
+  en_us: On job
+  pt_br: Em viagem
+drivers.assignment:
+  en_us: Assignment
+  pt_br: Atribuição
+drivers.hire_section:
+  en_us: Hire driver
+  pt_br: Contratar motorista
+drivers.hire:
+  en_us: Hire driver
+  pt_br: Contratar motorista
+drivers.fire:
+  en_us: Fire driver
+  pt_br: Demitir motorista
+drivers.fire_on_job_hint:
+  en_us: This driver is on a job and will be marked as dismissed until the delivery finishes.
+  pt_br: Este motorista está em uma entrega e ficará como dispensado até concluir o frete.
+drivers.no_free_garages:
+  en_us: No garage has a free driver slot. Expand a garage first.
+  pt_br: Nenhuma garagem tem vaga livre para motorista. Expanda uma garagem primeiro.
+drivers.no_garage_trucks:
+  en_us: No trucks parked in this garage.
+  pt_br: Nenhum caminhão estacionado nesta garagem.
+drivers.truck_none:
+  en_us: No truck
+  pt_br: Sem caminhão
+drivers.select_garage:
+  en_us: Choose a garage
+  pt_br: Escolha uma garagem
+field.garage:
+  en_us: Garage
+  pt_br: Garagem
+field.truck:
+  en_us: Assigned truck
+  pt_br: Caminhão atribuído
+field.hometown:
+  en_us: Hometown
+  pt_br: Cidade natal
+empty.no_hired_drivers:
+  en_us: No hired drivers
+  pt_br: Nenhum motorista contratado
+empty.no_hired_drivers_hint:
+  en_us: Switch to available drivers to hire one into a free garage slot.
+  pt_br: Mude para motoristas disponíveis para contratar em uma vaga livre de garagem.
+empty.no_available_drivers:
+  en_us: No available drivers
+  pt_br: Nenhum motorista disponível
+empty.no_available_drivers_hint:
+  en_us: All recruitment pool drivers are already hired.
+  pt_br: Todos os motoristas disponíveis já estão contratados.
+garages.show_all:
+  en_us: Show all garages
+  pt_br: Mostrar todas as garagens
+garages.show_active:
+  en_us: Show owned garages
+  pt_br: Mostrar minhas garagens
+garages.search:
+  en_us: Search garages
+  pt_br: Buscar garagens
+garages.status:
+  en_us: Status
+  pt_br: Status
+garages.slots:
+  en_us: Slots
+  pt_br: Vagas
+garages.occupied_hint:
+  en_us: Move all vehicles, drivers, and trailers out of this garage before changing its status.
+  pt_br: Remova todos os veículos, motoristas e reboques desta garagem antes de alterar o status.
+garages.slot_empty:
+  en_us: Empty
+  pt_br: Livre
+garages.player_driver:
+  en_us: Player
+  pt_br: Jogador
+garage.status_unowned:
+  en_us: Unowned
+  pt_br: Não comprada
+garage.status_buyable:
+  en_us: Buyable
+  pt_br: À venda
+garage.status_starter:
+  en_us: Starter (1 slot)
+  pt_br: Inicial (1 vaga)
+garage.status_small:
+  en_us: Small (3 slots)
+  pt_br: Pequena (3 vagas)
+garage.status_large:
+  en_us: Large (5 slots)
+  pt_br: Grande (5 vagas)
+garage.status_unknown:
+  en_us: Other
+  pt_br: Outro
+empty.no_garages:
+  en_us: No garage selected
+  pt_br: Nenhuma garagem selecionada
+empty.no_garages_hint:
+  en_us: Pick a garage from the list or show all garages.
+  pt_br: Escolha uma garagem na lista ou mostre todas as garagens.
+offenses.summary:
+  en_us: Police record
+  pt_br: Registro policial
+offenses.total_count:
+  en_us: Total offenses
+  pt_br: Total de infrações
+offenses.total_fines:
+  en_us: Total fines
+  pt_br: Total em multas
+offenses.history:
+  en_us: History entries
+  pt_br: Entradas no histórico
+offenses.categories:
+  en_us: By category
+  pt_br: Por categoria
+offenses.category:
+  en_us: Category
+  pt_br: Categoria
+offenses.count:
+  en_us: Offenses
+  pt_br: Infrações
+offenses.fines:
+  en_us: Fines
+  pt_br: Multas
+offenses.clear:
+  en_us: Clear offenses
+  pt_br: Limpar infrações
+offenses.clean:
+  en_us: Clean record
+  pt_br: Ficha limpa
+offenses.clean_hint:
+  en_us: No recorded offenses, fines, or history entries.
+  pt_br: Nenhuma infração, multa ou entrada no histórico registrada.
+empty.no_offenses:
+  en_us: No offense log
+  pt_br: Sem registro de infrações
+empty.no_offenses_hint:
+  en_us: This save does not include a police offense log.
+  pt_br: Este save não inclui um registro policial de infrações.
 banner.dismiss:
   en_us: Dismiss
   pt_br: Fechar

@@ -1,6 +1,5 @@
 use gpui_kit::assets::IconName;
 use gpui_kit::base::Button as BaseButton;
-use gpui_kit::base::Popover;
 use gpui_kit::base::input::{InputEvent, InputState, MaskPattern};
 use gpui_kit::base::slider::SliderState;
 use gpui_kit::prelude::*;
@@ -913,7 +912,6 @@ impl AppView {
         focus: &FocusHandle,
         cx: &mut Context<'_, Self>,
     ) -> impl IntoElement + use<> {
-        let palette = tokens::palette();
         let key = part.key();
         let current = part.current(vehicle).map(str::to_owned);
         let options = self.part_options(part, vehicle.model.as_deref());
@@ -930,50 +928,19 @@ impl AppView {
         let accessible = format!("{}: {label}", t(key));
         let id = vehicle.id.clone();
         let view = cx.entity().downgrade();
-        Popover::new(format!("{key}-menu"))
-            .anchor(Anchor::BottomLeft)
-            .trigger(
-                ui::select_field(format!("{key}-trigger"), label, accessible).track_focus(focus),
-            )
-            .content(move |_, _, cx| {
-                let popover = cx.entity();
-                let mut menu = div()
-                    .id(format!("{key}-list"))
-                    .flex()
-                    .flex_col()
-                    .items_start()
-                    .gap(px(tokens::SPACE_1))
-                    .p(px(tokens::SPACE_1))
-                    .max_h(px(260.0))
-                    .overflow_y_scroll()
-                    .on_scroll(|_, _, cx| cx.stop_propagation())
-                    .bg(palette.panel)
-                    .border_1()
-                    .border_color(palette.border)
-                    .rounded(px(tokens::RADIUS));
-                for (path, name) in &options {
-                    let selected = current.as_deref() == Some(path.as_str());
-                    let path = path.clone();
-                    let id = id.clone();
-                    let view = view.clone();
-                    let popover = popover.clone();
-                    menu = menu.child(
-                        ui::button(format!("{key}-option-{path}"), name.clone())
-                            .tone(Tone::Quiet)
-                            .selected(selected)
-                            .on_click(move |_, window, cx| {
-                                if !selected {
-                                    view.update(cx, |view, cx| {
-                                        view.apply(part.command(id.clone(), path.clone()), cx)
-                                    })
-                                    .ok();
-                                }
-                                popover.update(cx, |state, cx| state.dismiss(window, cx));
-                            }),
-                    );
-                }
-                menu.into_any_element()
-            })
+        ui::menu_popover(
+            key,
+            Anchor::BottomLeft,
+            ui::select_field(format!("{key}-trigger"), label, accessible).track_focus(focus),
+            options,
+            current,
+            move |path, _, cx| {
+                view.update(cx, |view, cx| {
+                    view.apply(part.command(id.clone(), path), cx)
+                })
+                .ok();
+            },
+        )
     }
 
     fn part_options(&self, part: PartKind, model: Option<&str>) -> Vec<(String, String)> {

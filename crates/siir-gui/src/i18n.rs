@@ -5,6 +5,8 @@ use std::borrow::Cow;
 use siir_save::Game;
 use siir_save::profiles::RootKind;
 
+use crate::view_data::DriverStatus;
+
 /// Translation for `key` in the current locale.
 pub fn t(key: &str) -> String {
     rust_i18n::t!(key).to_string()
@@ -25,6 +27,28 @@ pub fn root_kind(kind: RootKind) -> &'static str {
         RootKind::Steam => "kind.steam",
         RootKind::Proton => "kind.proton",
         RootKind::Custom => "kind.custom",
+    }
+}
+
+/// Employment label of an AI driver.
+pub fn driver_status(status: DriverStatus) -> &'static str {
+    match status {
+        DriverStatus::Employed => "drivers.status_employed",
+        DriverStatus::Dismissed => "drivers.status_dismissed",
+        DriverStatus::Available => "drivers.status_available",
+        DriverStatus::Other => "drivers.status_other",
+    }
+}
+
+/// Status label of a garage.
+pub fn garage_status(status: u64) -> &'static str {
+    match status {
+        0 => "garage.status_unowned",
+        1 => "garage.status_buyable",
+        2 => "garage.status_small",
+        3 => "garage.status_large",
+        6 => "garage.status_starter",
+        _ => "garage.status_unknown",
     }
 }
 
@@ -188,5 +212,22 @@ mod tests {
             assert_ne!(t(key), key, "{key} is missing from ui.yml");
         }
         assert_eq!(t("banner.no_such_key"), "banner.no_such_key");
+    }
+
+    #[test]
+    fn labels_driver_and_garage_statuses() {
+        for status in [
+            DriverStatus::Employed,
+            DriverStatus::Dismissed,
+            DriverStatus::Available,
+            DriverStatus::Other,
+        ] {
+            let key = driver_status(status);
+            assert_ne!(t(key), key, "{key} is missing from ui.yml");
+        }
+        for status in [0, 1, 2, 3, 6, 99] {
+            let key = garage_status(status);
+            assert_ne!(t(key), key, "{key} is missing from ui.yml");
+        }
     }
 }

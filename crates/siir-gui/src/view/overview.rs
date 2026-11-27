@@ -345,13 +345,37 @@ impl AppView {
                 IconName::Users,
                 palette.purple,
                 t("field.drivers"),
-                format::number(view.counts.drivers as u64, game),
+                {
+                    let label = t("field.drivers");
+                    let value = format::number(view.counts.drivers as u64, game);
+                    let target = self.drivers.list_focus.clone();
+                    ui::link(
+                        "overview-field.drivers",
+                        i18n::edit_link_label(&label, &value, "nav.drivers"),
+                        value,
+                        cx.listener(move |this, _, window, cx| {
+                            this.follow_link(Section::Drivers, &target, window, cx)
+                        }),
+                    )
+                },
             ))
             .child(ui::metric(
                 IconName::Warehouse,
                 palette.success,
                 t("field.garages"),
-                format::number(view.counts.garages as u64, game),
+                {
+                    let label = t("field.garages");
+                    let value = format::number(view.counts.garages as u64, game);
+                    let target = self.garages.list_focus.clone();
+                    ui::link(
+                        "overview-field.garages",
+                        i18n::edit_link_label(&label, &value, "nav.garages"),
+                        value,
+                        cx.listener(move |this, _, window, cx| {
+                            this.follow_link(Section::Garages, &target, window, cx)
+                        }),
+                    )
+                },
             ))
             .child(ui::metric(
                 IconName::ClipboardList,

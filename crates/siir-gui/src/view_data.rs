@@ -1,6 +1,6 @@
 //! Owned rows the views render, built from a borrowed [`Save`].
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use siir_save::{LicensePlate, Save, Skills, UsedTruck, Vehicle};
 
@@ -30,6 +30,126 @@ pub struct SaveView {
     pub vehicles: Vec<VehicleRow>,
     /// Every `trailer` unit.
     pub trailers: Vec<TrailerRow>,
+    /// Every `driver_ai` unit, employed ones first.
+    pub drivers: Vec<DriverRow>,
+    /// Every `garage` unit, active ones first.
+    pub garages: Vec<GarageRow>,
+    /// Police offense log summary, when the save has one.
+    pub offense: Option<OffenseView>,
+}
+
+/// Employment state of an AI driver.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DriverStatus {
+    /// Hired by the player and not dismissed.
+    Employed,
+    /// Fired while on a job; can be hired back into a free slot.
+    Dismissed,
+    /// Waiting in the recruitment pool.
+    Available,
+    /// Not listed in the player's roster, dismissed list, or pool.
+    Other,
+}
+
+impl DriverStatus {
+    /// Whether `Command::HireDriver` accepts this driver.
+    pub fn can_hire(self) -> bool {
+        matches!(self, Self::Available | Self::Dismissed)
+    }
+
+    fn sort_key(self) -> u8 {
+        match self {
+            Self::Employed => 0,
+            Self::Dismissed => 1,
+            Self::Available => 2,
+            Self::Other => 3,
+        }
+    }
+}
+
+/// One `driver_ai` unit as the Drivers screen shows it.
+pub struct DriverRow {
+    /// Unit id, the key every driver command takes.
+    pub id: String,
+    /// Employment status from the player and economy rosters.
+    pub status: DriverStatus,
+    /// Hometown city token, empty when unassigned.
+    pub hometown: String,
+    /// Experience points.
+    pub experience_points: u64,
+    /// Skill levels and ADR bitmask.
+    pub skills: Skills,
+    /// Garage unit id holding this driver, when assigned to one.
+    pub garage_id: Option<String>,
+    /// Garage city token holding this driver, when assigned to one.
+    pub garage_city: Option<String>,
+    /// Truck unit id sharing this driver's garage slot, or `assigned_truck`.
+    pub truck: Option<String>,
+    /// Whether the driver's current job has an active cargo.
+    pub on_job: bool,
+}
+
+/// One `garage` unit as the Garages screen shows it.
+pub struct GarageRow {
+    /// Unit id, the key `SetGarageStatus` and `HireDriver` take.
+    pub id: String,
+    /// City token stripped from `garage.<city>`.
+    pub city: String,
+    /// Garage status stored in the save (`0`, `1`, `2`, `3`, or `6`).
+    pub status: u64,
+    /// Vehicle unit ids by garage slot, `None` for an empty slot.
+    pub vehicles: Vec<Option<String>>,
+    /// Driver unit ids by garage slot, `None` for an empty slot.
+    pub drivers: Vec<Option<String>>,
+    /// Trailer unit ids by garage slot, `None` for an empty slot.
+    pub trailers: Vec<Option<String>>,
+}
+
+impl GarageRow {
+    /// Whether the garage holds any vehicle, driver, or trailer.
+    pub fn occupied(&self) -> bool {
+        self.vehicles.iter().any(Option::is_some)
+            || self.drivers.iter().any(Option::is_some)
+            || self.trailers.iter().any(Option::is_some)
+    }
+
+    /// Number of empty driver slots available for `Command::HireDriver`.
+    ///
+    /// Unowned garages (`status` 0 or 1) return 0 even if stale `null` slots
+    /// remain in the save.
+    pub fn free_driver_slots(&self) -> usize {
+        if !matches!(self.status, 2 | 3 | 6) {
+            return 0;
+        }
+        self.drivers.iter().filter(|slot| slot.is_none()).count()
+    }
+}
+
+/// Police offense summary as the Offenses screen shows it.
+pub struct OffenseView {
+    /// Offense counts per category.
+    pub counts: Vec<u64>,
+    /// Fines per category, in the save's stored currency.
+    pub fines: Vec<i64>,
+    /// Number of detailed history entries.
+    pub history_entries: u64,
+}
+
+impl OffenseView {
+    /// Sum of offenses across every category.
+    pub fn total_count(&self) -> u64 {
+        self.counts.iter().copied().sum()
+    }
+
+    /// Sum of fines across every category.
+    pub fn total_fines(&self) -> i64 {
+        self.fines.iter().copied().sum()
+    }
+
+    /// Whether counts, fines, and history are all zero.
+    pub fn is_clear(&self) -> bool {
+        self.total_count() == 0 && self.total_fines() == 0 && self.history_entries == 0
+    }
 }
 
 /// One `trailer` unit as the Trailers screen shows it.
@@ -180,6 +300,113 @@ impl SaveView {
             .collect();
         vehicles.sort_by_key(|vehicle| !vehicle.owned);
         let owned = vehicles.iter().filter(|vehicle| vehicle.owned).count();
+
+        let employed: HashSet<&str> = player
+            .map(|player| player.drivers.iter().copied().collect())
+            .unwrap_or_default();
+        let dismissed: HashSet<&str> = player
+            .map(|player| player.dismissed_drivers.iter().copied().collect())
+            .unwrap_or_default();
+        let pool: HashSet<&str> = save.driver_pool.iter().copied().collect();
+        let active_jobs: HashSet<&str> = save
+            .jobs
+            .iter()
+            .filter(|job| job.cargo.is_some())
+            .map(|job| job.id)
+            .collect();
+
+        let mut driver_garages: HashMap<&str, (&str, &str, Option<&str>)> = HashMap::new();
+        let mut garages: Vec<GarageRow> = save
+            .garages
+            .iter()
+            .map(|garage| {
+                let city = garage.id.strip_prefix("garage.").unwrap_or(garage.id);
+                for (slot, driver) in garage.drivers.iter().enumerate() {
+                    if let Some(driver_id) = driver {
+                        let slot_truck = garage.vehicles.get(slot).copied().flatten();
+                        driver_garages
+                            .entry(driver_id)
+                            .or_insert((garage.id, city, slot_truck));
+                    }
+                }
+                GarageRow {
+                    id: garage.id.to_owned(),
+                    city: city.to_owned(),
+                    status: garage.status,
+                    vehicles: garage
+                        .vehicles
+                        .iter()
+                        .map(|slot| slot.map(str::to_owned))
+                        .collect(),
+                    drivers: garage
+                        .drivers
+                        .iter()
+                        .map(|slot| slot.map(str::to_owned))
+                        .collect(),
+                    trailers: garage
+                        .trailers
+                        .iter()
+                        .map(|slot| slot.map(str::to_owned))
+                        .collect(),
+                }
+            })
+            .collect();
+        garages.sort_by(|left, right| {
+            (left.status == 0)
+                .cmp(&(right.status == 0))
+                .then_with(|| left.city.cmp(&right.city))
+        });
+
+        let mut drivers: Vec<DriverRow> = save
+            .drivers
+            .iter()
+            .map(|driver| {
+                let status = if dismissed.contains(driver.id) {
+                    DriverStatus::Dismissed
+                } else if employed.contains(driver.id) {
+                    DriverStatus::Employed
+                } else if pool.contains(driver.id) {
+                    DriverStatus::Available
+                } else {
+                    DriverStatus::Other
+                };
+                let (garage_id, garage_city, slot_truck) = driver_garages
+                    .get(driver.id)
+                    .copied()
+                    .map(|(id, city, truck)| (Some(id.to_owned()), Some(city.to_owned()), truck))
+                    .unwrap_or((None, None, None));
+                let truck = if garage_id.is_some() {
+                    slot_truck
+                } else {
+                    driver.assigned_truck
+                }
+                .map(str::to_owned);
+                let on_job = driver.job.is_some_and(|job| active_jobs.contains(job));
+                DriverRow {
+                    id: driver.id.to_owned(),
+                    status,
+                    hometown: driver.hometown.to_owned(),
+                    experience_points: driver.experience_points,
+                    skills: driver.skills,
+                    garage_id,
+                    garage_city,
+                    truck,
+                    on_job,
+                }
+            })
+            .collect();
+        drivers.sort_by_key(|driver| driver.status.sort_key());
+        let hired_drivers = drivers
+            .iter()
+            .filter(|driver| driver.status == DriverStatus::Employed)
+            .count();
+        let active_garages = garages.iter().filter(|garage| garage.status != 0).count();
+        let offense = save.offense.as_ref().map(|offense| OffenseView {
+            counts: offense.counts.clone(),
+            fines: offense.fines.clone(),
+            history_entries: offense.history_entries,
+        });
+
         Self {
             save_name,
             profile_name,
@@ -202,12 +429,8 @@ impl SaveView {
                 trailers: player
                     .map(|player| player.trailers.len())
                     .unwrap_or_default(),
-                drivers: save.drivers.len(),
-                garages: save
-                    .garages
-                    .iter()
-                    .filter(|garage| garage.status != 0)
-                    .count(),
+                drivers: hired_drivers,
+                garages: active_garages,
                 offers: save.offers.len(),
             },
             vehicles,
@@ -231,6 +454,99 @@ impl SaveView {
                     }
                 })
                 .collect(),
+            drivers,
+            garages,
+            offense,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use siir_save::{Game, Session};
+
+    #[test]
+    fn builds_driver_garage_and_offense_rows() {
+        let source = include_str!("../../siir-save/testdata/read.sii")
+            .replace(
+                "    unlocked_dealers: 0\n",
+                "    unlocked_dealers: 0\n    driver_pool: 1\n    driver_pool[0]: driver.pool\n",
+            )
+            .replace(
+                "    assigned_vehicles: slot.one\n",
+                "    assigned_vehicles: slot.one\n    drivers: 2\n    drivers[0]: driver_player.one\n    drivers[1]: driver.one\n    dismissed_drivers: 0\n",
+            )
+            .replace(
+                "garage : garage.one {\n    status: 2\n}",
+                "garage : garage.prague {\n    status: 2\n    vehicles: 2\n    vehicles[0]: vehicle.one\n    vehicles[1]: null\n    drivers: 2\n    drivers[0]: driver.one\n    drivers[1]: null\n    trailers: 2\n    trailers[0]: null\n    trailers[1]: null\n}\ngarage : garage.brno {\n    status: 0\n    vehicles: 0\n    drivers: 0\n    trailers: 0\n}",
+            )
+            .replace(
+                "    assigned_truck: vehicle.one\n}",
+                "    assigned_truck: vehicle.one\n    state: 2\n}\ndriver_ai : driver.pool {\n    experience_points: 0\n    adr: 0\n    long_dist: 0\n    heavy: 0\n    fragile: 0\n    urgent: 0\n    mechanical: 0\n    hometown: \"\"\n    assigned_truck: null\n    driver_job: null\n    training_policy: 0\n    state: 1\n}",
+            );
+        let session = Session::from_bytes(Game::Ets2, source.into_bytes()).unwrap();
+        let save = session.read().unwrap();
+        let view = SaveView::new(&save, "save".into(), "profile".into());
+
+        assert_eq!(view.counts.drivers, 1);
+        assert_eq!(view.counts.garages, 1);
+
+        assert_eq!(view.drivers.len(), 2);
+        assert_eq!(view.drivers[0].id, "driver.one");
+        assert_eq!(view.drivers[0].status, DriverStatus::Employed);
+        assert_eq!(view.drivers[0].garage_id.as_deref(), Some("garage.prague"));
+        assert_eq!(view.drivers[0].garage_city.as_deref(), Some("prague"));
+        assert_eq!(view.drivers[0].truck.as_deref(), Some("vehicle.one"));
+        assert!(!view.drivers[0].on_job);
+
+        assert_eq!(view.drivers[1].id, "driver.pool");
+        assert_eq!(view.drivers[1].status, DriverStatus::Available);
+        assert!(view.drivers[1].status.can_hire());
+        assert_eq!(view.drivers[1].garage_id, None);
+
+        assert_eq!(view.garages.len(), 2);
+        assert_eq!(view.garages[0].city, "prague");
+        assert!(view.garages[0].occupied());
+        assert_eq!(view.garages[0].free_driver_slots(), 1);
+        assert_eq!(view.garages[1].city, "brno");
+        assert!(!view.garages[1].occupied());
+        assert_eq!(view.garages[1].free_driver_slots(), 0);
+
+        let buyable = GarageRow {
+            id: "garage.buyable".into(),
+            city: "buyable".into(),
+            status: 1,
+            vehicles: vec![None],
+            drivers: vec![None],
+            trailers: vec![None],
+        };
+        assert_eq!(buyable.free_driver_slots(), 0);
+
+        let offense = view.offense.as_ref().unwrap();
+        assert_eq!(offense.total_count(), 9);
+        assert_eq!(offense.total_fines(), 1300);
+        assert_eq!(offense.history_entries, 3);
+        assert!(!offense.is_clear());
+    }
+
+    #[test]
+    fn empty_garage_slot_does_not_fall_back_to_assigned_truck() {
+        let source = include_str!("../../siir-save/testdata/read.sii")
+            .replace(
+                "    assigned_vehicles: slot.one\n",
+                "    assigned_vehicles: slot.one\n    drivers: 2\n    drivers[0]: driver_player.one\n    drivers[1]: driver.one\n    dismissed_drivers: 0\n",
+            )
+            .replace(
+                "garage : garage.one {\n    status: 2\n}",
+                "garage : garage.prague {\n    status: 2\n    vehicles: 2\n    vehicles[0]: null\n    vehicles[1]: vehicle.one\n    drivers: 2\n    drivers[0]: driver.one\n    drivers[1]: null\n    trailers: 2\n    trailers[0]: null\n    trailers[1]: null\n}",
+            );
+        let session = Session::from_bytes(Game::Ets2, source.into_bytes()).unwrap();
+        let save = session.read().unwrap();
+        let view = SaveView::new(&save, "save".into(), "profile".into());
+
+        let driver = view.drivers.iter().find(|d| d.id == "driver.one").unwrap();
+        assert_eq!(driver.garage_id.as_deref(), Some("garage.prague"));
+        assert_eq!(driver.truck, None);
     }
 }

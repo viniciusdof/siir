@@ -62,7 +62,10 @@ pub(super) fn hire(document: &mut Document<'_>, id: &str, garage: &str) -> Resul
         )?;
     }
 
-    {
+    let already_employed = values(unit_of(document, &player)?, names::DRIVERS)?
+        .iter()
+        .any(|value| value == id);
+    if !already_employed {
         let unit = super::edit(document, &player, names::PLAYER)?;
         for (name, value) in [
             (names::DRIVERS, id),
@@ -396,6 +399,37 @@ mod tests {
             Some("null")
         );
         assert_eq!(value(&document, "driver.two", names::STATE), Some("2"));
+    }
+
+    #[test]
+    fn rehires_a_dismissed_driver_without_duplicating_the_roster() {
+        let mut document = Document::parse(DRIVERS).unwrap();
+        for command in [
+            Command::HireDriver {
+                id: "driver.two".into(),
+                garage: "garage.prague".into(),
+            },
+            Command::FireDriver("driver.two".into()),
+            Command::HireDriver {
+                id: "driver.two".into(),
+                garage: "garage.prague".into(),
+            },
+        ] {
+            apply(&mut document, Game::Ets2, command).unwrap();
+        }
+        assert_eq!(value(&document, "player.one", names::DRIVERS), Some("2"));
+        assert_eq!(
+            value(&document, "player.one", names::DRIVER_FLAGS),
+            Some("2")
+        );
+        assert_eq!(
+            value(&document, "player.one", names::DISMISSED_DRIVERS),
+            Some("0")
+        );
+        assert_eq!(
+            value(&document, "garage.prague", "drivers[1]"),
+            Some("driver.two")
+        );
     }
 
     #[test]

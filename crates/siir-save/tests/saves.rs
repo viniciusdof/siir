@@ -149,12 +149,21 @@ fn assert_case(case: &Case) {
     assert_eq!(player.my_vehicles.len(), 3, "{name}");
     assert!(player.trucks.is_empty(), "{name}");
     assert!(player.trailers.is_empty(), "{name}");
+    assert_eq!(player.drivers.len(), 1, "{name}");
+    assert!(player.dismissed_drivers.is_empty(), "{name}");
     assert!(player.assigned_vehicles.is_some(), "{name}");
     assert!(player.current_job.is_some(), "{name}");
 
     assert_eq!(save.vehicles.len(), case.vehicles, "{name}");
     assert_eq!(save.trailers.len(), 1, "{name}");
     assert_eq!(save.garages.len(), case.garages, "{name}");
+    let starter = save
+        .garages
+        .iter()
+        .find(|garage| garage.status == 6)
+        .unwrap();
+    assert_eq!(starter.drivers.len(), 1, "{name}");
+    assert_eq!(starter.vehicles.len(), 1, "{name}");
     assert_eq!(
         save.garages
             .iter()
@@ -164,6 +173,8 @@ fn assert_case(case: &Case) {
         "{name}"
     );
     assert_eq!(save.drivers.len(), case.drivers, "{name}");
+    assert_eq!(save.driver_pool.len(), case.drivers, "{name}");
+    assert_eq!(save.drivers[0].state, Some(1), "{name}");
     assert_eq!(save.companies.len(), case.companies, "{name}");
     assert_eq!(save.companies[0].permanent_data, case.company, "{name}");
     assert_eq!(save.jobs.len(), case.drivers, "{name}");

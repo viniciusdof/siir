@@ -27,7 +27,7 @@ pub use link::link;
 pub use metric::metric;
 pub use plate::plate_preview;
 pub use section::section_title;
-pub use select_field::select_field;
+pub use select_field::{menu_popover, select_field};
 pub use skill_bar::{skill_pips, skill_segments};
 pub use slider::slider;
 pub use text_field::text_field;

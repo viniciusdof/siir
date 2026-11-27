@@ -4,6 +4,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use siir_gui::state::State;
+use siir_gui::view_data::DriverStatus;
 use siir_save::{Game, Origin};
 
 fn fixtures() -> PathBuf {
@@ -122,7 +123,16 @@ fn opens_a_fixture_save() {
     );
     assert_eq!(view.counts.trailers, 0);
     assert_eq!(view.counts.garages, 1);
-    assert_eq!(view.counts.drivers, 354);
+    assert_eq!(view.counts.drivers, 0);
+    assert_eq!(
+        view.counts.drivers,
+        view.drivers
+            .iter()
+            .filter(|driver| driver.status == DriverStatus::Employed)
+            .count(),
+        "the overview count matches the Drivers screen's hired list"
+    );
+    assert_eq!(view.drivers.len(), 354);
     assert_eq!(view.counts.offers, 6499);
     assert_eq!(view.current_vehicle.as_deref(), Some("renault.etech_t"));
     assert!(state.notice().is_none());

@@ -30,6 +30,7 @@ pub struct Button {
     toggled: Option<bool>,
     disabled: bool,
     width: Option<f32>,
+    full_width: bool,
     focus: Option<FocusHandle>,
     on_click: Option<ClickHandler>,
 }
@@ -46,6 +47,7 @@ pub fn button(id: impl Into<ElementId>, label: impl Into<SharedString>) -> Butto
         toggled: None,
         disabled: false,
         width: None,
+        full_width: false,
         focus: None,
         on_click: None,
     }
@@ -89,6 +91,11 @@ impl Button {
 
     pub fn width(mut self, width: f32) -> Self {
         self.width = Some(width);
+        self
+    }
+
+    pub fn full_width(mut self) -> Self {
+        self.full_width = true;
         self
     }
 
@@ -178,6 +185,9 @@ impl RenderOnce for Button {
                 })
             })
             .when_some(self.width, |this, width| this.w(px(width)))
+            .when(self.full_width, |this| {
+                this.w_full().justify_start().whitespace_nowrap()
+            })
             .when_some(self.focus, |this, handle| this.track_focus(&handle))
             .accessibility_label(accessible)
             .when_some(self.icon, |this, name| {

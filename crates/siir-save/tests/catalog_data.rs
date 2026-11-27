@@ -40,6 +40,7 @@ fn assert_snapshot(game: &str, name: &str) {
         "trailer_body_types",
         "trailer_brands",
         "cities",
+        "drivers",
     ] {
         let items = data[section].as_array().unwrap_or_else(|| {
             panic!("{name}: {section} is not an array");
@@ -212,6 +213,23 @@ fn assert_load(game: Game, name: &str) {
             .unwrap_or_else(|| panic!("{name}: {section} has no English name"));
         assert_eq!(resolved, Some(english), "{name}");
     }
+
+    assert_eq!(
+        catalog.drivers().len(),
+        data["drivers"].as_array().unwrap().len(),
+        "{name}: drivers"
+    );
+    assert_eq!(
+        catalog.driver_name("driver.0"),
+        data["drivers"][0].as_str(),
+        "{name}: driver.0"
+    );
+    assert_eq!(
+        catalog.driver_name("driver.10"),
+        Some("Sophie I."),
+        "{name}"
+    );
+    assert_eq!(catalog.driver_name("driver.9999"), None, "{name}");
 }
 
 #[test]

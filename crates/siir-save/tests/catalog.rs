@@ -186,6 +186,15 @@ fn reads_trucks_parts_and_transmissions() {
         "a missing language falls back to English"
     );
     assert_eq!(catalog.city_name("nowhere", "en_us"), None);
+    assert_eq!(catalog.drivers(), ["Bronislaw E.", "Sophie I."]);
+    assert_eq!(catalog.driver_name("driver.0"), Some("Bronislaw E."));
+    assert_eq!(
+        catalog.driver_name("driver.1"),
+        Some("Sophie I."),
+        "female prefix + is stripped"
+    );
+    assert_eq!(catalog.driver_name("driver.99"), None);
+    assert_eq!(catalog.driver_name("other.0"), None);
     assert_eq!(trailer.volume, 87.0);
     assert_eq!(trailer.gross_weight_limit, 35_000);
     assert_eq!(trailer.chassis_mass, 6461);
