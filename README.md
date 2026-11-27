@@ -10,6 +10,16 @@ their saves.
 
 It is an unofficial tool, not affiliated with or endorsed by SCS Software.
 
+## Screenshots
+
+![Overview of an ETS2 save: money, level, current vehicle, fleet counts, and skills](docs/screenshots/overview.png)
+
+| | |
+|---|---|
+| ![Save list grouped by profile](docs/screenshots/home.png) | ![Economy: money, level slider, skills, and ADR classes](docs/screenshots/economy.png) |
+| ![Vehicles: plate, country, odometer, fuel, and wear](docs/screenshots/vehicles.png) | ![Drivers: skills, ADR classes, and assignment](docs/screenshots/drivers.png) |
+| ![Garages: status and vehicle, driver, and trailer slots](docs/screenshots/garages.png) | ![Overview of an ATS save in the ATS palette](docs/screenshots/ats-overview.png) |
+
 ## Download
 
 Get the latest build from the
